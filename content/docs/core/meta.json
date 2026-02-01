@@ -1,0 +1,10 @@
+{
+  "title": "核心模块",
+  "icon": "Layers",
+  "pages": [
+    "architecture",
+    "register",
+    "response",
+    "error"
+  ]
+}

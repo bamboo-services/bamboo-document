@@ -1,0 +1,236 @@
+---
+title: 日志系统
+description: 基于 slog 的自定义日志 Handler
+icon: FileText
+---
+
+# 日志系统
+
+Bamboo Base 基于 Go 1.21+ 的 `slog` 包实现了自定义日志系统，支持彩色控制台输出和 JSON 文件记录。
+
+## 特性
+
+- 🎨 **彩色控制台输出** - 不同级别显示不同颜色
+- 📄 **JSON 文件记录** - 结构化日志便于分析
+- 🔍 **Trace ID 自动提取** - 从上下文提取请求追踪 ID
+- ⚡ **高性能** - 基于 slog 的高性能设计
+
+## 日志级别
+
+```go
+const (
+    LevelDebug slog.Level = -4
+    LevelInfo  slog.Level = 0
+    LevelWarn  slog.Level = 4
+    LevelError slog.Level = 8
+)
+```
+
+## 初始化日志
+
+```go
+func (r *Reg) LoggerInit() {
+    // 控制台处理器（彩色）
+    consoleHandler := NewColorHandler(os.Stdout, &slog.HandlerOptions{
+        Level: slog.LevelInfo,
+    })
+
+    // 文件处理器（JSON）
+    logFile := filepath.Join(r.Config.GetString("LOG_PATH"), "app.log")
+    file, _ := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+    fileHandler := slog.NewJSONHandler(file, &slog.HandlerOptions{
+        Level: slog.LevelInfo,
+    })
+
+    // 多输出处理器
+    r.Logger = slog.New(NewMultiHandler(consoleHandler, fileHandler))
+}
+```
+
+## 彩色输出
+
+控制台输出根据日志级别显示不同颜色：
+
+| 级别 | 颜色 | 示例 |
+|------|------|------|
+| DEBUG | 灰色 | `[DBG]` |
+| INFO | 绿色 | `[INF]` |
+| WARN | 黄色 | `[WRN]` |
+| ERROR | 红色 | `[ERR]` |
+
+输出格式：
+
+```
+[INF] 2024-01-01 12:00:00 | server started | port=8080
+[ERR] 2024-01-01 12:00:01 | database error | err=connection refused
+```
+
+## 使用日志
+
+### 基本用法
+
+```go
+// 记录信息
+web.Register.Logger.Info("server started", "port", 8080)
+
+// 记录错误
+web.Register.Logger.Error("database connection failed", "err", err)
+
+// 记录警告
+web.Register.Logger.Warn("high memory usage", "percent", 85)
+
+// 调试日志
+web.Register.Logger.Debug("processing request", "path", c.Request.URL.Path)
+```
+
+### 带 Trace ID 的日志
+
+```go
+func Handler(c *gin.Context) {
+    // 从上下文获取 Trace ID
+    traceID := ctxutil.GetTraceID(c)
+
+    // 创建带 Trace ID 的 Logger
+    logger := web.Register.Logger.With("trace_id", traceID)
+
+    logger.Info("request started", "path", c.Request.URL.Path)
+
+    // 处理请求...
+
+    logger.Info("request completed", "duration", time.Since(start))
+}
+```
+
+## 配置选项
+
+### 环境变量
+
+```bash
+# 日志级别: debug, info, warn, error
+LOG_LEVEL=info
+
+# 日志文件路径
+LOG_PATH=./logs
+
+# 是否输出到控制台
+LOG_CONSOLE=true
+
+# 是否输出到文件
+LOG_FILE=true
+```
+
+### 动态调整级别
+
+```go
+// 根据配置设置日志级别
+level := web.Register.Config.GetString("LOG_LEVEL")
+switch level {
+case "debug":
+    slog.SetLogLoggerLevel(slog.LevelDebug)
+case "warn":
+    slog.SetLogLoggerLevel(slog.LevelWarn)
+case "error":
+    slog.SetLogLoggerLevel(slog.LevelError)
+default:
+    slog.SetLogLoggerLevel(slog.LevelInfo)
+}
+```
+
+## 自定义 Handler
+
+### ColorHandler
+
+```go
+type ColorHandler struct {
+    handler slog.Handler
+    level   slog.Level
+}
+
+func NewColorHandler(w io.Writer, opts *slog.HandlerOptions) *ColorHandler {
+    return &ColorHandler{
+        handler: slog.NewTextHandler(w, opts),
+        level:   opts.Level,
+    }
+}
+
+func (h *ColorHandler) Handle(ctx context.Context, r slog.Record) error {
+    // 添加颜色代码
+    var color string
+    switch r.Level {
+    case slog.LevelDebug:
+        color = "\033[37m" // 灰色
+    case slog.LevelInfo:
+        color = "\033[32m" // 绿色
+    case slog.LevelWarn:
+        color = "\033[33m" // 黄色
+    case slog.LevelError:
+        color = "\033[31m" // 红色
+    }
+    reset := "\033[0m"
+
+    // 输出带颜色的日志
+    fmt.Fprintf(os.Stdout, "%s[%s]%s ", color, r.Level.String(), reset)
+    return h.handler.Handle(ctx, r)
+}
+```
+
+### MultiHandler
+
+同时输出到多个目标：
+
+```go
+type MultiHandler struct {
+    handlers []slog.Handler
+}
+
+func NewMultiHandler(handlers ...slog.Handler) *MultiHandler {
+    return &MultiHandler{handlers: handlers}
+}
+
+func (h *MultiHandler) Handle(ctx context.Context, r slog.Record) error {
+    for _, handler := range h.handlers {
+        if err := handler.Handle(ctx, r); err != nil {
+            return err
+        }
+    }
+    return nil
+}
+```
+
+## 完整示例
+
+```go
+package main
+
+import (
+    "github.com/bamboo-services/bamboo-base-go/web"
+    "github.com/gin-gonic/gin"
+)
+
+func main() {
+    // 初始化
+    web.InitRegister()
+    web.Register.ConfigInit()
+    web.Register.LoggerInit()
+    web.Register.EngineInit()
+
+    // 使用日志
+    web.Register.Logger.Info("application starting...")
+
+    web.Register.Engine.GET("/ping", func(c *gin.Context) {
+        web.Register.Logger.Debug("ping received", "ip", c.ClientIP())
+        c.String(200, "pong")
+    })
+
+    web.Register.Logger.Info("server started", "port", 8080)
+    web.Register.Run(":8080")
+}
+```
+
+## 下一步
+
+<Cards>
+  <Card title="中间件" href="./middleware" />
+  <Card title="注册系统" href="./register" />
+  <Card title="环境配置" href="./env" />
+</Cards>

@@ -1,0 +1,266 @@
+---
+title: 工具库
+description: 字符串、时间、加密等常用工具函数
+icon: Wrench
+---
+
+# 工具库
+
+Bamboo Base 提供了一系列常用的工具函数，简化开发工作。
+
+## 字符串工具 (string.go)
+
+### 常用函数
+
+```go
+// 判断字符串是否为空
+func IsEmpty(s string) bool
+
+// 判断字符串是否不为空
+func IsNotEmpty(s string) bool
+
+// 判断字符串是否为空白字符
+func IsBlank(s string) bool
+
+// 字符串默认值
+func DefaultIfEmpty(s, defaultVal string) string
+```
+
+### 使用示例
+
+```go
+import "github.com/bamboo-services/bamboo-base-go/utils"
+
+// 判断空字符串
+utils.IsEmpty("")        // true
+utils.IsEmpty("hello")   // false
+
+// 默认值
+utils.DefaultIfEmpty("", "default")  // "default"
+utils.DefaultIfEmpty("a", "default") // "a"
+```
+
+### 随机字符串
+
+```go
+// 生成随机字符串
+func RandomString(length int) string
+
+// 生成随机数字字符串
+func RandomNumber(length int) string
+
+// 生成 UUID
+func UUID() string
+```
+
+使用示例：
+
+```go
+utils.RandomString(10)  // "aBcDeFgHiJ"
+utils.RandomNumber(6)   // "123456"
+utils.UUID()            // "550e8400-e29b-41d4-a716-446655440000"
+```
+
+## 时间工具 (time.go)
+
+### 常用函数
+
+```go
+// 获取当前时间戳（秒）
+func NowTimestamp() int64
+
+// 获取当前时间戳（毫秒）
+func NowTimestampMilli() int64
+
+// 格式化时间
+func FormatTime(t time.Time, layout string) string
+
+// 解析时间字符串
+func ParseTime(value, layout string) (time.Time, error)
+```
+
+### 使用示例
+
+```go
+// 时间戳
+utils.NowTimestamp()      // 1640995200
+utils.NowTimestampMilli() // 1640995200000
+
+// 格式化
+t := time.Now()
+utils.FormatTime(t, "2006-01-02 15:04:05")  // "2024-01-01 12:00:00"
+
+// 解析
+t, _ := utils.ParseTime("2024-01-01", "2006-01-02")
+```
+
+### 时间计算
+
+```go
+// 获取当天开始时间
+func StartOfDay(t time.Time) time.Time
+
+// 获取当天结束时间
+func EndOfDay(t time.Time) time.Time
+
+// 添加天数
+func AddDays(t time.Time, days int) time.Time
+
+// 计算两个时间相差天数
+func DaysBetween(t1, t2 time.Time) int
+```
+
+## 加密工具
+
+### MD5
+
+```go
+// MD5 加密
+func MD5(s string) string
+
+// MD5 加密（字节）
+func MD5Bytes(data []byte) string
+```
+
+使用示例：
+
+```go
+utils.MD5("hello")  // "5d41402abc4b2a76b9719d911017c592"
+```
+
+### SHA256
+
+```go
+// SHA256 加密
+func SHA256(s string) string
+
+// HMAC-SHA256
+func HMACSHA256(data, key string) string
+```
+
+### 密码加密
+
+```go
+// 生成密码哈希（bcrypt）
+func HashPassword(password string) (string, error)
+
+// 验证密码
+func VerifyPassword(password, hash string) bool
+```
+
+使用示例：
+
+```go
+// 注册时加密密码
+hash, _ := utils.HashPassword("userPassword")
+// 存储 hash 到数据库
+
+// 登录时验证密码
+if utils.VerifyPassword(inputPassword, storedHash) {
+    // 密码正确
+}
+```
+
+## 上下文工具 (ctxutil)
+
+### Trace ID 管理
+
+```go
+// 从上下文获取 Trace ID
+func GetTraceID(c *gin.Context) string
+
+// 设置 Trace ID 到上下文
+func SetTraceID(c *gin.Context, traceID string)
+
+// 生成新的 Trace ID
+func GenerateTraceID() string
+```
+
+使用示例：
+
+```go
+func Middleware() gin.HandlerFunc {
+    return func(c *gin.Context) {
+        // 生成或从请求头获取 Trace ID
+        traceID := c.GetHeader("X-Trace-ID")
+        if traceID == "" {
+            traceID = ctxutil.GenerateTraceID()
+        }
+
+        // 设置到上下文
+        ctxutil.SetTraceID(c, traceID)
+
+        // 设置响应头
+        c.Header("X-Trace-ID", traceID)
+
+        c.Next()
+    }
+}
+```
+
+### 用户信息管理
+
+```go
+// 从上下文获取用户 ID
+func GetUserID(c *gin.Context) int64
+
+// 设置用户 ID 到上下文
+func SetUserID(c *gin.Context, userID int64)
+```
+
+使用示例：
+
+```go
+func AuthMiddleware() gin.HandlerFunc {
+    return func(c *gin.Context) {
+        // 验证 token 获取 userID
+        userID := validateToken(c.GetHeader("Authorization"))
+
+        // 设置到上下文
+        ctxutil.SetUserID(c, userID)
+
+        c.Next()
+    }
+}
+
+func Handler(c *gin.Context) {
+    // 获取当前用户 ID
+    userID := ctxutil.GetUserID(c)
+
+    // 查询用户信息...
+}
+```
+
+## 数据验证工具
+
+```go
+// 判断切片是否包含元素
+func Contains(slice []string, item string) bool
+
+// 去重
+func Unique(slice []string) []string
+
+// 交集
+func Intersection(a, b []string) []string
+```
+
+## 文件工具
+
+```go
+// 判断文件是否存在
+func FileExists(path string) bool
+
+// 获取文件扩展名
+func GetFileExt(filename string) string
+
+// 生成随机文件名
+func GenerateFileName(ext string) string
+```
+
+## 下一步
+
+<Cards>
+  <Card title="环境配置" href="./env" />
+  <Card title="验证器" href="./validator" />
+  <Card title="日志系统" href="./log" />
+</Cards>

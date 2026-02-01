@@ -10,7 +10,13 @@ export default function Layout({ children }: LayoutProps<'/'>) {
   return (
     <html lang="zh" className={inter.className} suppressHydrationWarning>
       <body className="flex flex-col min-h-screen">
-        <RootProvider>{children}</RootProvider>
+        <RootProvider
+          search={{
+            enabled: true, // disable search entirely
+          }}
+        >
+          {children}
+        </RootProvider>
       </body>
     </html>
   );

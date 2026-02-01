@@ -1,0 +1,10 @@
+{
+  "title": "功能组件",
+  "icon": "Box",
+  "pages": [
+    "snowflake",
+    "models",
+    "log",
+    "middleware"
+  ]
+}

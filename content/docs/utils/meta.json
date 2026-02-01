@@ -1,0 +1,11 @@
+{
+  "title": "工具库",
+  "icon": "Wrench",
+  "pages": [
+    "validator",
+    "utility",
+    "env",
+    "route",
+    "hook"
+  ]
+}

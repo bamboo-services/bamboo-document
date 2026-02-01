@@ -1,0 +1,224 @@
+---
+title: 雪花算法
+description: 64 位分布式 ID 生成器与业务基因
+icon: Snowflake
+---
+
+# 雪花算法
+
+Bamboo Base 实现了自定义的雪花算法（Snowflake），用于生成全局唯一的 64 位分布式 ID。
+
+## 雪花算法原理
+
+雪花算法生成的 64 位 ID 结构如下：
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│ 1 bit │ 41 bits │ 6 bits │ 3 bits │ 3 bits │ 10 bits                    │
+├─────────────────────────────────────────────────────────────────────────┤
+│ Sign  │ Timestamp │ Gene │ DC ID │ Node ID │ Sequence                   │
+│ 符号位 │ 时间戳(毫秒) │ 业务基因 │ 数据中心 │ 节点ID  │ 序列号                      │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### 位分配说明
+
+| 位数 | 字段 | 说明 | 范围 |
+|------|------|------|------|
+| 1 bit | 符号位 | 始终为 0（正数） | 0 |
+| 41 bits | 时间戳 | 毫秒级时间戳偏移量 | 约 69 年 |
+| 6 bits | 业务基因 | 标识业务类型 | 0-63 |
+| 3 bits | 数据中心 ID | 数据中心标识 | 0-7 |
+| 3 bits | 节点 ID | 机器节点标识 | 0-7 |
+| 10 bits | 序列号 | 同一毫秒内序列 | 0-1023 |
+
+## Node 节点
+
+### 创建节点
+
+```go
+import "github.com/bamboo-services/bamboo-base-go/web"
+
+// 初始化雪花算法节点
+// 参数：数据中心ID, 节点ID
+web.Register.SnowflakeInit(1, 1)
+```
+
+### 生成 ID
+
+```go
+// 生成新的雪花 ID
+id := web.Register.SnowflakeNode.Generate()
+
+// 获取 int64 值
+int64Value := id.Int64()
+
+// 获取字符串值
+strValue := id.String()
+```
+
+## SnowflakeID 类型
+
+```go
+// SnowflakeID 是雪花算法生成的 ID 类型
+type SnowflakeID int64
+
+// Int64 返回 int64 格式的 ID
+func (s SnowflakeID) Int64() int64
+
+// String 返回字符串格式的 ID
+func (s SnowflakeID) String() string
+
+// Time 返回 ID 生成的时间
+func (s SnowflakeID) Time() time.Time
+
+// DatacenterID 返回数据中心 ID
+func (s SnowflakeID) DatacenterID() int64
+
+// NodeID 返回节点 ID
+func (s SnowflakeID) NodeID() int64
+
+// Gene 返回业务基因
+func (s SnowflakeID) Gene() int64
+
+// Sequence 返回序列号
+func (s SnowflakeID) Sequence() int64
+```
+
+### 解析 ID 信息
+
+```go
+id := web.Register.SnowflakeNode.Generate()
+
+fmt.Println("ID:", id.String())
+fmt.Println("时间:", id.Time().Format("2006-01-02 15:04:05"))
+fmt.Println("数据中心:", id.DatacenterID())
+fmt.Println("节点:", id.NodeID())
+fmt.Println("业务基因:", id.Gene())
+fmt.Println("序列号:", id.Sequence())
+```
+
+## 业务基因（Gene）
+
+业务基因允许在同一个 ID 中嵌入业务类型信息，便于数据分片和路由。
+
+### 设置业务基因
+
+```go
+// 定义业务类型常量
+const (
+    GeneUser     = 1  // 用户
+    GeneOrder    = 2  // 订单
+    GeneProduct  = 3  // 商品
+    GenePayment  = 4  // 支付
+)
+
+// 生成带业务基因的 ID
+id := web.Register.SnowflakeNode.GenerateWithGene(GeneUser)
+```
+
+### 基因路由示例
+
+```go
+// 根据 ID 路由到对应的数据库分片
+func GetDBShard(id SnowflakeID) int {
+    gene := id.Gene()
+    // 根据基因值路由
+    switch gene {
+    case GeneUser:
+        return 0
+    case GeneOrder:
+        return 1
+    case GeneProduct:
+        return 2
+    default:
+        return 0
+    }
+}
+```
+
+## GORM 集成
+
+雪花 ID 可以直接作为 GORM 模型的主键：
+
+```go
+type User struct {
+    ID        snowflake.SnowflakeID `json:"id" gorm:"primaryKey"`
+    Username  string                `json:"username"`
+    CreatedAt time.Time             `json:"createdAt"`
+}
+
+// 创建用户时自动生成 ID
+func CreateUser(username string) (*User, error) {
+    user := &User{
+        ID:       web.Register.SnowflakeNode.Generate(),
+        Username: username,
+    }
+    return user, db.Create(user).Error
+}
+```
+
+## 性能特点
+
+- **高吞吐**：单机每秒可生成数百万个 ID
+- **低延迟**：本地生成，无需网络通信
+- **趋势递增**：ID 按时间趋势递增，有利于数据库索引
+- **无依赖**：不依赖外部服务（如 Redis、数据库）
+
+## 使用示例
+
+### 完整示例
+
+```go
+package main
+
+import (
+    "fmt"
+    "github.com/bamboo-services/bamboo-base-go/web"
+)
+
+func main() {
+    // 初始化
+    web.InitRegister()
+    web.Register.SnowflakeInit(1, 1) // 数据中心=1, 节点=1
+
+    // 生成 10 个 ID
+    for i := 0; i < 10; i++ {
+        id := web.Register.SnowflakeNode.Generate()
+        fmt.Printf("ID: %s, Time: %v\n", id.String(), id.Time())
+    }
+}
+```
+
+### 不同业务类型的 ID
+
+```go
+const (
+    GeneUser    = 1
+    GeneOrder   = 2
+    GenePayment = 3
+)
+
+// 生成用户 ID
+userID := web.Register.SnowflakeNode.GenerateWithGene(GeneUser)
+
+// 生成订单 ID
+orderID := web.Register.SnowflakeNode.GenerateWithGene(GeneOrder)
+
+// 生成支付 ID
+paymentID := web.Register.SnowflakeNode.GenerateWithGene(GenePayment)
+```
+
+## 注意事项
+
+1. **时钟回拨**：如果系统时钟回拨，可能导致 ID 重复。生产环境建议使用 NTP 同步时间
+2. **节点唯一性**：同一数据中心内的节点 ID 必须唯一
+3. **业务基因规划**：提前规划业务基因分配，避免冲突
+
+## 下一步
+
+<Cards>
+  <Card title="模型基类" href="./models" />
+  <Card title="注册系统" href="./register" />
+  <Card title="核心架构" href="./architecture" />
+</Cards>

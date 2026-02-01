@@ -1,0 +1,240 @@
+---
+title: 验证器
+description: 自定义验证规则与中文错误消息
+icon: ShieldCheck
+---
+
+# 验证器
+
+Bamboo Base 集成了 [go-playground/validator](https://github.com/go-playground/validator)，提供自定义验证规则和中文错误消息翻译。
+
+## 基本使用
+
+```go
+import "github.com/go-playground/validator/v10"
+
+var validate = validator.New()
+
+type User struct {
+    Username string `validate:"required,min=3,max=20"`
+    Email    string `validate:"required,email"`
+    Age      int    `validate:"gte=0,lte=150"`
+}
+
+func main() {
+    user := User{
+        Username: "ab",
+        Email:    "invalid",
+        Age:      200,
+    }
+
+    err := validate.Struct(user)
+    if err != nil {
+        // 处理验证错误
+        for _, err := range err.(validator.ValidationErrors) {
+            fmt.Println(err.Field(), err.Tag())
+        }
+    }
+}
+```
+
+## 预定义验证标签
+
+### 字符串验证
+
+| 标签 | 说明 | 示例 |
+|------|------|------|
+| `required` | 必填 | `validate:"required"` |
+| `min` | 最小长度 | `validate:"min=3"` |
+| `max` | 最大长度 | `validate:"max=20"` |
+| `len` | 固定长度 | `validate:"len=11"` |
+| `email` | 邮箱格式 | `validate:"email"` |
+| `url` | URL 格式 | `validate:"url"` |
+| `alpha` | 仅字母 | `validate:"alpha"` |
+| `alphanum` | 字母数字 | `validate:"alphanum"` |
+| `numeric` | 仅数字 | `validate:"numeric"` |
+
+### 数值验证
+
+| 标签 | 说明 | 示例 |
+|------|------|------|
+| `gte` | 大于等于 | `validate:"gte=0"` |
+| `lte` | 小于等于 | `validate:"lte=100"` |
+| `gt` | 大于 | `validate:"gt=0"` |
+| `lt` | 小于 | `validate:"lt=100"` |
+| `oneof` | 枚举值 | `validate:"oneof=1 2 3"` |
+
+### 其他验证
+
+| 标签 | 说明 | 示例 |
+|------|------|------|
+| `uuid` | UUID 格式 | `validate:"uuid"` |
+| `datetime` | 日期时间 | `validate:"datetime=2006-01-02"` |
+| `json` | JSON 格式 | `validate:"json"` |
+| `base64` | Base64 编码 | `validate:"base64"` |
+
+## 中文错误消息
+
+### 注册中文翻译器
+
+```go
+import (
+    "github.com/go-playground/validator/v10"
+    "github.com/go-playground/locales/zh"
+    ut "github.com/go-playground/universal-translator"
+    zhTranslations "github.com/go-playground/validator/v10/translations/zh"
+)
+
+var (
+    validate *validator.Validate
+    trans    ut.Translator
+)
+
+func InitValidator() {
+    // 创建验证器
+    validate = validator.New()
+
+    // 注册中文翻译
+    zh := zh.New()
+    uni := ut.New(zh, zh)
+    trans, _ = uni.GetTranslator("zh")
+
+    // 注册默认翻译
+    zhTranslations.RegisterDefaultTranslations(validate, trans)
+
+    // 注册自定义翻译
+    registerCustomTranslations()
+}
+```
+
+### 自定义错误消息
+
+```go
+func registerCustomTranslations() {
+    translations := []struct {
+        tag         string
+        translation string
+    }{
+        {
+            tag:         "required",
+            translation: "{0}为必填字段",
+        },
+        {
+            tag:         "email",
+            translation: "{0}必须是有效的邮箱地址",
+        },
+        {
+            tag:         "min",
+            translation: "{0}长度不能少于{1}个字符",
+        },
+        {
+            tag:         "max",
+            translation: "{0}长度不能超过{1}个字符",
+        },
+    }
+
+    for _, t := range translations {
+        validate.RegisterTranslation(t.tag, trans, func(ut ut.Translator) error {
+            return ut.Add(t.tag, t.translation, true)
+        }, func(ut ut.Translator, fe validator.FieldError) string {
+            t, _ := ut.T(fe.Tag(), fe.Field(), fe.Param())
+            return t
+        })
+    }
+}
+```
+
+### 使用中文错误消息
+
+```go
+func ValidateStruct(s interface{}) error {
+    err := validate.Struct(s)
+    if err != nil {
+        var errs []string
+        for _, err := range err.(validator.ValidationErrors) {
+            errs = append(errs, err.Translate(trans))
+        }
+        return errors.New(strings.Join(errs, "; "))
+    }
+    return nil
+}
+```
+
+## 自定义验证规则
+
+### 手机号验证
+
+```go
+func init() {
+    validate.RegisterValidation("phone", func(fl validator.FieldLevel) bool {
+        phone := fl.Field().String()
+        // 中国大陆手机号正则
+        matched, _ := regexp.MatchString(`^1[3-9]\d{9}$`, phone)
+        return matched
+    })
+
+    validate.RegisterTranslation("phone", trans, func(ut ut.Translator) error {
+        return ut.Add("phone", "{0}必须是有效的手机号码", true)
+    }, func(ut ut.Translator, fe validator.FieldError) string {
+        t, _ := ut.T("phone", fe.Field())
+        return t
+    })
+}
+```
+
+使用：
+
+```go
+type User struct {
+    Phone string `validate:"required,phone"`
+}
+```
+
+### 身份证号验证
+
+```go
+func init() {
+    validate.RegisterValidation("idcard", func(fl validator.FieldLevel) bool {
+        idcard := fl.Field().String()
+        // 18位身份证简单校验
+        matched, _ := regexp.MatchString(`^\d{17}[\dXx]$`, idcard)
+        return matched
+    })
+}
+```
+
+## 在 Handler 中使用
+
+```go
+type CreateUserRequest struct {
+    Username string `json:"username" validate:"required,min=3,max=20"`
+    Email    string `json:"email" validate:"required,email"`
+    Phone    string `json:"phone" validate:"required,phone"`
+    Age      int    `json:"age" validate:"gte=0,lte=150"`
+}
+
+func CreateUser(c *gin.Context) {
+    var req CreateUserRequest
+    if err := c.ShouldBindJSON(&req); err != nil {
+        result.Error(c, error.ErrInvalidParams)
+        return
+    }
+
+    // 验证请求参数
+    if err := ValidateStruct(&req); err != nil {
+        result.Error(c, error.New(100001, err.Error()))
+        return
+    }
+
+    // 创建用户...
+    result.Success(c, "创建成功")
+}
+```
+
+## 下一步
+
+<Cards>
+  <Card title="模型基类" href="./models" />
+  <Card title="工具库" href="./utility" />
+  <Card title="错误处理" href="./error" />
+</Cards>

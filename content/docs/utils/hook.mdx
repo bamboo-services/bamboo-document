@@ -1,0 +1,259 @@
+---
+title: 钩子系统
+description: 钩子机制与使用场景
+icon: Anchor
+---
+
+# 钩子系统
+
+Bamboo Base 提供钩子（Hook）机制，允许在特定生命周期节点插入自定义逻辑。
+
+## 钩子机制
+
+钩子是一种事件驱动的编程模式，允许在特定时机执行预注册的回调函数。
+
+```go
+// Hook 定义
+type Hook func(ctx context.Context) error
+
+// HookManager 钩子管理器
+type HookManager struct {
+    hooks map[string][]Hook
+}
+
+// 注册钩子
+func (hm *HookManager) Register(name string, hook Hook) {
+    hm.hooks[name] = append(hm.hooks[name], hook)
+}
+
+// 执行钩子
+func (hm *HookManager) Execute(name string, ctx context.Context) error {
+    for _, hook := range hm.hooks[name] {
+        if err := hook(ctx); err != nil {
+            return err
+        }
+    }
+    return nil
+}
+```
+
+## 生命周期钩子
+
+### 初始化钩子
+
+```go
+// 注册初始化前钩子
+web.Register.Hooks.Register("before:init", func(ctx context.Context) error {
+    log.Println("开始初始化...")
+    return nil
+})
+
+// 注册初始化后钩子
+web.Register.Hooks.Register("after:init", func(ctx context.Context) error {
+    log.Println("初始化完成")
+    return nil
+})
+```
+
+### 启动钩子
+
+```go
+// 服务启动前
+web.Register.Hooks.Register("before:start", func(ctx context.Context) error {
+    // 预热缓存
+    cache.WarmUp()
+
+    // 检查依赖服务
+    if err := checkDependencies(); err != nil {
+        return err
+    }
+
+    return nil
+})
+
+// 服务启动后
+web.Register.Hooks.Register("after:start", func(ctx context.Context) error {
+    log.Println("服务已启动，端口:", web.Register.Config.GetString("SERVER_PORT"))
+    return nil
+})
+```
+
+### 关闭钩子
+
+```go
+// 服务关闭前
+web.Register.Hooks.Register("before:shutdown", func(ctx context.Context) error {
+    // 停止接收新请求
+    log.Println("正在关闭服务...")
+    return nil
+})
+
+// 服务关闭后
+web.Register.Hooks.Register("after:shutdown", func(ctx context.Context) error {
+    // 关闭数据库连接
+    db.Close()
+
+    // 关闭缓存连接
+    cache.Close()
+
+    log.Println("服务已关闭")
+    return nil
+})
+```
+
+## 使用场景
+
+### 1. 初始化数据
+
+```go
+func init() {
+    web.Register.Hooks.Register("after:init", func(ctx context.Context) error {
+        // 加载配置到内存
+        config.Load()
+
+        // 初始化全局变量
+        initGlobalVars()
+
+        return nil
+    })
+}
+```
+
+### 2. 数据库迁移
+
+```go
+func init() {
+    web.Register.Hooks.Register("before:start", func(ctx context.Context) error {
+        // 执行数据库迁移
+        if err := db.AutoMigrate(&models.User{}, &models.Order{}); err != nil {
+            return fmt.Errorf("数据库迁移失败: %w", err)
+        }
+        return nil
+    })
+}
+```
+
+### 3. 缓存预热
+
+```go
+func init() {
+    web.Register.Hooks.Register("before:start", func(ctx context.Context) error {
+        // 加载热点数据到缓存
+        if err := cache.WarmUp("hot_data"); err != nil {
+            log.Printf("缓存预热失败: %v", err)
+            // 非致命错误，继续启动
+        }
+        return nil
+    })
+}
+```
+
+### 4. 优雅关闭
+
+```go
+func init() {
+    // 注册关闭钩子
+    web.Register.Hooks.Register("before:shutdown", func(ctx context.Context) error {
+        // 设置关闭超时
+        shutdownCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+        defer cancel()
+
+        // 等待正在处理的请求完成
+        if err := server.Shutdown(shutdownCtx); err != nil {
+            return err
+        }
+
+        return nil
+    })
+}
+```
+
+## 完整示例
+
+```go
+package main
+
+import (
+    "context"
+    "log"
+    "time"
+
+    "github.com/bamboo-services/bamboo-base-go/web"
+)
+
+func main() {
+    // 初始化
+    web.InitRegister()
+
+    // 注册钩子
+    registerHooks()
+
+    // 执行初始化
+    web.Register.ConfigInit()
+    web.Register.LoggerInit()
+
+    // 触发初始化后钩子
+    if err := web.Register.Hooks.Execute("after:init", context.Background()); err != nil {
+        log.Fatal(err)
+    }
+
+    web.Register.EngineInit()
+
+    // 触发启动前钩子
+    if err := web.Register.Hooks.Execute("before:start", context.Background()); err != nil {
+        log.Fatal(err)
+    }
+
+    // 启动服务
+    go func() {
+        web.Register.Run(":8080")
+    }()
+
+    // 触发启动后钩子
+    web.Register.Hooks.Execute("after:start", context.Background())
+
+    // 等待关闭信号...
+    waitForShutdown()
+
+    // 触发关闭钩子
+    ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+    defer cancel()
+
+    web.Register.Hooks.Execute("before:shutdown", ctx)
+    web.Register.Hooks.Execute("after:shutdown", ctx)
+}
+
+func registerHooks() {
+    // 初始化后钩子
+    web.Register.Hooks.Register("after:init", func(ctx context.Context) error {
+        log.Println("配置加载完成")
+        return nil
+    })
+
+    // 启动前钩子
+    web.Register.Hooks.Register("before:start", func(ctx context.Context) error {
+        log.Println("检查依赖服务...")
+        return nil
+    })
+
+    // 启动后钩子
+    web.Register.Hooks.Register("after:start", func(ctx context.Context) error {
+        log.Println("服务启动成功!")
+        return nil
+    })
+
+    // 关闭钩子
+    web.Register.Hooks.Register("before:shutdown", func(ctx context.Context) error {
+        log.Println("正在关闭服务...")
+        return nil
+    })
+}
+```
+
+## 下一步
+
+<Cards>
+  <Card title="注册系统" href="./register" />
+  <Card title="核心架构" href="./architecture" />
+  <Card title="路由处理" href="./route" />
+</Cards>

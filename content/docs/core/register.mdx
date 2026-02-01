@@ -1,0 +1,248 @@
+---
+title: 注册系统
+description: Reg 注册中心与初始化流程详解
+icon: AppWindow
+---
+
+# 注册系统
+
+注册系统是 Bamboo Base 的核心，通过 `Reg` 结构体集中管理所有组件的生命周期。
+
+## Reg 结构体
+
+```go
+type Reg struct {
+    // 配置
+    Config *viper.Viper
+
+    // Gin 引擎
+    Engine *gin.Engine
+
+    // 日志
+    Logger *slog.Logger
+
+    // 雪花算法节点
+    SnowflakeNode *snowflake.Node
+
+    // 系统上下文
+    SystemContext context.Context
+}
+```
+
+## 全局实例
+
+Bamboo Base 使用全局单例模式管理 Reg 实例：
+
+```go
+// 全局注册实例
+var Register *Reg
+
+// 初始化注册中心
+func InitRegister() {
+    Register = &Reg{}
+}
+```
+
+## 初始化方法详解
+
+### ConfigInit - 配置初始化
+
+读取 `.env` 文件并初始化 Viper 配置：
+
+```go
+func (r *Reg) ConfigInit() {
+    r.Config = viper.New()
+    r.Config.SetConfigFile(".env")
+    r.Config.AutomaticEnv()
+
+    if err := r.Config.ReadInConfig(); err != nil {
+        log.Printf("Warning: config file not found: %v", err)
+    }
+}
+```
+
+配置项读取示例：
+
+```go
+// 读取字符串配置
+port := web.Register.Config.GetString("SERVER_PORT")
+
+// 读取整数配置
+level := web.Register.Config.GetInt("LOG_LEVEL")
+
+// 读取布尔配置
+debug := web.Register.Config.GetBool("DEBUG")
+```
+
+### LoggerInit - 日志初始化
+
+基于 `slog` 初始化日志系统，支持彩色控制台输出和文件记录：
+
+```go
+func (r *Reg) LoggerInit() {
+    // 创建多输出处理器
+    handlers := []slog.Handler{
+        // 控制台输出（彩色）
+        NewColorHandler(os.Stdout, &slog.HandlerOptions{
+            Level: slog.LevelInfo,
+        }),
+    }
+
+    // 如果配置了日志文件，添加文件输出
+    if logPath := r.Config.GetString("LOG_PATH"); logPath != "" {
+        file, _ := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+        handlers = append(handlers, slog.NewJSONHandler(file, nil))
+    }
+
+    r.Logger = slog.New(NewMultiHandler(handlers...))
+}
+```
+
+使用日志：
+
+```go
+web.Register.Logger.Info("server started", "port", 8080)
+web.Register.Logger.Error("database connection failed", "err", err)
+```
+
+### SnowflakeInit - 雪花算法初始化
+
+初始化分布式 ID 生成器：
+
+```go
+func (r *Reg) SnowflakeInit(datacenterID, nodeID int64) {
+    node, err := snowflake.NewNode(datacenterID, nodeID)
+    if err != nil {
+        panic(fmt.Sprintf("snowflake init failed: %v", err))
+    }
+    r.SnowflakeNode = node
+}
+```
+
+参数说明：
+
+| 参数 | 说明 | 范围 |
+|------|------|------|
+| `datacenterID` | 数据中心 ID | 0-7 (3位) |
+| `nodeID` | 节点 ID | 0-7 (3位) |
+
+生成 ID：
+
+```go
+id := web.Register.SnowflakeNode.Generate()
+fmt.Println(id.Int64())  // 1640995200000000000
+```
+
+### EngineInit - Gin 引擎初始化
+
+创建并配置 Gin 引擎：
+
+```go
+func (r *Reg) EngineInit() {
+    mode := r.Config.GetString("SERVER_MODE")
+    gin.SetMode(mode)
+
+    r.Engine = gin.New()
+
+    // 注册全局中间件
+    r.Engine.Use(gin.Recovery())
+    r.Engine.Use(middleware.ResponseMiddleware())
+    r.Engine.Use(middleware.CORSMiddleware())
+}
+```
+
+### SystemContextInit - 系统上下文初始化
+
+初始化系统级上下文，用于传递全局信息：
+
+```go
+func (r *Reg) SystemContextInit() {
+    r.SystemContext = context.WithValue(context.Background(), "version", "1.0.0")
+}
+```
+
+## 完整初始化示例
+
+```go
+package main
+
+import (
+    "github.com/bamboo-services/bamboo-base-go/web"
+    "github.com/bamboo-services/bamboo-base-go/web/result"
+    "github.com/gin-gonic/gin"
+)
+
+func main() {
+    // 1. 初始化注册中心
+    web.InitRegister()
+
+    // 2. 初始化配置
+    web.Register.ConfigInit()
+
+    // 3. 初始化日志
+    web.Register.LoggerInit()
+
+    // 4. 初始化雪花算法（数据中心ID=1，节点ID=1）
+    web.Register.SnowflakeInit(1, 1)
+
+    // 5. 初始化 Gin 引擎
+    web.Register.EngineInit()
+
+    // 6. 初始化系统上下文
+    web.Register.SystemContextInit()
+
+    // 注册路由
+    web.Register.Engine.GET("/api/status", func(c *gin.Context) {
+        result.SuccessHasData(c, gin.H{
+            "status":  "running",
+            "version": "1.0.0",
+        })
+    })
+
+    // 启动服务
+    port := web.Register.Config.GetString("SERVER_PORT")
+    if port == "" {
+        port = "8080"
+    }
+    web.Register.Run(":" + port)
+}
+```
+
+## 快捷方法
+
+### Default() - 快速启动
+
+使用默认配置快速创建引擎：
+
+```go
+func Default() *gin.Engine {
+    InitRegister()
+    Register.ConfigInit()
+    Register.LoggerInit()
+    Register.SnowflakeInit(1, 1)
+    Register.EngineInit()
+    Register.SystemContextInit()
+
+    return Register.Engine
+}
+```
+
+使用示例：
+
+```go
+func main() {
+    r := web.Default()
+    r.GET("/ping", func(c *gin.Context) {
+        c.String(200, "pong")
+    })
+    r.Run(":8080")
+}
+```
+
+## 下一步
+
+<Cards>
+  <Card title="统一响应" href="./response" />
+  <Card title="雪花算法" href="./snowflake" />
+  <Card title="日志系统" href="./log" />
+</Cards>
