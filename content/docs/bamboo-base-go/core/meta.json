@@ -2,11 +2,7 @@
   "title": "核心架构",
   "icon": "Blocks",
   "pages": [
-    "result",
-    "architecture",
-    "register",
-    "response",
-    "error",
-    "context"
+    "init",
+    "result"
   ]
 }

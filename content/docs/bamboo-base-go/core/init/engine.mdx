@@ -1,0 +1,137 @@
+---
+title: 引擎初始化
+description: EngineInit 创建并配置 Gin 引擎，注册内置中间件和验证器
+icon: Cog
+---
+
+# 引擎初始化
+
+`EngineInit` 方法创建并配置 Gin 引擎，注册内置中间件和自定义验证器。
+
+## EngineInit
+
+```go title="register_gin.go"
+// [!code highlight]
+func (r *Reg) EngineInit()
+```
+
+## 实现细节
+
+```go title="register_gin.go"
+func (r *Reg) EngineInit() {
+    log := xLog.WithName(xLog.NamedINIT)
+
+    log.Debug(r.Context, "初始化 GIN 引擎")
+    // [!code highlight:3]
+    if !isDebugMode() {
+        gin.SetMode(gin.ReleaseMode)
+    }
+
+    // [!code highlight:6]
+    r.Serve = gin.New(func(engine *gin.Engine) {
+        engine.Use(xHelper.RequestContext())
+        engine.Use(xHelper.PanicRecovery())
+        engine.Use(xHelper.HttpLogger())
+    })
+
+    // [!code highlight:2]
+    // 注册自定义验证器和翻译器
+    if v, ok := binding.Validator.Engine().(*validator.Validate); ok {
+        // [!code highlight:5]
+        // 注册翻译器（必须在自定义验证器之前）
+        if err := xVaild.RegisterTranslator(v); err != nil {
+            log.Error(r.Context, "翻译器注册失败: "+err.Error())
+        } else {
+            log.Info(r.Context, "翻译器注册成功")
+        }
+
+        // [!code highlight:5]
+        // 注册自定义验证器
+        if err := xVaild.RegisterCustomValidators(v); err != nil {
+            log.Error(r.Context, "验证器注册失败: "+err.Error())
+        } else {
+            log.Info(r.Context, "预制内部验证器注册成功")
+        }
+    }
+}
+```
+
+## 内置中间件
+
+| 中间件 | 说明 |
+|--------|------|
+| `xHelper.RequestContext()` | 请求上下文处理，生成请求 ID 等 |
+| `xHelper.PanicRecovery()` | Panic 恢复，防止单个请求崩溃影响整个服务 |
+| `xHelper.HttpLogger()` | HTTP 请求日志记录 |
+
+## 运行模式
+
+根据 `DEBUG` 环境变量自动切换 Gin 运行模式：
+
+| 环境变量 | Gin 模式 | 说明 |
+|---------|---------|------|
+| `DEBUG=true` | Debug | 输出详细调试信息 |
+| `DEBUG=false` 或未设置 | Release | 生产模式，关闭调试输出 |
+
+## 验证器
+
+### 翻译器
+
+注册中文翻译器，将验证错误信息翻译为中文：
+
+```go
+type CreateUserReq struct {
+    Name  string `json:"name" binding:"required"`
+    Email string `json:"email" binding:"required,email"`
+}
+
+// 验证失败时返回中文错误信息
+// "Name 为必填字段"
+// "Email 必须是有效的邮箱地址"
+```
+
+### 自定义验证器
+
+框架预置了常用的自定义验证器：
+
+```go
+type CreateUserReq struct {
+    // [!code highlight]
+    Phone string `json:"phone" binding:"required,phone"`  // 手机号验证
+    // [!code highlight]
+    IDCard string `json:"id_card" binding:"required,idcard"` // 身份证验证
+}
+```
+
+## 使用引擎
+
+初始化完成后，通过 `reg.Serve` 访问 Gin 引擎：
+
+```go
+reg := xReg.Register()
+
+// [!code highlight:4]
+// 注册路由
+reg.Serve.GET("/api/users", userHandler.List)
+reg.Serve.POST("/api/users", userHandler.Create)
+reg.Serve.PUT("/api/users/:id", userHandler.Update)
+
+// [!code highlight:2]
+// 路由分组
+api := reg.Serve.Group("/api/v1")
+{
+    api.GET("/products", productHandler.List)
+    api.POST("/orders", orderHandler.Create)
+}
+
+// [!code highlight:2]
+// 启动服务
+reg.Serve.Run(":8080")
+```
+
+## 下一步
+
+<Cards>
+  <Card title="上下文初始化" href="./context" />
+  <Card title="快速开始" href="./index" />
+</Cards>

@@ -1,0 +1,12 @@
+{
+  "title": "初始化",
+  "icon": "Rocket",
+  "pages": [
+    "index",
+    "config",
+    "logger",
+    "snowflake",
+    "engine",
+    "context"
+  ]
+}

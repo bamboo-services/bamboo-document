@@ -1,0 +1,126 @@
+---
+title: 雪花算法初始化
+description: SnowflakeInit 初始化分布式唯一 ID 生成器
+icon: Snowflake
+---
+
+# 雪花算法初始化
+
+`SnowflakeInit` 方法初始化雪花算法节点，用于生成分布式唯一 ID。
+
+## SnowflakeInit
+
+```go title="register_snowflake.go"
+// [!code highlight]
+func (r *Reg) SnowflakeInit()
+```
+
+**环境变量配置：**
+
+| 变量名 | 说明 | 默认值 |
+|--------|------|--------|
+| `SNOWFLAKE_DATACENTER_ID` | 数据中心 ID | 根据机器特征自动生成 |
+| `SNOWFLAKE_NODE_ID` | 节点 ID | 根据机器特征自动生成 |
+
+## 实现细节
+
+```go title="register_snowflake.go"
+func (r *Reg) SnowflakeInit() {
+    log := xLog.WithName(xLog.NamedINIT)
+    log.Info(r.Context, "初始化雪花算法节点")
+
+    // [!code highlight:4]
+    if err := xSnowflake.InitDefaultNode(); err != nil {
+        log.SugarError(r.Context, "雪花算法节点初始化失败", "error", err)
+        panic("雪花算法节点初始化失败: " + err.Error())
+    }
+
+    // [!code highlight:2]
+    // 获取节点信息并记录日志
+    node := xSnowflake.GetDefaultNode()
+
+    // [!code highlight:3]
+    // 生成测试 ID 验证节点正常工作
+    testID := node.MustGenerate()                          // 普通 ID（Gene=0）
+    testGeneID := node.MustGenerate(xSnowflake.GeneSystem) // 基因 ID
+
+    log.SugarDebug(r.Context, "雪花算法节点初始化成功",
+        "datacenter_id", node.DatacenterID(),
+        "node_id", node.NodeID(),
+        "test_id", testID.String(),
+        "test_gene_id", testGeneID.String(),
+        "test_gene_id_gene", testGeneID.Gene().String(),
+    )
+}
+```
+
+## 自动节点 ID 生成
+
+若未配置环境变量，系统会根据机器特征自动生成节点 ID：
+
+1. **MAC 地址**：优先使用网卡 MAC 地址计算
+2. **主机名**：MAC 地址不可用时使用主机名哈希
+
+这确保了同一台机器在重启后仍能获得相同的节点 ID。
+
+## 使用雪花算法
+
+初始化后，雪花算法节点会在 `SystemContextInit` 中注入到请求上下文：
+
+```go
+import (
+    xSnowflake "github.com/bamboo-services/bamboo-base-go/snowflake"
+    xCtxUtil "github.com/bamboo-services/bamboo-base-go/context"
+)
+
+func CreateUser(ctx *gin.Context) {
+    // [!code highlight:2]
+    // 从上下文获取雪花算法节点
+    node := xCtxUtil.GetSnowflakeNode(ctx)
+
+    // [!code highlight:2]
+    // 生成普通 ID
+    userID := node.MustGenerate()
+
+    // [!code highlight:2]
+    // 生成带基因的 ID
+    orderID := node.MustGenerate(xSnowflake.GeneOrder)
+}
+```
+
+## 基因 ID
+
+基因 ID 在标准雪花 ID 基础上增加了业务类型标识：
+
+```go
+// [!code highlight:5]
+// 预定义基因类型
+xSnowflake.GeneSystem  // 系统级 ID
+xSnowflake.GeneUser    // 用户 ID
+xSnowflake.GeneOrder   // 订单 ID
+// ... 更多基因类型
+```
+
+**解析基因：**
+
+```go
+id := node.MustGenerate(xSnowflake.GeneUser)
+
+// [!code highlight:2]
+// 获取基因类型
+gene := id.Gene()
+fmt.Println(gene.String()) // "User"
+```
+
+## 注意事项
+
+- 该方法应在 `LoggerInit` 之后调用，以确保日志记录器可用
+- 初始化失败会触发 `panic` 并终止程序
+- 在分布式环境中，确保不同节点配置不同的 `SNOWFLAKE_DATACENTER_ID` 和 `SNOWFLAKE_NODE_ID`
+
+## 下一步
+
+<Cards>
+  <Card title="引擎初始化" href="./engine" />
+  <Card title="上下文初始化" href="./context" />
+</Cards>

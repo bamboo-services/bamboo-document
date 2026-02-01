@@ -1,0 +1,153 @@
+---
+title: 日志初始化
+description: LoggerInit 配置全局日志记录器，支持控制台彩色输出和文件 JSON 记录
+icon: FileText
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# 日志初始化
+
+`LoggerInit` 方法配置并初始化全局日志记录器，支持双输出模式。
+
+## LoggerInit
+
+```go title="register_logger.go"
+// [!code highlight]
+func (r *Reg) LoggerInit()
+```
+
+**日志输出：**
+
+| 输出目标 | 格式 | 说明 |
+|---------|------|------|
+| 控制台 | 彩色文本 | `<时间戳> [<日志等级>] [<trace>] [<日志类型>] <输出内容>` |
+| 文件 | JSON | Info 级别及以上，支持自动切割和归档 |
+
+## 实现细节
+
+```go title="register_logger.go"
+func (r *Reg) LoggerInit() {
+    // [!code highlight:7]
+    // 创建日志切割写入器
+    rotator, err := xLog.NewRotatingWriter(xLog.RotatorConfig{
+        Dir:      ".logs",
+        BaseName: "log",
+        Ext:      ".log",
+        MaxSize:  10 * 1024 * 1024, // 10MB
+    })
+    if err != nil {
+        panic("[INIT] 日志切割器创建失败: " + err.Error())
+    }
+
+    // [!code highlight:4]
+    // 确定日志级别
+    logLevel := slog.LevelInfo
+    debugMode := isDebugMode()
+    if debugMode {
+        logLevel = slog.LevelDebug
+    }
+
+    // [!code highlight:6]
+    // 创建自定义 Handler
+    handler := xLog.NewLogHandler(xLog.HandlerConfig{
+        Console:     os.Stdout,
+        File:        rotator,
+        Level:       logLevel,
+        IsDebugMode: debugMode,
+    })
+
+    // [!code highlight:2]
+    // 设置为全局默认 logger
+    logger := slog.New(handler)
+    slog.SetDefault(logger)
+}
+```
+
+## 日志切割配置
+
+<TypeTable
+  type={{
+    Dir: {
+      description: '日志文件目录',
+      type: 'string',
+      required: true,
+    },
+    BaseName: {
+      description: '日志文件基础名称',
+      type: 'string',
+      required: true,
+    },
+    Ext: {
+      description: '日志文件扩展名',
+      type: 'string',
+      required: true,
+    },
+    MaxSize: {
+      description: '单文件最大大小（字节），超过后自动切割',
+      type: 'int64',
+      required: true,
+    },
+  }}
+/>
+
+## 日志切割规则
+
+### 按大小切割
+
+单文件超过 10MB 自动切割：
+
+```
+.logs/
+├── log.log      # 当前日志文件
+├── log.0.log    # 切割后的历史文件
+├── log.1.log
+└── log.2.log
+```
+
+### 按时间归档
+
+每天 00:00:05 将前一天日志打包：
+
+```
+.logs/
+├── log.log
+└── logger-2024-01-15.tar.gz  # 归档文件
+```
+
+## 日志级别
+
+| 模式 | 日志级别 | 说明 |
+|------|---------|------|
+| 调试模式 (`DEBUG=true`) | Debug | 输出所有级别日志 |
+| 生产模式 | Info | 仅输出 Info 及以上级别 |
+
+## 使用日志
+
+```go
+import xLog "github.com/bamboo-services/bamboo-base-go/log"
+
+// [!code highlight:2]
+// 创建带名称的日志记录器
+log := xLog.WithName(xLog.NamedINIT)
+
+// [!code highlight]
+log.Info(ctx, "服务启动成功")
+
+// [!code highlight]
+log.Debug(ctx, "调试信息")
+
+// [!code highlight]
+log.Error(ctx, "发生错误: " + err.Error())
+
+// [!code highlight:2]
+// 带结构化参数
+log.SugarDebug(ctx, "用户登录", "user_id", 123, "ip", "192.168.1.1")
+```
+
+## 下一步
+
+<Cards>
+  <Card title="雪花算法初始化" href="./snowflake" />
+  <Card title="引擎初始化" href="./engine" />
+</Cards>

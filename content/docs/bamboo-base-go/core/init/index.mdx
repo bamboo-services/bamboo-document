@@ -1,0 +1,193 @@
+---
+title: 快速开始
+description: xReg 包提供一键初始化所有核心组件
+icon: Rocket
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# xReg 包
+
+`xReg` 包是 Bamboo Base 的核心注册模块，提供一键初始化所有核心组件的能力。
+
+```go
+import xReg "github.com/bamboo-services/bamboo-base-go/register"
+```
+
+## Reg 结构体
+
+应用程序的核心注册结构，包含所有初始化后的组件实例：
+
+```go title="register.go"
+type Reg struct {
+    // [!code highlight:2]
+    Context context.Context // 上下文，用于控制取消和超时
+    Serve   *gin.Engine     // Gin 引擎实例
+}
+```
+
+<TypeTable
+  type={{
+    Context: {
+      description: '系统上下文，用于控制取消和超时',
+      type: 'context.Context',
+      required: true,
+    },
+    Serve: {
+      description: 'Gin 引擎实例，用于处理 HTTP 请求',
+      type: '*gin.Engine',
+      required: true,
+    },
+  }}
+/>
+
+## Register
+
+一键注册并初始化应用的所有核心组件。
+
+```go title="register.go"
+// [!code highlight]
+func Register() *Reg
+```
+
+**初始化顺序：**
+
+```
+Register()
+    ├── ConfigInit()        // 1. 加载配置
+    ├── LoggerInit()        // 2. 初始化日志
+    ├── SnowflakeInit()     // 3. 初始化雪花算法
+    ├── EngineInit()        // 4. 启动 Gin 引擎
+    └── SystemContextInit() // 5. 初始化系统上下文
+```
+
+**示例：**
+
+```go title="main.go"
+package main
+
+import (
+    xReg "github.com/bamboo-services/bamboo-base-go/register"
+)
+
+func main() {
+    // [!code highlight]
+    // 一键初始化所有组件
+    reg := xReg.Register()
+
+    // 注册路由
+    reg.Serve.GET("/ping", func(c *gin.Context) {
+        c.String(200, "pong")
+    })
+
+    // 启动服务
+    reg.Serve.Run(":8080")
+}
+```
+
+## 初始化流程
+
+### 1. ConfigInit
+
+从 `.env` 文件加载环境变量配置。
+
+```go title="register_config.go"
+func (r *Reg) ConfigInit()
+```
+
+详见：[配置初始化](./config)
+
+### 2. LoggerInit
+
+初始化日志记录器，支持控制台彩色输出和文件 JSON 记录。
+
+```go title="register_logger.go"
+func (r *Reg) LoggerInit()
+```
+
+详见：[日志初始化](./logger)
+
+### 3. SnowflakeInit
+
+初始化雪花算法节点，用于生成分布式唯一 ID。
+
+```go title="register_snowflake.go"
+func (r *Reg) SnowflakeInit()
+```
+
+详见：[雪花算法初始化](./snowflake)
+
+### 4. EngineInit
+
+初始化 Gin 引擎，注册内置中间件和验证器。
+
+```go title="register_gin.go"
+func (r *Reg) EngineInit()
+```
+
+详见：[引擎初始化](./engine)
+
+### 5. SystemContextInit
+
+初始化系统上下文中间件，注入雪花算法节点等全局资源。
+
+```go title="register_context.go"
+func (r *Reg) SystemContextInit()
+```
+
+详见：[上下文初始化](./context)
+
+## 调试模式
+
+通过环境变量 `DEBUG` 控制调试模式：
+
+```go title="register.go"
+// [!code highlight]
+func isDebugMode() bool {
+    return xEnv.GetEnvBool(xEnv.Debug, false)
+}
+```
+
+| 环境变量 | 值 | 效果 |
+|---------|-----|------|
+| `DEBUG` | `true` | 启用调试模式，日志级别为 Debug |
+| `DEBUG` | `false` 或未设置 | 生产模式，日志级别为 Info |
+
+## 完整示例
+
+```go title="main.go"
+package main
+
+import (
+    xReg "github.com/bamboo-services/bamboo-base-go/register"
+    xResult "github.com/bamboo-services/bamboo-base-go/result"
+    "github.com/gin-gonic/gin"
+)
+
+func main() {
+    // [!code highlight]
+    // 一键初始化
+    reg := xReg.Register()
+
+    // 注册路由
+    // [!code highlight:4]
+    reg.Serve.GET("/api/status", func(c *gin.Context) {
+        xResult.SuccessHasData(c, "服务正常", gin.H{
+            "status": "running",
+        })
+    })
+
+    // 启动服务
+    // [!code highlight]
+    reg.Serve.Run(":8080")
+}
+```
+
+## 下一步
+
+<Cards>
+  <Card title="配置初始化" href="./config" />
+  <Card title="日志初始化" href="./logger" />
+  <Card title="雪花算法初始化" href="./snowflake" />
+  <Card title="引擎初始化" href="./engine" />
+</Cards>

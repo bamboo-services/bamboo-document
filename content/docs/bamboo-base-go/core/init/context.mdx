@@ -1,0 +1,117 @@
+---
+title: 上下文初始化
+description: SystemContextInit 初始化系统上下文中间件，注入全局资源
+icon: Layers
+---
+
+# 上下文初始化
+
+`SystemContextInit` 方法初始化系统上下文中间件，将全局资源注入到每个请求的上下文中。
+
+## SystemContextInit
+
+```go title="register_context.go"
+// [!code highlight]
+func (r *Reg) SystemContextInit()
+```
+
+## 实现细节
+
+```go title="register_context.go"
+type handler struct {
+    Data *Reg
+}
+
+func (r *Reg) SystemContextInit() {
+    xLog.WithName(xLog.NamedINIT).Info(r.Context, "初始化系统上下文")
+
+    // [!code highlight:4]
+    // 创建处理器实例
+    handler := &handler{
+        Data: r,
+    }
+
+    // [!code highlight:2]
+    // 注册系统上下文处理函数
+    r.Serve.Use(handler.systemContextHandlerFunc)
+}
+
+func (h *handler) systemContextHandlerFunc(c *gin.Context) {
+    // [!code highlight:2]
+    // 注入雪花算法节点
+    c.Set(xConsts.SnowflakeNodeKey.String(), xSnowflake.GetDefaultNode())
+
+    // 放行内容
+    c.Next()
+}
+```
+
+## 注入的资源
+
+| 资源 | Key | 类型 | 说明 |
+|------|-----|------|------|
+| 雪花算法节点 | `SnowflakeNodeKey` | `*xSnowflake.Node` | 用于生成分布式唯一 ID |
+
+## 获取上下文资源
+
+使用 `xCtxUtil` 包从上下文获取注入的资源：
+
+```go
+import xCtxUtil "github.com/bamboo-services/bamboo-base-go/context"
+
+func CreateOrder(ctx *gin.Context) {
+    // [!code highlight:2]
+    // 获取雪花算法节点
+    node := xCtxUtil.GetSnowflakeNode(ctx)
+
+    // 生成订单 ID
+    orderID := node.MustGenerate(xSnowflake.GeneOrder)
+}
+```
+
+## 扩展上下文
+
+在业务代码中，可以继续向上下文注入自定义资源：
+
+```go
+// [!code highlight:2]
+// 在中间件中注入数据库连接
+func DatabaseMiddleware(db *gorm.DB) gin.HandlerFunc {
+    return func(c *gin.Context) {
+        // [!code highlight]
+        c.Set("db", db)
+        c.Next()
+    }
+}
+
+// [!code highlight:2]
+// 在 Handler 中获取
+func GetUser(ctx *gin.Context) {
+    // [!code highlight]
+    db := ctx.MustGet("db").(*gorm.DB)
+    // ...
+}
+```
+
+## 请求 ID
+
+`RequestContext` 中间件会为每个请求生成唯一的请求 ID：
+
+```go
+func GetRequestID(ctx *gin.Context) string {
+    // [!code highlight]
+    return ctx.GetString(xConsts.RequestKey.String())
+}
+```
+
+请求 ID 会：
+- 存储在上下文中，通过 `xConsts.RequestKey` 访问
+- 添加到响应头 `X-Request-ID`
+- 用于日志追踪和问题排查
+
+## 下一步
+
+<Cards>
+  <Card title="快速开始" href="./index" />
+  <Card title="响应处理" href="../result" />
+</Cards>
