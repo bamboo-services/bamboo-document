@@ -1,62 +1,50 @@
 ---
-title: Bamboo Base
-description: Bamboo 服务的 Go 语言基础组件库文档
+title: 竹简文档
+description: Bamboo 服务组件库文档中心
 icon: Home
 ---
 
-# Bamboo Base
+# 竹简文档
 
-**Bamboo Base** 是 Bamboo 服务的 Go 语言基础组件库，基于 Gin 框架构建，为微服务提供标准化的基础设施。
+欢迎来到 **竹简文档**，这里是 Bamboo 服务各组件库的统一文档中心。
 
-## 特性
-
-- 🚀 **快速启动** - 基于 Gin 框架，一键启动 Web 服务
-- 🏗️ **模块化设计** - 清晰的模块划分，按需使用
-- 📦 **开箱即用** - 内置日志、配置、数据库等常用组件
-- 🆔 **分布式 ID** - 自定义雪花算法，支持业务基因
-- 📝 **统一响应** - 标准化 API 响应格式
-- 🔒 **类型安全** - 完整的类型定义和错误处理
-
-## 模块概览
-
-| 模块 | 描述 |
-|------|------|
-| [注册系统](../bamboo-base-go/core/register) | Reg 结构体与初始化流程 |
-| [统一响应](../bamboo-base-go/core/response) | BaseResponse 与响应中间件 |
-| [错误处理](../bamboo-base-go/core/error) | IError 接口与 40+ 预定义错误码 |
-| [雪花算法](../bamboo-base-go/components/snowflake) | 64 位分布式 ID 生成 |
-| [模型基类](../bamboo-base-go/components/models) | GORM 实体基类与软删除 |
-| [日志系统](../bamboo-base-go/components/log) | 基于 slog 的彩色日志 |
-| [中间件](../bamboo-base-go/components/middleware) | CORS、响应处理等 |
-| [验证器](../bamboo-base-go/utils/validator) | 自定义验证规则与中文翻译 |
-
-## 快速开始
-
-```bash
-go get github.com/bamboo-services/bamboo-base-go
-```
-
-```go
-package main
-
-import (
-    "github.com/bamboo-services/bamboo-base-go/web"
-    "github.com/bamboo-services/bamboo-base-go/web/result"
-)
-
-func main() {
-    r := web.Default()
-    r.GET("/ping", func(c *gin.Context) {
-        result.Success(c, "pong")
-    })
-    r.Run(":8080")
-}
-```
-
-## 更多信息
+## 可用组件库
 
 <Cards>
-  <Card title="入门指南" href="./getting-started" />
-  <Card title="核心架构" href="../bamboo-base-go/core/architecture" />
-  <Card title="GitHub 仓库" href="https://github.com/bamboo-services/bamboo-base-go" />
+  <Card
+    title="筱工具 (Golang)"
+    description="Go 语言基础组件库，基于 Gin 框架构建"
+    href="./bamboo-base-go"
+  />
+</Cards>
+
+## 即将推出
+
+以下组件库正在开发中，敬请期待：
+
+| 组件库 | 语言 | 状态 |
+|--------|------|------|
+| bamboo-base-java | Java | 规划中 |
+| bamboo-base-ts | TypeScript | 规划中 |
+
+## 关于
+
+竹简文档是 Bamboo 服务生态的统一文档平台，旨在为开发者提供清晰、完整的组件库使用指南。
+
+### 特点
+
+- **多语言支持** - 覆盖 Go、Java、TypeScript 等主流语言
+- **统一规范** - 各语言库遵循相似的设计理念和 API 风格
+- **持续更新** - 文档与代码同步维护
+
+### 贡献
+
+如果你发现文档有误或想要贡献内容，欢迎提交 Issue 或 PR。
+
+<Cards>
+  <Card
+    title="GitHub"
+    description="查看源码与提交反馈"
+    href="https://github.com/bamboo-services"
+  />
 </Cards>
