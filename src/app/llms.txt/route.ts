@@ -9,5 +9,9 @@ export async function GET() {
   for (const page of source.getPages()) {
     lines.push(`- [${page.data.title}](${page.url}): ${page.data.description}`);
   }
-  return new Response(lines.join('\n'));
+  return new Response(lines.join('\n'), {
+    headers: {
+      'Content-Type': 'text/plain; charset=utf-8',
+    },
+  });
 }

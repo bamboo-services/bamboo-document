@@ -1,0 +1,13 @@
+{
+  "title": "Bamboo Base Go",
+  "description": "Go 语言基础组件库",
+  "icon": "Package",
+  "root": true,
+  "defaultOpen": true,
+  "pages": [
+    "index",
+    "core",
+    "components",
+    "utils"
+  ]
+}

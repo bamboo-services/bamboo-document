@@ -119,7 +119,7 @@ func main() {
           </Link>
 
           <Link
-            href="/docs/core"
+            href="/docs/bamboo-base-go/core"
             className="group p-6 border border-border rounded-lg hover:border-primary hover:shadow-lg transition-all"
           >
             <div className="flex items-start gap-4">
@@ -142,7 +142,7 @@ func main() {
           </Link>
 
           <Link
-            href="/docs/components"
+            href="/docs/bamboo-base-go/components"
             className="group p-6 border border-border rounded-lg hover:border-primary hover:shadow-lg transition-all"
           >
             <div className="flex items-start gap-4">
@@ -165,7 +165,7 @@ func main() {
           </Link>
 
           <Link
-            href="/docs/utils"
+            href="/docs/bamboo-base-go/utils"
             className="group p-6 border border-border rounded-lg hover:border-primary hover:shadow-lg transition-all"
           >
             <div className="flex items-start gap-4">

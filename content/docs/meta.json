@@ -3,11 +3,8 @@
   "description": "基于 Bamboo Base 构建的文档库",
   "icon": "Library",
   "pages": [
-    "index",
-    "---Bamboo Base---",
     "guide",
-    "core",
-    "components",
-    "utils"
+    "---Bamboo Base Go---",
+    "bamboo-base-go"
   ]
 }

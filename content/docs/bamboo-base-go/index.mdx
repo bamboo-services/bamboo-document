@@ -1,12 +1,12 @@
 ---
-title: Bamboo Base
+title: Bamboo Base Go
 description: Bamboo 服务的 Go 语言基础组件库文档
-icon: Home
+icon: Package
 ---
 
-# Bamboo Base
+# Bamboo Base Go
 
-**Bamboo Base** 是 Bamboo 服务的 Go 语言基础组件库，基于 Gin 框架构建，为微服务提供标准化的基础设施。
+**Bamboo Base Go** 是 Bamboo 服务的 Go 语言基础组件库，基于 Gin 框架构建，为微服务提供标准化的基础设施。
 
 ## 特性
 
@@ -21,14 +21,14 @@ icon: Home
 
 | 模块 | 描述 |
 |------|------|
-| [注册系统](../bamboo-base-go/core/register) | Reg 结构体与初始化流程 |
-| [统一响应](../bamboo-base-go/core/response) | BaseResponse 与响应中间件 |
-| [错误处理](../bamboo-base-go/core/error) | IError 接口与 40+ 预定义错误码 |
-| [雪花算法](../bamboo-base-go/components/snowflake) | 64 位分布式 ID 生成 |
-| [模型基类](../bamboo-base-go/components/models) | GORM 实体基类与软删除 |
-| [日志系统](../bamboo-base-go/components/log) | 基于 slog 的彩色日志 |
-| [中间件](../bamboo-base-go/components/middleware) | CORS、响应处理等 |
-| [验证器](../bamboo-base-go/utils/validator) | 自定义验证规则与中文翻译 |
+| [注册系统](./core/register) | Reg 结构体与初始化流程 |
+| [统一响应](./core/response) | BaseResponse 与响应中间件 |
+| [错误处理](./core/error) | IError 接口与 40+ 预定义错误码 |
+| [雪花算法](./components/snowflake) | 64 位分布式 ID 生成 |
+| [模型基类](./components/models) | GORM 实体基类与软删除 |
+| [日志系统](./components/log) | 基于 slog 的彩色日志 |
+| [中间件](./components/middleware) | CORS、响应处理等 |
+| [验证器](./utils/validator) | 自定义验证规则与中文翻译 |
 
 ## 快速开始
 
@@ -56,7 +56,7 @@ func main() {
 ## 更多信息
 
 <Cards>
-  <Card title="入门指南" href="./getting-started" />
-  <Card title="核心架构" href="../bamboo-base-go/core/architecture" />
+  <Card title="入门指南" href="../guide/getting-started" />
+  <Card title="核心架构" href="./core/architecture" />
   <Card title="GitHub 仓库" href="https://github.com/bamboo-services/bamboo-base-go" />
 </Cards>
