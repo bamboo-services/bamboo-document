@@ -6,11 +6,12 @@
   "defaultOpen": true,
   "pages": [
     "index",
-    "---[Blocks]核心架构---",
+    "architecture",
+    "---核心架构---",
     "...core",
-    "---[Component]功能组件---",
+    "---功能组件---",
     "...components",
-    "---[Wrench]工具集---",
+    "---工具集---",
     "...utils"
   ]
 }

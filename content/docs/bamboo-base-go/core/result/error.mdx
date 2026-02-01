@@ -1,0 +1,341 @@
+---
+title: 错误处理
+description: xError 包提供统一的错误处理机制
+icon: SearchAlert
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# xError 包
+
+`xError` 包提供统一的错误处理机制，包含错误接口、错误结构体和错误创建函数。
+
+```go
+import xError "github.com/bamboo-services/bamboo-base-go/error"
+```
+
+## 核心类型
+
+### IError 接口
+
+所有错误类型都实现 `IError` 接口：
+
+```go title="error.go"
+type IError interface {
+    // [!code highlight:4]
+    Error() string
+    GetErrorCode() *ErrorCode
+    GetErrorMessage() ErrMessage
+    GetData() interface{}
+}
+```
+
+### ErrorCode 结构体
+
+预定义错误码的结构：
+
+```go title="error_code.go"
+type ErrorCode struct {
+    // [!code highlight:3]
+    Code    uint   // 错误码（如 40400）
+    Output  string // 输出标识（如 "NOT_FOUND"）
+    Message string // 错误信息（如 "未找到"）
+}
+```
+
+<TypeTable
+  type={{
+    Code: {
+      description: '错误码，5位数字，前3位对应HTTP状态码',
+      type: 'uint',
+      required: true,
+    },
+    Output: {
+      description: '输出标识，大写下划线格式，用于前端识别',
+      type: 'string',
+      required: true,
+    },
+    Message: {
+      description: '错误信息，中文描述',
+      type: 'string',
+      required: true,
+    },
+  }}
+/>
+
+### Error 结构体
+
+实际的错误对象：
+
+```go title="error.go"
+type Error struct {
+    // [!code highlight:4]
+    *ErrorCode              // 嵌入错误码
+    error        error      // 原始错误
+    ErrorMessage ErrMessage // 自定义错误消息
+    Data         interface{} // 附加数据
+}
+```
+
+### ErrMessage 类型
+
+自定义错误消息类型：
+
+```go title="error_message.go"
+// [!code highlight]
+type ErrMessage string
+
+func (e *ErrMessage) String() string {
+    return string(*e)
+}
+```
+
+## 创建错误
+
+### NewError
+
+创建标准错误对象。
+
+```go title="error_new.go"
+func NewError(
+    ctx *gin.Context,
+    err *ErrorCode,
+    errorMessage ErrMessage,
+    // [!code highlight]
+    throw bool,
+    getErr ...error,
+) *Error
+```
+
+**参数说明：**
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| ctx | `*gin.Context` | Gin 上下文 |
+| err | `*ErrorCode` | 预定义错误码 |
+| errorMessage | `ErrMessage` | 自定义错误描述 |
+| throw | `bool` | 是否记录日志 |
+| getErr | `...error` | 原始错误（可选） |
+
+**示例：**
+
+```go
+func GetUser(ctx *gin.Context, id string) (*User, error) {
+    user, err := db.FindUser(id)
+    if err != nil {
+        // [!code highlight:6]
+        return nil, xError.NewError(
+            ctx,
+            xError.NotFound,
+            "用户不存在",
+            true,  // 记录日志
+            err,   // 原始错误
+        )
+    }
+    return user, nil
+}
+```
+
+### NewErrorHasData
+
+创建带附加数据的错误对象。
+
+```go title="error_new.go"
+func NewErrorHasData(
+    ctx *gin.Context,
+    err *ErrorCode,
+    errorMessage ErrMessage,
+    throw bool,
+    getErr error,
+    // [!code highlight]
+    data ...interface{},
+) *Error
+```
+
+**示例：**
+
+```go
+func ValidateUser(ctx *gin.Context, req *CreateUserReq) error {
+    if req.Age < 18 {
+        // [!code highlight:10]
+        return xError.NewErrorHasData(
+            ctx,
+            xError.ValidationError,
+            "年龄不符合要求",
+            true,
+            nil,
+            map[string]interface{}{
+                "field":    "age",
+                "required": 18,
+                "actual":   req.Age,
+            },
+        )
+    }
+    return nil
+}
+```
+
+### NewInternalServerError
+
+创建服务器内部错误，自动记录 ERROR 级别日志。
+
+```go title="error_library.go"
+func NewInternalServerError(
+    ctx *gin.Context,
+    errMessage ErrMessage,
+    err error,
+) *Error
+```
+
+**示例：**
+
+```go
+func SaveUser(ctx *gin.Context, user *User) error {
+    if err := db.Save(user); err != nil {
+        // [!code highlight:4]
+        return xError.NewInternalServerError(
+            ctx,
+            "保存用户失败",
+            err,
+        )
+    }
+    return nil
+}
+```
+
+## 使用模式
+
+### Handler 中的错误处理
+
+在 Handler 中，使用 `ctx.Error()` 将错误传递给错误处理中间件：
+
+```go title="handler.go"
+func (h *AppHandler) CreateApp(ctx *gin.Context) {
+    h.log.Info(ctx, "开始处理创建应用请求")
+
+    // 验证并绑定数据
+    getReq := bUtil.BindData(ctx, &apiApp.CreateAppRequest{})
+    if getReq == nil {
+        return
+    }
+
+    // 验证商户 ID
+    merchantID, snowflakeErr := xSnowflake.ParseSnowflakeID(getReq.MerchantID)
+    if snowflakeErr != nil {
+        // [!code highlight:2]
+        // 创建错误并传递给中间件处理
+        _ = ctx.Error(xError.NewError(ctx, xError.BadRequest, "商户 ID 非法", false))
+        return
+    }
+
+    // 检查用户权限
+    if xErr := h.service.merchantUser.CheckUserBelongsToMerchant(ctx, getUser.ID, merchantID); xErr != nil {
+        // [!code highlight]
+        _ = ctx.Error(xErr)
+        return
+    }
+
+    // 创建应用
+    newApp, clientSecret, xErr := h.service.app.CreateApp(ctx, merchantID, getUser.ID, getReq.AppName, getReq.BaseURL, getReq.Description, getReq.Logo, getReq.Homepage)
+    if xErr != nil {
+        // [!code highlight]
+        _ = ctx.Error(xErr)
+        return
+    }
+
+    // 成功响应
+    response := apiApp.CreateAppResponse{
+        App:          newApp,
+        ClientSecret: *clientSecret,
+    }
+    // [!code highlight]
+    xResult.SuccessHasData(ctx, "应用创建成功", response)
+}
+```
+
+### 中间件中的错误处理
+
+在中间件中，使用 `xResult.AbortError()` 直接返回错误：
+
+```go title="middleware.go"
+func AuthRequired(ctx *gin.Context) {
+    // 获取用户 token
+    getToken := ctx.GetHeader(xHttp.HeaderAuthorization.String())
+    if getToken == "" {
+        // [!code highlight]
+        xResult.AbortError(ctx, xError.NotAcceptable, "Authorization Token 不能为空", nil)
+        return
+    }
+
+    // 验证 token 格式
+    if !strings.HasPrefix(getToken, "Bearer ") {
+        // [!code highlight]
+        xResult.AbortError(ctx, xError.NotAcceptable, "无效的 Authorization Token 格式", nil)
+        return
+    }
+
+    // 验证 token 合法性
+    if !xUtil.VerifySecurityKey(getToken[7:]) {
+        // [!code highlight]
+        xResult.AbortError(ctx, xError.Unauthorized, "无效的 Authorization Token", nil)
+        return
+    }
+
+    // 获取用户信息
+    getUser, xErr := logic.NewUser(db, rdb).GetUser(ctx, entity.SearchTypeID, tokenUser.UserID.String())
+    if xErr != nil {
+        // [!code highlight]
+        xResult.AbortError(ctx, xErr.ErrorCode, xErr.ErrorMessage, xErr.Error())
+        return
+    }
+    ctx.Set(bConstContext.UserEntityKey.String(), getUser)
+
+    ctx.Next()
+}
+```
+
+### Service 层的错误处理
+
+在 Service 层，返回 `*xError.Error` 类型的错误：
+
+```go title="service.go"
+func (s *UserService) GetUser(ctx *gin.Context, id string) (*entity.User, *xError.Error) {
+    user, err := s.repo.FindByID(ctx, id)
+    if err != nil {
+        if errors.Is(err, gorm.ErrRecordNotFound) {
+            // [!code highlight]
+            return nil, xError.NewError(ctx, xError.UserNotFound, "用户不存在", true, err)
+        }
+        // [!code highlight]
+        return nil, xError.NewInternalServerError(ctx, "查询用户失败", err)
+    }
+    return user, nil
+}
+```
+
+## 错误方法
+
+```go
+// [!code highlight]
+// 获取错误字符串
+err.Error() string
+
+// [!code highlight]
+// 获取错误码结构
+err.GetErrorCode() *ErrorCode
+
+// [!code highlight]
+// 获取自定义错误消息
+err.GetErrorMessage() ErrMessage
+
+// [!code highlight]
+// 获取附加数据
+err.GetData() interface{}
+```
+
+## 下一步
+
+<Cards>
+  <Card title="错误码" href="./error-code" />
+  <Card title="结果处理" href="./result" />
+</Cards>

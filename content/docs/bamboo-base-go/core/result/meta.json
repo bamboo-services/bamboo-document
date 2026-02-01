@@ -1,0 +1,10 @@
+{
+  "title": "响应处理",
+  "icon": "MessageSquareMore",
+  "pages": [
+    "base-response",
+    "result",
+    "error",
+    "error-code"
+  ]
+}

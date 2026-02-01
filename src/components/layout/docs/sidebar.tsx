@@ -1,6 +1,5 @@
 'use client';
 import * as Base from '../sidebar/base';
-import { cn } from '../../../lib/cn';
 import { type ComponentProps, useRef } from 'react';
 import { cva } from 'class-variance-authority';
 import { createPageTreeRenderer } from '../sidebar/page-tree';
@@ -11,6 +10,7 @@ import { Sidebar as SidebarIcon } from 'lucide-react';
 import { mergeRefs } from '../../../lib/merge-refs';
 import { usePathname } from 'next/navigation';
 import { getSection } from '../../../lib/navigation';
+import { cn } from '@/lib/cn';
 
 const itemVariants = cva(
   'relative flex flex-row items-center gap-2 rounded-lg p-2 text-start text-fd-muted-foreground wrap-anywhere [&_svg]:size-4 [&_svg]:shrink-0',

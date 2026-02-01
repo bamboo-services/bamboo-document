@@ -1,0 +1,117 @@
+---
+title: 通用返回结构
+description: BaseResponse 是 Bamboo Base Go 的统一响应结构体，确保所有 API 返回格式一致。
+icon: TextQuote
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# BaseResponse
+
+`BaseResponse` 是所有 API 响应的统一结构体，位于 `xBase` 包根目录。
+
+```go title="base_response.go"
+package xBase
+
+type BaseResponse struct {
+    Context      string            `json:"context"`
+    Output       string            `json:"output"`
+    Code         uint              `json:"code"`
+    Message      string            `json:"message"`
+    ErrorMessage xError.ErrMessage `json:"error_message,omitempty"`
+    Overhead     int64             `json:"overhead,omitempty"`
+    Data         interface{}       `json:"data,omitempty"`
+}
+```
+
+## 字段说明
+
+<TypeTable
+  type={{
+    context: {
+      description: '请求唯一标识，用于链路追踪',
+      type: 'string',
+      required: true,
+    },
+    output: {
+      description: '输出标识，成功时为 "Success"，失败时为错误码的 Output（如 "NOT_FOUND"）',
+      type: 'string',
+      required: true,
+    },
+    code: {
+      description: '响应状态码，200 表示成功，其他为错误码',
+      type: 'uint',
+      required: true,
+    },
+    message: {
+      description: '响应消息，成功时为自定义消息，失败时为错误码的 Message',
+      type: 'string',
+      required: true,
+    },
+    error_message: {
+      description: '详细错误描述，仅在错误响应时返回',
+      type: 'ErrMessage',
+      required: false,
+    },
+    overhead: {
+      description: '请求处理耗时（微秒）',
+      type: 'int64',
+      required: false,
+    },
+    data: {
+      description: '响应数据，仅在有数据时返回',
+      type: 'interface{}',
+      required: false,
+    },
+  }}
+/>
+
+## 响应格式示例
+
+### 成功响应（无数据）
+
+```json
+{
+  "context": "req_abc123",
+  "output": "Success",
+  "code": 200,
+  "message": "操作成功",
+  "overhead": 1234
+}
+```
+
+### 成功响应（有数据）
+
+```json
+{
+  "context": "req_abc123",
+  "output": "Success",
+  "code": 200,
+  "message": "获取成功",
+  "overhead": 2345,
+  "data": {
+    "id": 1,
+    "name": "bamboo"
+  }
+}
+```
+
+### 错误响应
+
+```json
+{
+  "context": "req_abc123",
+  "output": "NOT_FOUND",
+  "code": 40400,
+  "message": "未找到",
+  "error_message": "用户不存在",
+  "overhead": 567
+}
+```
+
+## 下一步
+
+<Cards>
+  <Card title="结果处理" href="./result" />
+  <Card title="错误处理" href="./error" />
+</Cards>

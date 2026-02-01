@@ -1,5 +1,12 @@
 {
   "title": "核心架构",
   "icon": "Blocks",
-  "pages": ["architecture", "register", "response", "error", "context"]
+  "pages": [
+    "result",
+    "architecture",
+    "register",
+    "response",
+    "error",
+    "context"
+  ]
 }

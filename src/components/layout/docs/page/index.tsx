@@ -1,5 +1,4 @@
 import type { ComponentProps, ReactNode } from 'react';
-import { cn } from '../../../../lib/cn';
 import { buttonVariants } from '../../../ui/button';
 import { Edit, Text } from 'lucide-react';
 import { I18nLabel } from 'fumadocs-ui/contexts/i18n';
@@ -16,6 +15,7 @@ import type { AnchorProviderProps, TOCItemType } from 'fumadocs-core/toc';
 import * as TocDefault from '../../../toc/default';
 import * as TocClerk from '../../../toc/clerk';
 import { TOCProvider, TOCScrollArea } from '../../../toc';
+import { cn } from '@/lib/cn';
 
 interface BreadcrumbOptions extends BreadcrumbProps {
   enabled: boolean;

@@ -1,0 +1,354 @@
+---
+title: 错误码
+description: 100+ 预定义错误码速查表
+icon: ListX
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# 错误码规范
+
+错误码采用 5 位数字格式，前 3 位对应 HTTP 状态码：
+
+```
+XXXXX
+├── XXX: HTTP 状态码（如 400、401、404、500）
+└── XX: 具体错误序号（00-99）
+```
+
+## HTTP 状态码映射
+
+| 错误码前缀 | HTTP 状态码 | 说明 |
+|-----------|------------|------|
+| 400xx | 400 | Bad Request - 请求错误 |
+| 401xx | 401 | Unauthorized - 未授权 |
+| 403xx | 403 | Forbidden - 禁止访问 |
+| 404xx | 404 | Not Found - 未找到 |
+| 405xx | 405 | Method Not Allowed |
+| 408xx | 408 | Request Timeout |
+| 409xx | 409 | Conflict - 冲突 |
+| 410xx | 410 | Gone - 已删除 |
+| 413xx | 413 | Payload Too Large |
+| 422xx | 422 | Unprocessable Entity |
+| 429xx | 429 | Too Many Requests |
+| 500xx | 500 | Internal Server Error |
+| 502xx | 502 | Bad Gateway |
+| 503xx | 503 | Service Unavailable |
+| 504xx | 504 | Gateway Timeout |
+
+## 错误码表
+
+### 400 Bad Request
+
+<TypeTable
+  type={{
+    '40000': { description: '请求的内容不存在，如查询的记录、资源等未找到', type: 'NotExist', required: true },
+    '40001': { description: '请求创建的内容已存在，如重复注册、重复创建等', type: 'Existed', required: true },
+    '40002': { description: '请求的内容已过期，如邀请链接、临时资源等', type: 'Expired', required: true },
+    '40003': { description: '请求的内容已被禁用，如账号、功能等被管理员禁用', type: 'Disabled', required: true },
+    '40004': { description: '请求的内容已被锁定，如订单、记录等处于锁定状态', type: 'Locked', required: true },
+    '40005': { description: '请求的内容待处理，如审核中、处理中等状态', type: 'Pending', required: true },
+    '40006': { description: '请求的内容已被拒绝，如申请被驳回等', type: 'Rejected', required: true },
+    '40007': { description: '请求的内容已被取消，如订单取消、预约取消等', type: 'Canceled', required: true },
+    '40010': { description: '请求格式错误，服务器无法理解请求', type: 'BadRequest', required: true },
+    '40011': { description: '请求参数错误，参数值不符合要求', type: 'ParameterError', required: true },
+    '40012': { description: '请求缺少必要参数', type: 'ParameterEmpty', required: true },
+    '40013': { description: '请求参数类型错误，如需要数字却传入字符串', type: 'ParameterType', required: true },
+    '40014': { description: '请求体格式错误，无法解析 JSON/XML 等', type: 'BodyError', required: true },
+    '40015': { description: '请求体为空，缺少必要的请求体内容', type: 'BodyEmpty', required: true },
+    '40016': { description: '请求体类型错误，Content-Type 不匹配', type: 'BodyType', required: true },
+    '40017': { description: '请求头错误，必要的请求头格式不正确', type: 'HeaderError', required: true },
+    '40018': { description: '请求头缺失，缺少必要的请求头', type: 'HeaderEmpty', required: true },
+    '40019': { description: '请求头类型错误', type: 'HeaderType', required: true },
+    '40020': { description: '操作执行过程中发生错误', type: 'OperationError', required: true },
+    '40021': { description: '操作执行失败，未能完成预期操作', type: 'OperationFailed', required: true },
+    '40022': { description: '操作被系统拒绝，不允许执行此操作', type: 'OperationDenied', required: true },
+    '40023': { description: '操作无效，当前状态下不支持此操作', type: 'OperationInvalid', required: true },
+    '40024': { description: '开发者调用错误，API 使用方式不正确', type: 'DeveloperError', required: true },
+    '40025': { description: '重复操作，该操作已经执行过', type: 'RepeatOperation', required: true },
+    '40026': { description: '不支持的操作类型', type: 'UnsupportedOp', required: true },
+    '40030': { description: '数据验证失败，输入数据不符合验证规则', type: 'ValidationError', required: true },
+    '40031': { description: '数据格式错误，如日期格式、邮箱格式等', type: 'FormatError', required: true },
+    '40032': { description: '数据长度错误，超出或不足规定长度', type: 'LengthError', required: true },
+    '40033': { description: '数据范围错误，数值超出允许范围', type: 'RangeError', required: true },
+    '40034': { description: '数据格式不匹配正则表达式规则', type: 'PatternError', required: true },
+    '40035': { description: '数据类型不匹配预期类型', type: 'TypeMismatch', required: true },
+    '40036': { description: '无效的数据值', type: 'InvalidValue', required: true },
+    '40037': { description: '无效的数据格式', type: 'InvalidFormat', required: true },
+    '40038': { description: '无效的状态值', type: 'InvalidState', required: true },
+    '40039': { description: '无效的输入内容', type: 'InvalidInput', required: true },
+    '40040': { description: '数据处理过程中发生错误', type: 'DataError', required: true },
+    '40041': { description: '数据无效，不符合业务规则', type: 'DataInvalid', required: true },
+    '40042': { description: '数据冲突，与现有数据产生冲突', type: 'DataConflict', required: true },
+    '40043': { description: '数据重复，违反唯一性约束', type: 'DataDuplicate', required: true },
+    '40044': { description: '数据不匹配，关联数据不一致', type: 'DataNotMatch', required: true },
+    '40045': { description: '数据不完整，缺少必要字段', type: 'DataIncomplete', required: true },
+    '40046': { description: '数据损坏，无法正常读取或解析', type: 'DataCorrupted', required: true },
+    '40047': { description: '数据超出允许范围', type: 'DataOutOfRange', required: true },
+    '40048': { description: '数据过大，超出处理限制', type: 'DataTooLarge', required: true },
+    '40049': { description: '数据过小，不满足最小要求', type: 'DataTooSmall', required: true },
+    '40050': { description: '文件上传过程中发生错误', type: 'FileUploadError', required: true },
+    '40051': { description: '文件下载过程中发生错误', type: 'FileDownloadError', required: true },
+    '40052': { description: '文件大小超出限制', type: 'FileSizeExceeded', required: true },
+    '40053': { description: '不允许上传此类型的文件', type: 'FileTypeNotAllowed', required: true },
+    '40054': { description: '请求的文件不存在', type: 'FileNotFound', required: true },
+    '40055': { description: '文件读取失败', type: 'FileReadError', required: true },
+    '40056': { description: '文件写入失败', type: 'FileWriteError', required: true },
+    '40057': { description: '文件删除失败', type: 'FileDeleteError', required: true },
+    '40058': { description: '文件格式错误，无法解析', type: 'FileFormatError', required: true },
+    '40059': { description: '上传的文件内容为空', type: 'FileEmpty', required: true },
+    '40060': { description: '业务逻辑处理错误', type: 'BusinessError', required: true },
+    '40061': { description: '数据库事务执行失败', type: 'TransactionFailed', required: true },
+    '40062': { description: '业务状态错误，当前状态不允许此操作', type: 'StateError', required: true },
+    '40063': { description: '业务流程错误，流程节点异常', type: 'FlowError', required: true },
+    '40064': { description: '违反业务规则', type: 'RuleViolation', required: true },
+    '40065': { description: '配额超出限制，如存储配额、API 调用配额等', type: 'QuotaExceeded', required: true },
+    '40066': { description: '超出操作限制，如每日操作次数等', type: 'LimitExceeded', required: true },
+    '40067': { description: '账户余额不足', type: 'BalanceInsuff', required: true },
+    '40068': { description: '库存不足，无法完成操作', type: 'StockInsuff', required: true },
+    '40069': { description: '不满足操作的前置条件', type: 'ConditionNotMet', required: true },
+  }}
+/>
+
+### 401 Unauthorized
+
+<TypeTable
+  type={{
+    '40100': { description: '未授权访问，需要登录认证', type: 'Unauthorized', required: true },
+    '40101': { description: '登录失败，用户名或密码错误', type: 'LoginFailed', required: true },
+    '40102': { description: '访问令牌无效，请重新获取', type: 'TokenInvalid', required: true },
+    '40103': { description: '访问令牌已过期，请重新登录', type: 'TokenExpired', required: true },
+    '40104': { description: '请求缺少访问令牌', type: 'TokenMissing', required: true },
+    '40105': { description: '用户会话已过期，请重新登录', type: 'SessionExpired', required: true },
+    '40106': { description: '用户会话无效', type: 'SessionInvalid', required: true },
+    '40107': { description: '认证凭证错误', type: 'CredentialError', required: true },
+    '40108': { description: '请求签名无效，签名验证失败', type: 'SignatureInvalid', required: true },
+    '40109': { description: '请求签名已过期', type: 'SignatureExpired', required: true },
+    '40110': { description: '用户不存在', type: 'UserNotFound', required: true },
+    '40111': { description: '用户账号已被禁用', type: 'UserDisabled', required: true },
+    '40112': { description: '用户账号已被锁定，请联系管理员', type: 'UserLocked', required: true },
+    '40113': { description: '用户账号已过期', type: 'UserExpired', required: true },
+    '40114': { description: '密码错误', type: 'PasswordError', required: true },
+    '40115': { description: '密码已过期，请修改密码', type: 'PasswordExpired', required: true },
+    '40116': { description: '密码强度不足，请设置更复杂的密码', type: 'PasswordWeak', required: true },
+    '40117': { description: '新密码不能与旧密码相同', type: 'PasswordSame', required: true },
+    '40118': { description: '账户不存在', type: 'AccountNotExist', required: true },
+    '40119': { description: '账户已被冻结', type: 'AccountFrozen', required: true },
+    '40120': { description: '验证码错误', type: 'CaptchaError', required: true },
+    '40121': { description: '验证码已过期，请重新获取', type: 'CaptchaExpired', required: true },
+    '40122': { description: '验证码无效', type: 'CaptchaInvalid', required: true },
+    '40123': { description: '请输入验证码', type: 'CaptchaMissing', required: true },
+    '40124': { description: '验证码发送过于频繁，请稍后再试', type: 'CaptchaFreq', required: true },
+    '40125': { description: '短信验证码错误', type: 'SmsCodeError', required: true },
+    '40126': { description: '邮箱验证码错误', type: 'EmailCodeError', required: true },
+  }}
+/>
+
+### 403 Forbidden
+
+<TypeTable
+  type={{
+    '40300': { description: '禁止访问，没有权限访问此资源', type: 'Forbidden', required: true },
+    '40301': { description: '权限不足，需要更高级别的权限', type: 'PermissionDenied', required: true },
+    '40302': { description: '访问受限，当前条件下无法访问', type: 'AccessLimited', required: true },
+    '40303': { description: '角色不存在', type: 'RoleNotFound', required: true },
+    '40304': { description: '角色权限被拒绝', type: 'RoleDenied', required: true },
+    '40305': { description: '资源访问被拒绝', type: 'ResourceDenied', required: true },
+    '40306': { description: 'IP 地址已被封禁', type: 'IpBlocked', required: true },
+    '40307': { description: '当前地区无法访问此服务', type: 'RegionBlocked', required: true },
+    '40308': { description: '当前设备已被封禁', type: 'DeviceBlocked', required: true },
+    '40309': { description: '此操作被禁止执行', type: 'ActionForbidden', required: true },
+  }}
+/>
+
+### 404 Not Found
+
+<TypeTable
+  type={{
+    '40400': { description: '请求的资源未找到', type: 'NotFound', required: true },
+    '40401': { description: '请求的页面不存在', type: 'PageNotFound', required: true },
+    '40402': { description: '请求的资源不存在', type: 'ResourceNotFound', required: true },
+    '40403': { description: '请求的 API 接口不存在', type: 'ApiNotFound', required: true },
+    '40404': { description: '请求的路由不存在', type: 'RouteNotFound', required: true },
+    '40405': { description: '请求的服务不存在', type: 'ServiceNotFound', required: true },
+    '40406': { description: '请求的记录不存在', type: 'RecordNotFound', required: true },
+    '40407': { description: '请求的配置项不存在', type: 'ConfigNotFound', required: true },
+  }}
+/>
+
+### 405 Method Not Allowed
+
+<TypeTable
+  type={{
+    '40500': { description: '请求方法不允许，如对只读资源使用 POST', type: 'MethodNotAllowed', required: true },
+  }}
+/>
+
+### 406 Not Acceptable
+
+<TypeTable
+  type={{
+    '40600': { description: '请求的内容类型不可接受', type: 'NotAcceptable', required: true },
+    '40601': { description: 'Content-Type 请求头错误', type: 'ContentTypeError', required: true },
+    '40602': { description: 'Accept 请求头错误', type: 'AcceptHeaderError', required: true },
+  }}
+/>
+
+### 408 Request Timeout
+
+<TypeTable
+  type={{
+    '40800': { description: '请求处理超时', type: 'Timeout', required: true },
+    '40801': { description: '建立连接超时', type: 'ConnectTimeout', required: true },
+    '40802': { description: '读取数据超时', type: 'ReadTimeout', required: true },
+    '40803': { description: '写入数据超时', type: 'WriteTimeout', required: true },
+    '40804': { description: '执行操作超时', type: 'ExecuteTimeout', required: true },
+    '40805': { description: '连接空闲超时', type: 'IdleTimeout', required: true },
+  }}
+/>
+
+### 409 Conflict
+
+<TypeTable
+  type={{
+    '40900': { description: '请求与当前资源状态冲突', type: 'Conflict', required: true },
+    '40901': { description: '资源版本冲突，请刷新后重试', type: 'VersionConflict', required: true },
+    '40902': { description: '并发操作冲突', type: 'ConcurrencyError', required: true },
+    '40903': { description: '资源锁冲突，资源正被其他操作占用', type: 'LockConflict', required: true },
+    '40904': { description: '资源状态冲突', type: 'ResourceConflict', required: true },
+    '40905': { description: '乐观锁冲突，数据已被其他用户修改', type: 'OptimisticLock', required: true },
+    '40906': { description: '重复条目，违反唯一约束', type: 'DuplicateEntry', required: true },
+    '40907': { description: '唯一约束冲突', type: 'UniqueConstraint', required: true },
+    '40908': { description: '外键约束错误，关联数据不存在', type: 'ForeignKeyError', required: true },
+    '40909': { description: '数据完整性约束错误', type: 'IntegrityError', required: true },
+  }}
+/>
+
+### 410 Gone
+
+<TypeTable
+  type={{
+    '41000': { description: '资源已被永久删除', type: 'Gone', required: true },
+    '41001': { description: '资源已不存在', type: 'ResourceGone', required: true },
+    '41002': { description: 'API 接口已废弃，请使用新版本', type: 'DeprecatedApi', required: true },
+    '41003': { description: 'API 版本已过期', type: 'VersionExpired', required: true },
+  }}
+/>
+
+### 413 Payload Too Large
+
+<TypeTable
+  type={{
+    '41300': { description: '请求体过大，超出服务器处理限制', type: 'PayloadTooLarge', required: true },
+    '41301': { description: '请求数据过大', type: 'RequestTooLarge', required: true },
+    '41302': { description: '上传内容过大', type: 'UploadTooLarge', required: true },
+  }}
+/>
+
+### 415 Unsupported Media Type
+
+<TypeTable
+  type={{
+    '41500': { description: '不支持的媒体类型', type: 'UnsupportedMedia', required: true },
+    '41501': { description: '不支持的内容类型', type: 'UnsupportedType', required: true },
+  }}
+/>
+
+### 422 Unprocessable Entity
+
+<TypeTable
+  type={{
+    '42200': { description: '无法处理的实体，请求格式正确但语义错误', type: 'UnprocessableEntity', required: true },
+    '42201': { description: '请求语义错误', type: 'SemanticError', required: true },
+    '42202': { description: '业务逻辑错误', type: 'LogicError', required: true },
+  }}
+/>
+
+### 429 Too Many Requests
+
+<TypeTable
+  type={{
+    '42900': { description: '请求过多，请稍后再试', type: 'TooManyRequests', required: true },
+    '42901': { description: '请求频率过高，已触发限流', type: 'RateLimited', required: true },
+    '42902': { description: '超出限流阈值', type: 'ThrottleExceeded', required: true },
+    '42903': { description: '并发请求数超出限制', type: 'ConcurrentLimit', required: true },
+    '42904': { description: '今日请求量已达上限', type: 'DailyLimitExceed', required: true },
+  }}
+/>
+
+### 500 Internal Server Error
+
+<TypeTable
+  type={{
+    '50000': { description: '服务器内部错误，请联系管理员', type: 'ServerInternalError', required: true },
+    '50001': { description: '数据库操作错误', type: 'DatabaseError', required: true },
+    '50002': { description: '缓存服务错误', type: 'CacheError', required: true },
+    '50003': { description: '文件系统错误', type: 'FileError', required: true },
+    '50004': { description: '存储服务错误', type: 'StorageError', required: true },
+    '50005': { description: '远程服务调用错误', type: 'RemoteError', required: true },
+    '50006': { description: '系统配置错误', type: 'ConfigError', required: true },
+    '50007': { description: '网络通信错误', type: 'NetworkError', required: true },
+    '50008': { description: '数据加密错误', type: 'EncryptError', required: true },
+    '50009': { description: '数据解密错误', type: 'DecryptError', required: true },
+    '50010': { description: '数据序列化错误', type: 'SerializeError', required: true },
+    '50011': { description: '数据反序列化错误', type: 'DeserializeErr', required: true },
+    '50012': { description: 'JSON 处理错误', type: 'JsonError', required: true },
+    '50013': { description: 'XML 处理错误', type: 'XmlError', required: true },
+    '50014': { description: 'IO 操作错误', type: 'IoError', required: true },
+    '50015': { description: '内存分配错误', type: 'MemoryError', required: true },
+    '50016': { description: '线程/协程错误', type: 'ThreadError', required: true },
+    '50017': { description: '连接池资源耗尽', type: 'PoolExhausted', required: true },
+    '50018': { description: '消息队列已满', type: 'QueueFull', required: true },
+    '50020': { description: '第三方服务调用错误', type: 'ThirdPartyError', required: true },
+    '50021': { description: '外部 API 调用失败', type: 'ApiCallFailed', required: true },
+    '50022': { description: '回调处理错误', type: 'CallbackError', required: true },
+    '50023': { description: 'Webhook 处理错误', type: 'WebhookError', required: true },
+    '50024': { description: '短信服务错误', type: 'SmsError', required: true },
+    '50025': { description: '邮件服务错误', type: 'EmailError', required: true },
+    '50026': { description: '支付服务错误', type: 'PaymentError', required: true },
+    '50027': { description: '对象存储服务错误', type: 'OssError', required: true },
+    '50028': { description: 'CDN 服务错误', type: 'CdnError', required: true },
+    '50029': { description: '消息推送服务错误', type: 'PushError', required: true },
+    '50099': { description: '未知错误', type: 'UnknownError', required: true },
+  }}
+/>
+
+### 502 Bad Gateway
+
+<TypeTable
+  type={{
+    '50200': { description: '网关错误，无法连接上游服务', type: 'GatewayError', required: true },
+    '50201': { description: '上游服务返回错误', type: 'UpstreamError', required: true },
+    '50202': { description: '代理服务错误', type: 'ProxyError', required: true },
+    '50203': { description: '负载均衡错误', type: 'LoadBalanceError', required: true },
+  }}
+/>
+
+### 503 Service Unavailable
+
+<TypeTable
+  type={{
+    '50300': { description: '服务暂时不可用，请稍后再试', type: 'ServiceUnavailable', required: true },
+    '50301': { description: '系统维护中，请稍后访问', type: 'SystemMaintenance', required: true },
+    '50302': { description: '服务器资源耗尽', type: 'ResourceExhausted', required: true },
+    '50303': { description: '服务过载，请稍后再试', type: 'ServiceOverload', required: true },
+    '50304': { description: '服务熔断保护中', type: 'CircuitBreaker', required: true },
+    '50305': { description: '服务已降级', type: 'ServiceDegraded', required: true },
+  }}
+/>
+
+### 504 Gateway Timeout
+
+<TypeTable
+  type={{
+    '50400': { description: '网关超时，上游服务响应超时', type: 'GatewayTimeout', required: true },
+    '50401': { description: '上游服务响应超时', type: 'UpstreamTimeout', required: true },
+  }}
+/>
+
+## 下一步
+
+<Cards>
+  <Card title="错误处理" href="./error" />
+  <Card title="结果处理" href="./result" />
+</Cards>

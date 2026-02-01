@@ -1,0 +1,266 @@
+---
+title: 结果处理
+description: xResult 包提供便捷的响应函数，用于统一 API 响应格式
+icon: ArrowLeftRight
+---
+
+# xResult 包
+
+`xResult` 包提供便捷的响应函数，基于 [BaseResponse](./base-response) 结构体封装，自动处理日志记录和响应格式化。
+
+```go
+import xResult "github.com/bamboo-services/bamboo-base-go/result"
+```
+
+## Success
+
+返回成功响应（无数据）。
+
+```go title="result.go"
+func Success(ctx *gin.Context, message string)
+```
+
+**示例：**
+
+```go
+func Logout(ctx *gin.Context) {
+    // 执行登出逻辑...
+    // [!code highlight]
+    xResult.Success(ctx, "登出成功")
+}
+```
+
+**响应：**
+
+```json
+{
+  "context": "req_abc123",
+  "output": "Success",
+  // [!code highlight]
+  "code": 200,
+  "message": "登出成功",
+  "overhead": 1234
+}
+```
+
+## SuccessHasData
+
+返回成功响应（有数据）。
+
+```go title="result.go"
+func SuccessHasData(ctx *gin.Context, message string, data interface{})
+```
+
+**示例：**
+
+```go
+func GetUser(ctx *gin.Context) {
+    user := User{
+        ID:   1,
+        Name: "Bamboo",
+    }
+    // [!code highlight]
+    xResult.SuccessHasData(ctx, "获取成功", user)
+}
+```
+
+**响应：**
+
+```json
+{
+  "context": "req_abc123",
+  "output": "Success",
+  // [!code highlight]
+  "code": 200,
+  "message": "获取成功",
+  "overhead": 2345,
+  // [!code highlight:5]
+  "data": {
+    "id": 1,
+    "name": "Bamboo"
+  }
+}
+```
+
+## Error
+
+返回错误响应，请求继续执行后续中间件。适用于需要统一错误处理中间件的场景。
+
+```go title="result.go"
+func Error(ctx *gin.Context, errorCode *xError.ErrorCode, errorMessage xError.ErrMessage, data interface{})
+```
+
+**参数说明：**
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| ctx | `*gin.Context` | Gin 上下文 |
+| errorCode | `*xError.ErrorCode` | 预定义错误码 |
+| errorMessage | `xError.ErrMessage` | 详细错误描述 |
+| data | `interface{}` | 附加数据（可为 nil） |
+
+**响应：**
+
+```json
+{
+  "context": "req_abc123",
+  // [!code highlight:3]
+  "output": "NOT_FOUND",
+  "code": 40400,
+  "message": "未找到",
+  // [!code highlight]
+  "error_message": "用户不存在",
+  "overhead": 567
+}
+```
+
+## AbortError
+
+返回错误响应并**终止请求**，不再执行后续中间件和处理函数。**主要用于中间件中的错误处理**。
+
+```go title="result.go"
+func AbortError(ctx *gin.Context, errorCode *xError.ErrorCode, errorMessage xError.ErrMessage, data interface{})
+```
+
+**与 Error 的区别：**
+
+| 函数 | 使用场景 | 行为 |
+|------|---------|------|
+| `Error` | Handler 中配合错误中间件 | 返回响应后继续执行后续中间件 |
+| `AbortError` | 中间件中直接返回 | 返回响应后立即终止请求链 |
+
+## 使用模式
+
+### Handler 中的错误处理
+
+在 Handler 中，推荐使用 `ctx.Error()` 配合错误处理中间件，而不是直接调用 `xResult.Error()`：
+
+```go title="handler.go"
+func (h *AppHandler) CreateApp(ctx *gin.Context) {
+    h.log.Info(ctx, "开始处理创建应用请求")
+
+    // 验证并绑定数据
+    getReq := bUtil.BindData(ctx, &apiApp.CreateAppRequest{})
+    if getReq == nil {
+        return
+    }
+
+    // 验证商户 ID
+    merchantID, snowflakeErr := xSnowflake.ParseSnowflakeID(getReq.MerchantID)
+    if snowflakeErr != nil {
+        // [!code highlight:2]
+        // 使用 ctx.Error() 而不是直接返回
+        _ = ctx.Error(xError.NewError(ctx, xError.BadRequest, "商户 ID 非法", false))
+        return
+    }
+
+    // 检查用户权限
+    if xErr := h.service.merchantUser.CheckUserBelongsToMerchant(ctx, getUser.ID, merchantID); xErr != nil {
+        // [!code highlight]
+        _ = ctx.Error(xErr)
+        return
+    }
+
+    // 创建应用
+    newApp, clientSecret, xErr := h.service.app.CreateApp(ctx, merchantID, getUser.ID, getReq.AppName, getReq.BaseURL, getReq.Description, getReq.Logo, getReq.Homepage)
+    if xErr != nil {
+        // [!code highlight]
+        _ = ctx.Error(xErr)
+        return
+    }
+
+    // 成功响应
+    response := apiApp.CreateAppResponse{
+        App:          newApp,
+        ClientSecret: *clientSecret,
+    }
+    // [!code highlight]
+    xResult.SuccessHasData(ctx, "应用创建成功", response)
+}
+```
+
+### 中间件中的错误处理
+
+在中间件中，使用 `xResult.AbortError()` 直接返回错误并终止请求：
+
+```go title="middleware.go"
+func AuthRequired(ctx *gin.Context) {
+    xLog.WithName(xLog.NamedMIDE).Info(ctx, "开始验证用户登录状态")
+
+    // 获取用户 token
+    getToken := ctx.GetHeader(xHttp.HeaderAuthorization.String())
+    if getToken == "" {
+        // [!code highlight]
+        xResult.AbortError(ctx, xError.NotAcceptable, "Authorization Token 不能为空", nil)
+        return
+    }
+
+    // 验证 token 格式
+    if !strings.HasPrefix(getToken, "Bearer ") {
+        // [!code highlight]
+        xResult.AbortError(ctx, xError.NotAcceptable, "无效的 Authorization Token 格式", nil)
+        return
+    }
+
+    // 验证 token 合法性
+    if !xUtil.VerifySecurityKey(getToken[7:]) {
+        // [!code highlight]
+        xResult.AbortError(ctx, xError.Unauthorized, "无效的 Authorization Token", nil)
+        return
+    }
+
+    // 获取缓存的登录态信息
+    tokenUser := new(bModelsCache.TokenUser)
+    rdb := xCtxUtil.GetRDB(ctx)
+    redisErr := rdb.HGetAll(ctx, bRedis.TokenUserKey.Get(getToken[7:]).String()).Scan(tokenUser)
+    if redisErr != nil {
+        // [!code highlight]
+        xResult.AbortError(ctx, xError.CacheError, "缓存获取失败", redisErr.Error())
+        return
+    }
+
+    if tokenUser == nil || tokenUser.Token == "" {
+        // [!code highlight]
+        xResult.AbortError(ctx, xError.Unauthorized, "无效的用户令牌", nil)
+        return
+    }
+
+    // 设置用户信息到上下文
+    db := xCtxUtil.GetDB(ctx)
+    getUser, xErr := logic.NewUser(db, rdb).GetUser(ctx, entity.SearchTypeID, tokenUser.UserID.String())
+    if xErr != nil {
+        // [!code highlight]
+        xResult.AbortError(ctx, xErr.ErrorCode, xErr.ErrorMessage, xErr.Error())
+        return
+    }
+    ctx.Set(bConstContext.UserEntityKey.String(), getUser)
+
+    // 继续放行
+    ctx.Next()
+}
+```
+
+## HTTP 状态码映射
+
+`xResult` 会根据错误码自动计算 HTTP 状态码：
+
+```go
+// [!code highlight]
+httpStatus := errorCode.Code / 100
+```
+
+| 错误码范围 | HTTP 状态码 | 说明 |
+|-----------|------------|------|
+| 40000-40099 | 400 | Bad Request |
+| 40100-40199 | 401 | Unauthorized |
+| 40300-40399 | 403 | Forbidden |
+| 40400-40499 | 404 | Not Found |
+| 50000-50099 | 500 | Internal Server Error |
+
+## 下一步
+
+<Cards>
+  <Card title="BaseResponse" href="./base-response" />
+  <Card title="错误处理" href="./error" />
+  <Card title="错误码" href="./error-code" />
+</Cards>

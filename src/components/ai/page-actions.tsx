@@ -52,7 +52,7 @@ export function LLMCopyButton({
       onClick={onClick}
     >
       {checked ? <Check /> : <Copy />}
-      Copy Markdown
+      复制 Markdown
     </button>
   );
 }
@@ -78,7 +78,7 @@ export function ViewOptions({
 
     return [
       {
-        title: 'Open in GitHub',
+        title: '在 Github 打开',
         href: githubUrl,
         icon: (
           <svg fill="currentColor" role="img" viewBox="0 0 24 24">
@@ -88,7 +88,7 @@ export function ViewOptions({
         ),
       },
       {
-        title: 'Open in Scira AI',
+        title: '在 Scira AI 打开',
         href: `https://scira.ai/?${new URLSearchParams({
           q,
         })}`,
@@ -152,7 +152,7 @@ export function ViewOptions({
         ),
       },
       {
-        title: 'Open in ChatGPT',
+        title: '在 ChatGPT 打开',
         href: `https://chatgpt.com/?${new URLSearchParams({
           hints: 'search',
           q,
@@ -170,7 +170,7 @@ export function ViewOptions({
         ),
       },
       {
-        title: 'Open in Claude',
+        title: '在 Claude 打开',
         href: `https://claude.ai/new?${new URLSearchParams({
           q,
         })}`,
@@ -187,7 +187,7 @@ export function ViewOptions({
         ),
       },
       {
-        title: 'Open in T3 Chat',
+        title: '在 T3 Chat 打开',
         href: `https://t3.chat/new?${new URLSearchParams({
           q,
         })}`,
@@ -207,7 +207,7 @@ export function ViewOptions({
           }),
         )}
       >
-        Open
+        打开
         <ChevronDown className="size-3.5 text-fd-muted-foreground" />
       </PopoverTrigger>
       <PopoverContent className="flex flex-col">
