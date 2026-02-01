@@ -1,6 +1,7 @@
 {
   "title": "工具库",
   "icon": "Wrench",
+  "root": true,
   "pages": [
     "validator",
     "utility",

@@ -9,18 +9,20 @@ import { buttonVariants } from '../../ui/button';
 import { SearchToggle } from '../search-toggle';
 import { Sidebar as SidebarIcon } from 'lucide-react';
 import { mergeRefs } from '../../../lib/merge-refs';
+import { usePathname } from 'next/navigation';
+import { getSection } from '../../../lib/navigation';
 
 const itemVariants = cva(
   'relative flex flex-row items-center gap-2 rounded-lg p-2 text-start text-fd-muted-foreground wrap-anywhere [&_svg]:size-4 [&_svg]:shrink-0',
   {
     variants: {
       variant: {
-        link: 'transition-colors hover:bg-fd-accent/50 hover:text-fd-accent-foreground/80 hover:transition-none data-[active=true]:bg-fd-primary/10 data-[active=true]:text-fd-primary data-[active=true]:hover:transition-colors',
+        link: 'transition-colors hover:bg-fd-accent/50 hover:text-fd-accent-foreground/80 hover:transition-none data-[active=true]:bg-(--section-color)/10 data-[active=true]:text-(--section-color) data-[active=true]:hover:transition-colors',
         button:
           'transition-colors hover:bg-fd-accent/50 hover:text-fd-accent-foreground/80 hover:transition-none',
       },
       highlight: {
-        true: "data-[active=true]:before:content-[''] data-[active=true]:before:bg-fd-primary data-[active=true]:before:absolute data-[active=true]:before:w-px data-[active=true]:before:inset-y-2.5 data-[active=true]:before:start-2.5",
+        true: "data-[active=true]:before:content-[''] data-[active=true]:before:bg-(--section-color) data-[active=true]:before:absolute data-[active=true]:before:w-px data-[active=true]:before:inset-y-2.5 data-[active=true]:before:start-2.5",
       },
     },
   },
@@ -150,14 +152,18 @@ export function SidebarItem({
   ...props
 }: ComponentProps<typeof Base.SidebarItem>) {
   const depth = Base.useFolderDepth();
+  const pathname = usePathname();
+  const section = getSection(pathname);
+  const sectionColor = `var(--${section}-color, var(--color-fd-foreground))`;
 
   return (
     <Base.SidebarItem
       className={cn(itemVariants({ variant: 'link', highlight: depth >= 1 }), className)}
       style={{
         paddingInlineStart: getItemOffset(depth),
+        '--section-color': sectionColor,
         ...style,
-      }}
+      } as React.CSSProperties}
       {...props}
     >
       {children}
@@ -171,14 +177,18 @@ export function SidebarFolderTrigger({
   ...props
 }: ComponentProps<typeof Base.SidebarFolderTrigger>) {
   const { depth, collapsible } = Base.useFolder()!;
+  const pathname = usePathname();
+  const section = getSection(pathname);
+  const sectionColor = `var(--${section}-color, var(--color-fd-foreground))`;
 
   return (
     <Base.SidebarFolderTrigger
       className={cn(itemVariants({ variant: collapsible ? 'button' : null }), 'w-full', className)}
       style={{
         paddingInlineStart: getItemOffset(depth - 1),
+        '--section-color': sectionColor,
         ...style,
-      }}
+      } as React.CSSProperties}
       {...props}
     >
       {props.children}
@@ -192,14 +202,18 @@ export function SidebarFolderLink({
   ...props
 }: ComponentProps<typeof Base.SidebarFolderLink>) {
   const depth = Base.useFolderDepth();
+  const pathname = usePathname();
+  const section = getSection(pathname);
+  const sectionColor = `var(--${section}-color, var(--color-fd-foreground))`;
 
   return (
     <Base.SidebarFolderLink
       className={cn(itemVariants({ variant: 'link', highlight: depth > 1 }), 'w-full', className)}
       style={{
         paddingInlineStart: getItemOffset(depth - 1),
+        '--section-color': sectionColor,
         ...style,
-      }}
+      } as React.CSSProperties}
       {...props}
     >
       {props.children}

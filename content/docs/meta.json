@@ -1,9 +1,10 @@
 {
   "title": "竹简库",
   "description": "基于 Bamboo Base 构建的文档库",
-  "root": true,
   "icon": "Library",
   "pages": [
+    "index",
+    "---Bamboo Base---",
     "guide",
     "core",
     "components",

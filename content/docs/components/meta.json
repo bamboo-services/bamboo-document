@@ -1,6 +1,7 @@
 {
   "title": "功能组件",
   "icon": "Box",
+  "root": true,
   "pages": [
     "snowflake",
     "models",

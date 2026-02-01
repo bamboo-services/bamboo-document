@@ -5,11 +5,16 @@ import { cn } from '../../lib/cn';
 import { TocThumb, useTOCItems } from './index';
 import { mergeRefs } from '../../lib/merge-refs';
 import { useI18n } from 'fumadocs-ui/contexts/i18n';
+import { usePathname } from 'next/navigation';
+import { getSection } from '../../lib/navigation';
 
 export function TOCItems({ ref, className, ...props }: ComponentProps<'div'>) {
   const containerRef = useRef<HTMLDivElement>(null);
   const items = useTOCItems();
   const { text } = useI18n();
+  const pathname = usePathname();
+  const section = getSection(pathname);
+  const sectionColor = `var(--${section}-color, var(--color-fd-foreground))`;
 
   const [svg, setSvg] = useState<{
     path: string;
@@ -68,7 +73,11 @@ export function TOCItems({ ref, className, ...props }: ComponentProps<'div'>) {
     );
 
   return (
-    <>
+    <div
+      style={{
+        '--section-color': sectionColor,
+      } as React.CSSProperties}
+    >
       {svg && (
         <div
           className="absolute start-0 top-0 rtl:-scale-x-100"
@@ -85,7 +94,7 @@ export function TOCItems({ ref, className, ...props }: ComponentProps<'div'>) {
         >
           <TocThumb
             containerRef={containerRef}
-            className="absolute w-full top-(--fd-top) h-(--fd-height) bg-fd-primary transition-[top,height]"
+            className="absolute w-full top-(--fd-top) h-(--fd-height) bg-(--section-color) transition-[top,height]"
           />
         </div>
       )}
@@ -99,7 +108,7 @@ export function TOCItems({ ref, className, ...props }: ComponentProps<'div'>) {
           />
         ))}
       </div>
-    </>
+    </div>
   );
 }
 
@@ -132,7 +141,7 @@ function TOCItem({
       style={{
         paddingInlineStart: getItemOffset(item.depth),
       }}
-      className="prose relative py-1.5 text-sm text-fd-muted-foreground hover:text-fd-accent-foreground transition-colors wrap-anywhere first:pt-0 last:pb-0 data-[active=true]:text-fd-primary"
+      className="prose relative py-1.5 text-sm text-fd-muted-foreground hover:text-fd-accent-foreground transition-colors wrap-anywhere first:pt-0 last:pb-0 data-[active=true]:text-(--section-color)"
     >
       {offset !== upperOffset && (
         <svg

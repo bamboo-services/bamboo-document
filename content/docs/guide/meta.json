@@ -1,6 +1,9 @@
 {
   "title": "入门指南",
   "icon": "BookOpen",
+  "description": "快速上手框架",
+  "root": true,
+  "defaultOpen": true,
   "pages": [
     "index",
     "getting-started"
