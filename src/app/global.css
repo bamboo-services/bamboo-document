@@ -13,6 +13,10 @@
     --color-fd-primary: var(--custom-other-selected-color);
 }
 
+.bamboo-base-go {
+    --color-fd-primary: var(--custom-bamboo-base-go-selected-color);
+}
+
 :root {
     --radius: 0.625rem;
     --background: oklch(1 0 0);
@@ -47,8 +51,9 @@
     --sidebar-border: oklch(0.92 0.004 286.32);
     --sidebar-ring: oklch(0.705 0.015 286.067);
 
-    --custom-guide-selected-color: hsl(217, 100%, 58%);
-    --custom-other-selected-color: hsl(342, 100%, 58%);
+    --custom-guide-selected-color: hsl(342, 100%, 58%);
+    --custom-other-selected-color: hsl(142, 76%, 45%);
+    --custom-bamboo-base-go-selected-color: hsl(199, 89%, 58%);
 }
 
 .dark {
@@ -84,8 +89,9 @@
     --sidebar-border: oklch(1 0 0 / 10%);
     --sidebar-ring: oklch(0.552 0.016 285.938);
 
-    --custom-guide-selected-color: #a9ceff;
-    --custom-other-selected-color: #ff94c2;
+    --custom-guide-selected-color: #ff94c2;
+    --custom-other-selected-color: #5eead4;
+    --custom-bamboo-base-go-selected-color: #7dd3fc;
 }
 
 @theme inline {
