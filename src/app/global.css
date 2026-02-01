@@ -6,11 +6,11 @@
 @custom-variant dark (&:is(.dark *));
 
 .guide {
-    --color-fd-primary: var(--guide-color);
+    --color-fd-primary: var(--custom-guide-selected-color);
 }
 
 .other {
-    --color-fd-primary: var(--other-color);
+    --color-fd-primary: var(--custom-other-selected-color);
 }
 
 :root {
@@ -47,8 +47,8 @@
     --sidebar-border: oklch(0.92 0.004 286.32);
     --sidebar-ring: oklch(0.705 0.015 286.067);
 
-    --guide-color: hsl(217, 100%, 58%);
-    --other-color: hsl(342, 100%, 58%);
+    --custom-guide-selected-color: hsl(217, 100%, 58%);
+    --custom-other-selected-color: hsl(342, 100%, 58%);
 }
 
 .dark {
@@ -84,8 +84,8 @@
     --sidebar-border: oklch(1 0 0 / 10%);
     --sidebar-ring: oklch(0.552 0.016 285.938);
 
-    --guide-color: #a9ceff;
-    --other-color: #ff94c2;
+    --custom-guide-selected-color: #a9ceff;
+    --custom-other-selected-color: #ff94c2;
 }
 
 @theme inline {

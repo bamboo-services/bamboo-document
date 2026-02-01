@@ -14,7 +14,7 @@ export function TOCItems({ ref, className, ...props }: ComponentProps<'div'>) {
   const { text } = useI18n();
   const pathname = usePathname();
   const section = getSection(pathname);
-  const sectionColor = `var(--${section}-color, var(--color-fd-foreground))`;
+  const sectionColor = `var(--custom-${section}-selected-color, var(--color-fd-foreground))`;
 
   const [svg, setSvg] = useState<{
     path: string;

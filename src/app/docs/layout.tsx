@@ -17,7 +17,7 @@ export default function Layout({ children }: { children: ReactNode }) {
           transform(option, node) {
             const meta = source.getNodeMeta(node);
             if (!meta || !node.icon) return option;
-            const color = `var(--${getSection(meta.path)}-color, var(--color-fd-foreground))`;
+            const color = `var(--custom-${getSection(meta.path)}-selected-color, var(--color-fd-foreground))`;
 
             return {
               ...option,

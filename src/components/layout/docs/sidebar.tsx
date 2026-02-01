@@ -154,7 +154,7 @@ export function SidebarItem({
   const depth = Base.useFolderDepth();
   const pathname = usePathname();
   const section = getSection(pathname);
-  const sectionColor = `var(--${section}-color, var(--color-fd-foreground))`;
+  const sectionColor = `var(--custom-${section}-selected-color, var(--color-fd-foreground))`;
 
   return (
     <Base.SidebarItem
@@ -179,7 +179,7 @@ export function SidebarFolderTrigger({
   const { depth, collapsible } = Base.useFolder()!;
   const pathname = usePathname();
   const section = getSection(pathname);
-  const sectionColor = `var(--${section}-color, var(--color-fd-foreground))`;
+  const sectionColor = `var(--custom-${section}-selected-color, var(--color-fd-foreground))`;
 
   return (
     <Base.SidebarFolderTrigger
@@ -204,7 +204,7 @@ export function SidebarFolderLink({
   const depth = Base.useFolderDepth();
   const pathname = usePathname();
   const section = getSection(pathname);
-  const sectionColor = `var(--${section}-color, var(--color-fd-foreground))`;
+  const sectionColor = `var(--custom-${section}-selected-color, var(--color-fd-foreground))`;
 
   return (
     <Base.SidebarFolderLink
