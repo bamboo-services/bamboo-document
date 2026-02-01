@@ -1,10 +1,12 @@
 {
-  "title": "工具库",
+  "title": "工具集",
   "icon": "Wrench",
-  "root": false,
   "pages": [
     "validator",
+    "validator-custom",
     "utility",
+    "utility-advanced",
+    "ctxutil",
     "env",
     "route",
     "hook"

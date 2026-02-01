@@ -1,11 +1,13 @@
 {
   "title": "功能组件",
-  "icon": "Box",
-  "root": false,
+  "icon": "Component",
   "pages": [
     "snowflake",
+    "snowflake-gene",
     "models",
     "log",
-    "middleware"
+    "log-advanced",
+    "middleware",
+    "helper"
   ]
 }

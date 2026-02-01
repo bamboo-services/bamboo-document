@@ -1,0 +1,125 @@
+---
+title: 上下文常量
+description: 请求上下文键定义与使用规范
+icon: Key
+---
+
+# 上下文常量
+
+Bamboo Base 定义了一组标准的上下文键（Context Key），用于在请求生命周期中传递和共享数据。
+
+## 常量定义
+
+```go
+package xCtx
+
+type ContextKey string
+
+const (
+    RequestKey       ContextKey = "context_request_key"     // 请求唯一标识
+    ErrorCodeKey     ContextKey = "context_error_code"      // 错误码
+    ErrorMessageKey  ContextKey = "context_error_message"   // 错误描述
+    UserStartTimeKey ContextKey = "context_user_start_time" // 请求开始时间
+    DatabaseKey      ContextKey = "context_database"        // 数据库客户端
+    RedisClientKey   ContextKey = "context_redis_client"    // Redis 客户端
+    SnowflakeNodeKey ContextKey = "context_snowflake_node"  // 雪花算法节点
+)
+```
+
+## 键说明
+
+| 常量 | 值 | 用途 |
+|------|------|------|
+| `RequestKey` | `context_request_key` | 请求的唯一追踪标识（Trace ID） |
+| `ErrorCodeKey` | `context_error_code` | 存储 `*xError.ErrorCode` 错误码 |
+| `ErrorMessageKey` | `context_error_message` | 存储错误详细描述信息 |
+| `UserStartTimeKey` | `context_user_start_time` | 请求开始时间，用于计算耗时 |
+| `DatabaseKey` | `context_database` | `*gorm.DB` 数据库连接实例 |
+| `RedisClientKey` | `context_redis_client` | `*redis.Client` Redis 客户端 |
+| `SnowflakeNodeKey` | `context_snowflake_node` | `*xSnowflake.Node` 雪花算法节点 |
+
+## 使用方式
+
+### 设置上下文值
+
+```go
+func InjectMiddleware(db *gorm.DB, rdb *redis.Client) gin.HandlerFunc {
+    return func(c *gin.Context) {
+        // 注入数据库连接
+        c.Set(xCtx.DatabaseKey.String(), db)
+
+        // 注入 Redis 客户端
+        c.Set(xCtx.RedisClientKey.String(), rdb)
+
+        // 记录请求开始时间
+        c.Set(xCtx.UserStartTimeKey.String(), time.Now())
+
+        c.Next()
+    }
+}
+```
+
+### 获取上下文值
+
+```go
+func Handler(c *gin.Context) {
+    // 获取数据库连接
+    db := c.MustGet(xCtx.DatabaseKey.String()).(*gorm.DB)
+
+    // 获取请求标识
+    requestKey := c.GetString(xCtx.RequestKey.String())
+
+    // 获取请求开始时间
+    startTime := c.GetTime(xCtx.UserStartTimeKey.String())
+}
+```
+
+## 推荐：使用 ctxutil 工具
+
+为了类型安全和代码简洁，推荐使用 `ctxutil` 包提供的工具函数：
+
+```go
+import xCtxUtil "github.com/bamboo-services/bamboo-base-go/utility/ctxutil"
+
+func Handler(c *gin.Context) {
+    // 获取数据库（带类型检查和错误处理）
+    db := xCtxUtil.GetDB(c)
+
+    // 获取 Redis 客户端
+    rdb := xCtxUtil.GetRDB(c)
+
+    // 获取雪花算法节点
+    node := xCtxUtil.GetSnowflakeNode(c)
+
+    // 生成雪花 ID
+    id := xCtxUtil.GenerateSnowflakeID(c)
+}
+```
+
+## String 方法
+
+`ContextKey` 类型实现了 `String()` 方法，返回键的字符串值：
+
+```go
+func (s ContextKey) String() string {
+    return string(s)
+}
+
+// 使用示例
+key := xCtx.DatabaseKey.String() // "context_database"
+```
+
+## 设计原则
+
+1. **类型安全**：使用自定义类型 `ContextKey` 避免键名冲突
+2. **命名规范**：所有键以 `context_` 前缀开头，便于识别
+3. **集中管理**：所有上下文键在同一包中定义，便于维护
+4. **文档化**：每个常量都有明确的用途说明
+
+## 下一步
+
+<Cards>
+  <Card title="上下文工具" href="../utils/ctxutil" />
+  <Card title="注册系统" href="./register" />
+  <Card title="错误处理" href="./error" />
+</Cards>

@@ -1,0 +1,232 @@
+---
+title: 日志高级功能
+description: 日志切割、归档与 GORM 集成
+icon: Settings
+---
+
+# 日志高级功能
+
+Bamboo Base 提供了日志切割、自动归档和 GORM 数据库日志集成等高级功能。
+
+## 日志切割器 (RotatingWriter)
+
+### 功能特性
+
+- **自动切割**：文件大小超过阈值时自动切割
+- **索引命名**：切割文件使用递增索引（log.0.log, log.1.log...）
+- **自动归档**：每天 00:00:05 自动将前一天日志打包为 tar.gz
+- **线程安全**：支持并发写入
+
+### 配置选项
+
+```go
+type RotatorConfig struct {
+    Dir      string // 日志目录，默认 ".logs"
+    BaseName string // 基础文件名，默认 "log"
+    Ext      string // 扩展名，默认 ".log"
+    MaxSize  int64  // 最大文件大小（字节），默认 10MB
+}
+```
+
+### 使用示例
+
+```go
+import xLog "github.com/bamboo-services/bamboo-base-go/log"
+
+// 创建日志切割写入器
+writer, err := xLog.NewRotatingWriter(xLog.RotatorConfig{
+    Dir:      "./logs",
+    BaseName: "app",
+    Ext:      ".log",
+    MaxSize:  10 * 1024 * 1024, // 10MB
+})
+if err != nil {
+    log.Fatal(err)
+}
+defer writer.Close()
+
+// 配合 slog 使用
+handler := slog.NewJSONHandler(writer, &slog.HandlerOptions{
+    Level: slog.LevelInfo,
+})
+logger := slog.New(handler)
+```
+
+### 文件命名规则
+
+```
+logs/
+├── app.log           # 当前写入的日志文件
+├── app.0.log         # 第一个切割文件（最早）
+├── app.1.log         # 第二个切割文件
+├── app.2.log         # 第三个切割文件（最新切割）
+└── logger-2024-01-01.tar.gz  # 归档文件
+```
+
+### 切割流程
+
+1. 检测当前文件大小是否超过 `MaxSize`
+2. 关闭当前文件
+3. 重命名：`app.log` → `app.N.log`（N = 最大索引 + 1）
+4. 创建新的 `app.log`
+
+### 归档流程
+
+每天 00:00:05 自动执行：
+
+1. 收集所有切割文件（`app.*.log`）
+2. 打包为 `logger-yyyy-MM-dd.tar.gz`
+3. 删除已归档的切割文件
+
+---
+
+## GORM 日志适配器
+
+### 功能特性
+
+- **slog 集成**：使用标准 slog 记录 GORM 日志
+- **慢查询检测**：超过阈值的查询以 WARN 级别记录
+- **错误过滤**：可选忽略 `ErrRecordNotFound` 错误
+- **上下文支持**：自动从 context 提取 trace ID
+
+### 日志级别
+
+```go
+const (
+    LevelSilent LogLevel = iota + 1 // 静默模式
+    LevelError                       // 仅错误
+    LevelWarn                        // 错误和警告
+    LevelInfo                        // 所有日志（含 SQL）
+)
+```
+
+### 配置选项
+
+```go
+type GormLoggerConfig struct {
+    SlowThreshold             int      // 慢查询阈值（毫秒），默认 200ms
+    LogLevel                  LogLevel // 日志级别，默认 LevelInfo
+    IgnoreRecordNotFoundError bool     // 是否忽略记录未找到错误
+    Colorful                  bool     // 预留字段
+}
+```
+
+### 使用示例
+
+```go
+import (
+    xLog "github.com/bamboo-services/bamboo-base-go/log"
+    "gorm.io/driver/postgres"
+    "gorm.io/gorm"
+)
+
+// 创建 GORM slog 适配器
+gormLogger := xLog.NewSlogLogger(
+    slog.Default().WithGroup(xLog.NamedREPO),
+    xLog.GormLoggerConfig{
+        SlowThreshold:             200,           // 200ms 慢查询阈值
+        LogLevel:                  xLog.LevelInfo,
+        IgnoreRecordNotFoundError: true,          // 忽略记录未找到
+    },
+)
+
+// 配置 GORM
+db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
+    Logger: gormLogger,
+})
+```
+
+### 日志输出规则
+
+| 场景 | 日志级别 | 条件 |
+|------|----------|------|
+| SQL 执行错误 | ERROR | `LogLevel >= LevelError` |
+| 慢查询 | WARN | 执行时间 > `SlowThreshold` |
+| 普通查询 | DEBUG | `LogLevel >= LevelInfo` |
+| 记录未找到 | 忽略 | `IgnoreRecordNotFoundError = true` |
+
+### 日志输出示例
+
+```json
+{
+  "time": "2024-01-01T12:00:00.000Z",
+  "level": "WARN",
+  "msg": "发现SQL慢查询",
+  "elapsed_ms": 350.5,
+  "rows": 100,
+  "sql": "SELECT * FROM users WHERE status = 1",
+  "threshold": "200ms"
+}
+```
+
+```json
+{
+  "time": "2024-01-01T12:00:01.000Z",
+  "level": "ERROR",
+  "msg": "执行SQL语句失败",
+  "elapsed_ms": 50.2,
+  "rows": 0,
+  "sql": "INSERT INTO users ...",
+  "error": "duplicate key value violates unique constraint"
+}
+```
+
+---
+
+## 完整配置示例
+
+```go
+package main
+
+import (
+    "log/slog"
+    "os"
+
+    xLog "github.com/bamboo-services/bamboo-base-go/log"
+    "gorm.io/driver/postgres"
+    "gorm.io/gorm"
+)
+
+func main() {
+    // 1. 创建日志切割写入器
+    rotator, _ := xLog.NewRotatingWriter(xLog.RotatorConfig{
+        Dir:      "./logs",
+        BaseName: "app",
+        MaxSize:  50 * 1024 * 1024, // 50MB
+    })
+
+    // 2. 创建多输出 Handler
+    consoleHandler := xLog.NewColorHandler(os.Stdout, &slog.HandlerOptions{
+        Level: slog.LevelDebug,
+    })
+    fileHandler := slog.NewJSONHandler(rotator, &slog.HandlerOptions{
+        Level: slog.LevelInfo,
+    })
+
+    // 3. 设置默认 Logger
+    logger := slog.New(xLog.NewMultiHandler(consoleHandler, fileHandler))
+    slog.SetDefault(logger)
+
+    // 4. 配置 GORM Logger
+    db, _ := gorm.Open(postgres.Open(dsn), &gorm.Config{
+        Logger: xLog.NewSlogLogger(
+            logger.WithGroup(xLog.NamedREPO),
+            xLog.GormLoggerConfig{
+                SlowThreshold:             300,
+                LogLevel:                  xLog.LevelInfo,
+                IgnoreRecordNotFoundError: true,
+            },
+        ),
+    })
+
+    // 使用...
+}
+```
+
+## 下一步
+
+<Cards>
+  <Card title="日志系统" href="./log" />
+  <Card title="中间件" href="./middleware" />
+  <Card title="辅助中间件" href="./helper" />
+</Cards>

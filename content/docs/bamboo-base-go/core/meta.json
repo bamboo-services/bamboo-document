@@ -1,11 +1,5 @@
 {
-  "title": "核心模块",
-  "icon": "Layers",
-  "root": false,
-  "pages": [
-    "architecture",
-    "register",
-    "response",
-    "error"
-  ]
+  "title": "核心架构",
+  "icon": "Blocks",
+  "pages": ["architecture", "register", "response", "error", "context"]
 }

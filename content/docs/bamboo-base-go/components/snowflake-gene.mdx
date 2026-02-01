@@ -1,0 +1,220 @@
+---
+title: 业务基因详解
+description: 26 种预定义业务基因与自定义扩展
+icon: Dna
+---
+
+# 业务基因详解
+
+业务基因（Gene）是嵌入雪花 ID 中的 6 位标识，用于区分不同业务类型的数据。支持 0-63 共 64 种业务类型。
+
+## 基因分类
+
+基因分为两个级别：
+
+| 范围 | 级别 | 说明 |
+|------|------|------|
+| 0-15 | 系统级别 | 保留给系统内部使用 |
+| 16-63 | 业务级别 | 供业务自定义使用 |
+
+## 系统级别基因 (0-15)
+
+```go
+const (
+    GeneDefault Gene = 0  // 默认/未指定类型
+    GeneSystem  Gene = 1  // 系统内部数据
+    GeneUser    Gene = 2  // 用户相关数据
+    GeneRole    Gene = 3  // 角色权限数据
+    GeneLog     Gene = 4  // 日志记录数据
+    GeneConfig  Gene = 5  // 配置数据
+    GeneFile    Gene = 6  // 文件/附件数据
+    GeneSession Gene = 7  // 会话数据
+    GeneToken   Gene = 8  // 令牌数据
+    GeneCache   Gene = 9  // 缓存数据
+)
+```
+
+### 系统基因说明
+
+| 基因 | 值 | 适用场景 |
+|------|------|------|
+| `GeneDefault` | 0 | 未指定业务类型时的默认值 |
+| `GeneSystem` | 1 | 系统配置、内部任务等 |
+| `GeneUser` | 2 | 用户账号、个人信息 |
+| `GeneRole` | 3 | 角色定义、权限配置 |
+| `GeneLog` | 4 | 操作日志、审计记录 |
+| `GeneConfig` | 5 | 系统配置项 |
+| `GeneFile` | 6 | 文件上传、附件管理 |
+| `GeneSession` | 7 | 用户会话 |
+| `GeneToken` | 8 | 访问令牌、刷新令牌 |
+| `GeneCache` | 9 | 缓存数据标识 |
+
+## 业务级别基因 (16-63)
+
+```go
+const (
+    GeneOrder     Gene = 16 // 订单数据
+    GeneProduct   Gene = 17 // 商品数据
+    GenePayment   Gene = 18 // 支付数据
+    GeneInventory Gene = 19 // 库存数据
+    GeneCustomer  Gene = 20 // 客户数据
+    GeneVendor    Gene = 21 // 供应商数据
+    GeneContract  Gene = 22 // 合同数据
+    GeneInvoice   Gene = 23 // 发票数据
+    GeneShipment  Gene = 24 // 物流数据
+    GeneRefund    Gene = 25 // 退款数据
+    GeneCoupon    Gene = 26 // 优惠券数据
+    GenePromotion Gene = 27 // 促销活动数据
+    GeneReview    Gene = 28 // 评价数据
+    GeneMessage   Gene = 29 // 消息数据
+    GeneNotify    Gene = 30 // 通知数据
+    GeneTask      Gene = 31 // 任务数据
+)
+```
+
+### 业务基因说明
+
+| 基因 | 值 | 适用场景 |
+|------|------|------|
+| `GeneOrder` | 16 | 订单主表、订单明细 |
+| `GeneProduct` | 17 | 商品信息、SKU |
+| `GenePayment` | 18 | 支付记录、交易流水 |
+| `GeneInventory` | 19 | 库存记录、出入库 |
+| `GeneCustomer` | 20 | 客户档案、会员信息 |
+| `GeneVendor` | 21 | 供应商信息 |
+| `GeneContract` | 22 | 合同文档 |
+| `GeneInvoice` | 23 | 发票记录 |
+| `GeneShipment` | 24 | 物流单号、配送记录 |
+| `GeneRefund` | 25 | 退款申请、退款记录 |
+| `GeneCoupon` | 26 | 优惠券定义、领取记录 |
+| `GenePromotion` | 27 | 促销活动配置 |
+| `GeneReview` | 28 | 商品评价、服务评价 |
+| `GeneMessage` | 29 | 站内信、聊天消息 |
+| `GeneNotify` | 30 | 系统通知、推送消息 |
+| `GeneTask` | 31 | 异步任务、定时任务 |
+
+## Gene 类型方法
+
+### 字符串表示
+
+```go
+func (g Gene) String() string
+
+// 示例
+xSnowflake.GeneUser.String()    // "User"
+xSnowflake.GeneOrder.String()   // "Order"
+xSnowflake.Gene(50).String()    // "Custom(50)"
+```
+
+### 级别判断
+
+```go
+// 判断是否为系统级别基因（0-15）
+func (g Gene) IsSystem() bool
+
+// 判断是否为业务级别基因（16-63）
+func (g Gene) IsBusiness() bool
+
+// 判断基因是否有效（0-63）
+func (g Gene) IsValid() bool
+```
+
+### 数值转换
+
+```go
+// 返回 int64 值
+func (g Gene) Int64() int64
+
+// 示例
+xSnowflake.GeneUser.Int64() // 2
+```
+
+## 使用示例
+
+### 生成带基因的 ID
+
+```go
+import xSnowflake "github.com/bamboo-services/bamboo-base-go/snowflake"
+
+// 生成用户 ID
+userID := node.MustGenerate(xSnowflake.GeneUser)
+
+// 生成订单 ID
+orderID := node.MustGenerate(xSnowflake.GeneOrder)
+
+// 生成支付 ID
+paymentID := node.MustGenerate(xSnowflake.GenePayment)
+```
+
+### 从 ID 解析基因
+
+```go
+// 解析 ID 中的基因
+gene := id.Gene()
+
+// 判断业务类型
+switch xSnowflake.Gene(gene) {
+case xSnowflake.GeneUser:
+    fmt.Println("这是用户数据")
+case xSnowflake.GeneOrder:
+    fmt.Println("这是订单数据")
+default:
+    fmt.Println("其他类型")
+}
+```
+
+### 数据分片路由
+
+```go
+// 根据基因路由到不同数据库
+func GetDBByGene(id xSnowflake.SnowflakeID) *gorm.DB {
+    gene := xSnowflake.Gene(id.Gene())
+
+    if gene.IsSystem() {
+        return systemDB
+    }
+
+    switch gene {
+    case xSnowflake.GeneOrder, xSnowflake.GenePayment:
+        return orderDB
+    case xSnowflake.GeneProduct, xSnowflake.GeneInventory:
+        return productDB
+    default:
+        return defaultDB
+    }
+}
+```
+
+## 自定义业务基因
+
+在项目中扩展业务基因：
+
+```go
+package consts
+
+import xSnowflake "github.com/bamboo-services/bamboo-base-go/snowflake"
+
+// 项目自定义业务基因（使用 32-63 范围）
+const (
+    GeneArticle   xSnowflake.Gene = 32 // 文章数据
+    GeneComment   xSnowflake.Gene = 33 // 评论数据
+    GeneLike      xSnowflake.Gene = 34 // 点赞数据
+    GeneFollow    xSnowflake.Gene = 35 // 关注数据
+    GeneBookmark  xSnowflake.Gene = 36 // 收藏数据
+)
+```
+
+## 最佳实践
+
+1. **系统基因保留**：0-15 范围保留给框架和通用功能
+2. **业务基因规划**：提前规划业务基因分配，避免冲突
+3. **文档记录**：在项目中维护基因分配表
+4. **一致性**：同一业务类型的数据使用相同基因
+
+## 下一步
+
+<Cards>
+  <Card title="雪花算法" href="./snowflake" />
+  <Card title="上下文工具" href="../utils/ctxutil" />
+  <Card title="模型基类" href="./models" />
+</Cards>
