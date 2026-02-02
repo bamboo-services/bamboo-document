@@ -1,0 +1,173 @@
+---
+title: 概述
+description: xLog 包提供企业级日志管理，支持彩色控制台、文件切割、链路追踪
+icon: FileText
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# 日志系统
+
+`xLog` 是基于 Go 标准库 `log/slog` 构建的企业级日志库，提供彩色控制台输出、JSON 文件记录、自动切割归档、链路追踪等功能。
+
+```go
+import xLog "github.com/bamboo-services/bamboo-base-go/log"
+```
+
+## 核心特性
+
+| 特性 | 说明 |
+|------|------|
+| 双通道输出 | 控制台彩色 + 文件 JSON |
+| 命名日志器 | 按模块分类，便于过滤 |
+| 链路追踪 | 自动提取 Trace ID |
+| 自动切割 | 按大小切割，按天归档 |
+| GORM 集成 | 数据库日志适配器 |
+
+## 快速使用
+
+### 命名日志器
+
+```go
+// [!code highlight:2]
+// 创建带名称的日志器
+log := xLog.WithName(xLog.NamedCORE)
+
+// [!code highlight]
+log.Info(ctx, "服务启动成功")
+log.Debug(ctx, "调试信息")
+log.Error(ctx, "发生错误")
+```
+
+### 全局函数
+
+```go
+// [!code highlight:2]
+// 标准方式
+xLog.Info(ctx, "用户登录", slog.String("user_id", "12345"))
+
+// [!code highlight:2]
+// Sugar 语法糖（key-value 形式）
+xLog.SugarInfo(ctx, "用户登录", "user_id", "12345", "ip", "192.168.1.1")
+```
+
+### 带属性的日志
+
+```go
+log := xLog.WithName(xLog.NamedAUTH)
+
+// [!code highlight:4]
+// 使用 slog.Attr
+log.Info(ctx, "登录成功",
+    slog.String("user_id", "12345"),
+    slog.String("ip", "192.168.1.1"),
+)
+
+// [!code highlight:2]
+// 使用 Sugar 语法糖
+log.SugarInfo(ctx, "登录成功", "user_id", "12345", "ip", "192.168.1.1")
+```
+
+## 日志级别
+
+| 级别 | 方法 | 说明 |
+|------|------|------|
+| DEBUG | `Debug` / `SugarDebug` | 调试信息，仅调试模式输出 |
+| INFO | `Info` / `SugarInfo` | 一般信息 |
+| NOTICE | `Notice` / `SugarNotice` | 重要信息 (INFO+1) |
+| WARN | `Warn` / `SugarWarn` | 警告信息 |
+| ERROR | `Error` / `SugarError` | 错误信息 |
+| PANIC | `Panic` / `SugarPanic` | 错误并触发 panic |
+
+## 输出格式
+
+### 控制台输出
+
+彩色格式，便于开发调试：
+
+```
+2024-01-15 10:30:00 [INFO] [abc123] [CORE] 服务启动成功
+2024-01-15 10:30:01 [DEBUG] [abc123] [AUTH] 验证用户令牌
+2024-01-15 10:30:02 [ERROR] [abc123] [REPO] 数据库连接失败
+```
+
+### 文件输出
+
+JSON 格式，便于日志分析：
+
+```json
+{
+  "time": "2024-01-15T10:30:00.000+08:00",
+  "level": "INFO",
+  "message": "服务启动成功",
+  "trace": "abc123",
+  "logger": "CORE"
+}
+```
+
+## 初始化示例
+
+```go title="register_logger.go"
+func (r *Reg) LoggerInit() {
+    // [!code highlight:6]
+    // 1. 创建日志切割器
+    rotator, err := xLog.NewRotatingWriter(xLog.RotatorConfig{
+        Dir:      ".logs",
+        BaseName: "log",
+        Ext:      ".log",
+        MaxSize:  10 * 1024 * 1024, // 10MB
+    })
+    if err != nil {
+        panic(err)
+    }
+
+    // [!code highlight:7]
+    // 2. 创建自定义 Handler
+    handler := xLog.NewLogHandler(xLog.HandlerConfig{
+        Console:     os.Stdout,
+        File:        rotator,
+        Level:       slog.LevelDebug,
+        IsDebugMode: true,
+    })
+
+    // [!code highlight:2]
+    // 3. 设置为全局默认 Logger
+    slog.SetDefault(slog.New(handler))
+}
+```
+
+## API 一览
+
+<TypeTable
+  type={{
+    'WithName(name)': {
+      description: '创建命名日志器',
+      type: '*LogNamedLogger',
+      required: true,
+    },
+    'NewLogHandler(config)': {
+      description: '创建自定义 slog Handler',
+      type: 'slog.Handler',
+      required: true,
+    },
+    'NewRotatingWriter(config)': {
+      description: '创建日志切割写入器',
+      type: '*RotatingWriter',
+      required: true,
+    },
+    'NewSlogLogger(slogger, config)': {
+      description: '创建 GORM 日志适配器',
+      type: 'logger.Interface',
+      required: true,
+    },
+  }}
+/>
+
+## 下一步
+
+<Cards>
+  <Card title="命名常量" href="./named" />
+  <Card title="自定义 Handler" href="./handler" />
+  <Card title="日志切割" href="./rotator" />
+  <Card title="GORM 集成" href="./gorm" />
+</Cards>

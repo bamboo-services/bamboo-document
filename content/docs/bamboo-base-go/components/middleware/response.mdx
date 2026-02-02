@@ -1,0 +1,268 @@
+---
+title: 统一响应
+description: ResponseMiddleware 自动处理未输出的响应和错误
+icon: MessageSquare
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# 统一响应
+
+`ResponseMiddleware` 在请求处理完成后，统一检查和处理响应输出，确保所有请求都有正确的响应格式。
+
+## ResponseMiddleware
+
+```go title="response.go"
+// [!code highlight]
+func ResponseMiddleware(ctx *gin.Context)
+```
+
+**实现：**
+
+```go title="response.go"
+func ResponseMiddleware(ctx *gin.Context) {
+    // [!code highlight]
+    ctx.Next()  // 先执行后续处理器
+
+    // [!code highlight:2]
+    // 检查响应是否已写入
+    if !ctx.Writer.Written() {
+        // 情况1: 存在错误
+        if ctx.Errors != nil && len(ctx.Errors) > 0 {
+            var getErr *xError.Error
+            // [!code highlight:3]
+            // 尝试解析为自定义错误类型
+            if errors.As(ctx.Errors.Last(), &getErr) && getErr.ErrorCode != nil {
+                xResult.Error(ctx, getErr.ErrorCode, getErr.ErrorMessage, getErr.Data)
+            } else {
+                // 通用服务器内部错误
+                xResult.Error(ctx, xError.ServerInternalError, ...)
+            }
+            ctx.Abort()
+        } else {
+            // [!code highlight:2]
+            // 情况2: 无错误但也无响应（排除重定向）
+            if ctx.Writer.Status() != 301 && ctx.Writer.Status() != 302 {
+                xResult.Error(ctx, xError.DeveloperError,
+                    "没有正常输出信息或报错信息，请检查代码逻辑「开发者错误」",
+                    nil)
+                ctx.Abort()
+            }
+        }
+    }
+}
+```
+
+## 处理流程
+
+<Mermaid chart="
+flowchart TD
+    A[请求进入] --> B[ctx.Next 执行 Handler]
+    B --> C{响应已写入?}
+    C -->|是| D[直接返回]
+    C -->|否| E{ctx.Errors 存在?}
+    E -->|是| F{是 xError.Error?}
+    F -->|是| G[输出结构化错误]
+    F -->|否| H[输出 ServerInternalError]
+    E -->|否| I{状态码 301/302?}
+    I -->|是| D
+    I -->|否| J[输出 DeveloperError]
+"/>
+
+## 三种处理场景
+
+### 场景一：正常响应
+
+Handler 已调用 `xResult.Success()` 输出响应：
+
+```go title="handler/user.go"
+func GetUser(ctx *gin.Context) {
+    user := userService.FindByID(ctx, id)
+    // [!code highlight:2]
+    // 已输出响应，ResponseMiddleware 不做处理
+    xResult.Success(ctx, user)
+}
+```
+
+### 场景二：错误响应
+
+Handler 通过 `ctx.Error()` 添加错误：
+
+```go title="handler/user.go"
+func GetUser(ctx *gin.Context) {
+    user, err := userService.FindByID(ctx, id)
+    if err != nil {
+        // [!code highlight:2]
+        // 添加错误到 ctx.Errors，ResponseMiddleware 自动处理
+        ctx.Error(xError.NewError(ctx, xError.NotFound, "用户不存在", true))
+        return
+    }
+    xResult.Success(ctx, user)
+}
+```
+
+**输出：**
+
+```json
+{
+  "context": "abc123",
+  "output": "NOT_EXIST",
+  "code": 40004,
+  "message": "数据不存在",
+  "error_message": "用户不存在"
+}
+```
+
+### 场景三：开发者错误
+
+Handler 既没有输出响应，也没有添加错误：
+
+```go title="handler/user.go"
+func GetUser(ctx *gin.Context) {
+    user := userService.FindByID(ctx, id)
+    // [!code highlight:2]
+    // 忘记输出响应！ResponseMiddleware 会返回 DeveloperError
+    _ = user
+}
+```
+
+**输出：**
+
+```json
+{
+  "context": "abc123",
+  "output": "DEVELOPER_ERROR",
+  "code": 50001,
+  "message": "开发者错误",
+  "error_message": "没有正常输出信息或报错信息，请检查代码逻辑「开发者错误」"
+}
+```
+
+## 错误类型处理
+
+### xError.Error 类型
+
+如果错误是 `xError.Error` 类型，使用其错误码和消息：
+
+```go
+// [!code highlight:2]
+// 创建带错误码的错误
+err := xError.NewError(ctx, xError.ParameterError, "参数格式错误", true)
+ctx.Error(err)
+```
+
+### 其他错误类型
+
+如果是普通 `error`，使用 `ServerInternalError`：
+
+```go
+// [!code highlight:2]
+// 普通错误会被包装为 ServerInternalError
+ctx.Error(errors.New("database connection failed"))
+```
+
+## 使用示例
+
+### 基础配置
+
+```go title="main.go"
+func main() {
+    router := gin.Default()
+
+    // [!code highlight:2]
+    // 注册统一响应中间件
+    router.Use(xMiddle.ResponseMiddleware)
+
+    router.GET("/api/users/:id", getUser)
+    router.Run(":8080")
+}
+```
+
+### 完整示例
+
+```go title="handler/user.go"
+package handler
+
+import (
+    xError "github.com/bamboo-services/bamboo-base-go/error"
+    xResult "github.com/bamboo-services/bamboo-base-go/result"
+    "github.com/gin-gonic/gin"
+)
+
+func GetUser(ctx *gin.Context) {
+    id := ctx.Param("id")
+
+    // [!code highlight:4]
+    // 参数校验
+    if id == "" {
+        ctx.Error(xError.NewError(ctx, xError.ParameterError, "用户ID不能为空", true))
+        return
+    }
+
+    user, err := userService.FindByID(ctx, id)
+    if err != nil {
+        // [!code highlight:3]
+        // 业务错误
+        ctx.Error(xError.NewError(ctx, xError.NotFound, "用户不存在", true))
+        return
+    }
+
+    // [!code highlight:2]
+    // 成功响应
+    xResult.Success(ctx, user)
+}
+```
+
+### 带数据的错误
+
+```go
+// [!code highlight:6]
+// 错误响应中携带额外数据
+ctx.Error(xError.NewErrorHasData(
+    ctx,
+    xError.ParameterError,
+    "参数校验失败",
+    true,
+    nil,
+    map[string]string{
+        "username": "长度必须在 3-20 之间",
+        "email":    "格式不正确",
+    },
+))
+```
+
+**输出：**
+
+```json
+{
+  "context": "abc123",
+  "output": "PARAMETER_ERROR",
+  "code": 40000,
+  "message": "参数错误",
+  "error_message": "参数校验失败",
+  "data": {
+    "username": "长度必须在 3-20 之间",
+    "email": "格式不正确"
+  }
+}
+```
+
+## 重定向处理
+
+重定向响应（301/302）不会被 ResponseMiddleware 处理：
+
+```go
+func RedirectHandler(ctx *gin.Context) {
+    // [!code highlight:2]
+    // 重定向不会触发 DeveloperError
+    ctx.Redirect(302, "/new-location")
+}
+```
+
+## 下一步
+
+<Cards>
+  <Card title="CORS 跨域" href="./cors" />
+  <Card title="错误处理" href="../error" />
+  <Card title="统一响应" href="../../core/result" />
+</Cards>

@@ -1,0 +1,222 @@
+---
+title: 基础实体
+description: xModels 包提供与 GORM 深度集成的基础实体类型
+icon: Database
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# 模型基类
+
+`xModels` 包提供与 GORM 深度集成的基础实体类型，自动处理主键生成和时间戳管理。
+
+```go
+import xModels "github.com/bamboo-services/bamboo-base-go/models"
+```
+
+## BaseEntity
+
+基础实体结构体，适用于不需要软删除的数据表。
+
+```go title="base_entity.go"
+type BaseEntity struct {
+    // [!code highlight:3]
+    ID        xSnowflake.SnowflakeID `json:"id" gorm:"type:bigint;primaryKey;comment:主键"`
+    CreatedAt time.Time              `json:"-" gorm:"autoCreateTime:milli;not null;comment:创建时间"`
+    UpdatedAt time.Time              `json:"updated_at" gorm:"autoUpdateTime:milli;not null;comment:更新时间"`
+}
+```
+
+### 字段说明
+
+<TypeTable
+  type={{
+    ID: {
+      description: '雪花算法生成的主键，64 位整数',
+      type: 'xSnowflake.SnowflakeID',
+      required: true,
+    },
+    CreatedAt: {
+      description: '创建时间，毫秒精度，JSON 序列化时不输出',
+      type: 'time.Time',
+      required: true,
+    },
+    UpdatedAt: {
+      description: '更新时间，毫秒精度',
+      type: 'time.Time',
+      required: true,
+    },
+  }}
+/>
+
+### GORM 标签说明
+
+| 字段 | JSON | GORM 标签 |
+|------|------|-----------|
+| `ID` | `"id"` | `type:bigint;primaryKey` |
+| `CreatedAt` | `"-"` (不输出) | `autoCreateTime:milli;not null` |
+| `UpdatedAt` | `"updated_at"` | `autoUpdateTime:milli;not null` |
+
+## 使用示例
+
+### 定义实体
+
+```go title="entity/user.go"
+package entity
+
+import (
+    xModels "github.com/bamboo-services/bamboo-base-go/models"
+    xSnowflake "github.com/bamboo-services/bamboo-base-go/snowflake"
+)
+
+// [!code highlight:5]
+type User struct {
+    xModels.BaseEntity                                      // 继承基础实体
+    Username string `gorm:"type:varchar(64);uniqueIndex" json:"username"`
+    Email    string `gorm:"type:varchar(128);uniqueIndex" json:"email"`
+    Password string `gorm:"type:varchar(256)" json:"-"`
+}
+
+// [!code highlight:4]
+// 实现 GeneProvider 接口（可选）
+func (u *User) GetGene() xSnowflake.Gene {
+    return xSnowflake.GeneUser
+}
+```
+
+### 创建记录
+
+```go
+user := &entity.User{
+    Username: "zhangsan",
+    Email:    "zhangsan@example.com",
+    Password: hashedPassword,
+}
+
+// [!code highlight:2]
+// ID 会自动生成，CreatedAt 和 UpdatedAt 会自动设置
+db.Create(user)
+
+fmt.Println(user.ID) // 1234567890123456789
+```
+
+### 更新记录
+
+```go
+// [!code highlight:2]
+// UpdatedAt 会自动更新
+db.Model(&user).Update("username", "lisi")
+```
+
+### 查询记录
+
+```go
+var user entity.User
+
+// [!code highlight:2]
+// 按 ID 查询
+db.First(&user, "id = ?", "1234567890123456789")
+
+// [!code highlight:2]
+// 按条件查询
+db.Where("username = ?", "zhangsan").First(&user)
+```
+
+## GORM 钩子
+
+### BeforeCreate
+
+在插入数据前自动执行：
+
+```go title="base_entity.go"
+func (e *BaseEntity) BeforeCreate(tx *gorm.DB) error {
+    if e.ID.IsZero() {
+        // [!code highlight:4]
+        // 尝试从实体获取基因类型
+        gene := xSnowflake.GeneDefault
+        if provider, ok := tx.Statement.Dest.(GeneProvider); ok {
+            gene = provider.GetGene()
+        }
+        // [!code highlight]
+        e.ID = xSnowflake.GenerateID(gene)
+    }
+    // [!code highlight:2]
+    now := time.Now()
+    e.CreatedAt = now
+    e.UpdatedAt = now
+    return nil
+}
+```
+
+**功能：**
+- 如果 ID 为零值，自动生成雪花 ID
+- 检查实体是否实现 `GeneProvider` 接口
+- 实现了接口则使用自定义基因，否则使用默认基因
+- 设置 `CreatedAt` 和 `UpdatedAt` 为当前时间
+
+### BeforeUpdate
+
+在更新数据前自动执行：
+
+```go title="base_entity.go"
+func (e *BaseEntity) BeforeUpdate(tx *gorm.DB) error {
+    // [!code highlight]
+    e.UpdatedAt = time.Now()
+    return nil
+}
+```
+
+**功能：**
+- 自动更新 `UpdatedAt` 时间戳
+
+## 数据库表结构
+
+使用 `BaseEntity` 的实体会生成如下表结构：
+
+```sql
+CREATE TABLE users (
+    -- [!code highlight:3]
+    id         BIGINT PRIMARY KEY,
+    created_at TIMESTAMP(3) NOT NULL,
+    updated_at TIMESTAMP(3) NOT NULL,
+    username   VARCHAR(64) UNIQUE,
+    email      VARCHAR(128) UNIQUE,
+    password   VARCHAR(256)
+);
+```
+
+## JSON 序列化
+
+```go
+user := entity.User{
+    Username: "zhangsan",
+    Email:    "zhangsan@example.com",
+}
+db.Create(&user)
+
+// [!code highlight]
+data, _ := json.Marshal(user)
+```
+
+输出：
+
+```json
+{
+  "id": "1234567890123456789",
+  "updated_at": "2024-01-15T10:30:00.123Z",
+  "username": "zhangsan",
+  "email": "zhangsan@example.com"
+}
+```
+
+**注意：**
+- `ID` 序列化为字符串（避免 JavaScript 精度丢失）
+- `CreatedAt` 不输出（`json:"-"`）
+- `Password` 不输出（`json:"-"`）
+
+## 下一步
+
+<Cards>
+  <Card title="软删除实体" href="./soft-delete" />
+  <Card title="基因提供者" href="./gene-provider" />
+</Cards>

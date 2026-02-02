@@ -1,0 +1,176 @@
+---
+title: 请求上下文
+description: RequestContext 为每个请求生成唯一标识符和记录开始时间
+icon: SquareMousePointer
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# 请求上下文
+
+`RequestContext` 为每个 HTTP 请求生成唯一标识符 (UUID) 并记录请求开始时间，用于请求追踪和性能监控。
+
+## RequestContext
+
+```go title="context.go"
+// [!code highlight]
+func RequestContext() gin.HandlerFunc
+```
+
+**实现：**
+
+```go title="context.go"
+func RequestContext() gin.HandlerFunc {
+    return func(c *gin.Context) {
+        // [!code highlight:2]
+        // 1. 生成请求唯一 ID (UUID)
+        requestID := uuid.NewString()
+
+        // [!code highlight:2]
+        // 2. 设置响应头 X-Request-UUID
+        c.Writer.Header().Set(xHttp.HeaderRequestUUID.String(), requestID)
+
+        // [!code highlight:3]
+        // 3. 存储到 Gin Context
+        c.Set(xConsts.RequestKey.String(), requestID)
+        c.Set(xConsts.UserStartTimeKey.String(), time.Now())
+
+        // [!code highlight:3]
+        // 4. 注入到标准 context (供 slog 日志使用)
+        ctx := context.WithValue(c.Request.Context(), xConsts.RequestKey, requestID)
+        c.Request = c.Request.WithContext(ctx)
+
+        c.Next()
+    }
+}
+```
+
+## 注入的上下文键
+
+<TypeTable
+  type={{
+    RequestKey: {
+      description: '请求唯一标识符 (UUID)',
+      type: 'string',
+      required: true,
+    },
+    UserStartTimeKey: {
+      description: '请求开始时间',
+      type: 'time.Time',
+      required: true,
+    },
+  }}
+/>
+
+## 响应头
+
+中间件会在响应头中添加请求 UUID：
+
+```
+X-Request-UUID: 550e8400-e29b-41d4-a716-446655440000
+```
+
+## 使用示例
+
+### 基础使用
+
+```go title="main.go"
+func main() {
+    router := gin.New()
+
+    // [!code highlight:2]
+    // 注册请求上下文中间件（应该最先注册）
+    router.Use(xHelper.RequestContext())
+
+    router.GET("/api/users", getUsers)
+    router.Run(":8080")
+}
+```
+
+### 获取请求 UUID
+
+```go title="handler/user.go"
+func GetUser(ctx *gin.Context) {
+    // [!code highlight:2]
+    // 从 Gin Context 获取
+    requestID := ctx.GetString(xConsts.RequestKey.String())
+
+    // 用于日志记录
+    xLog.WithName(xLog.NamedCONT).SugarInfo(ctx, "处理用户请求",
+        "request_id", requestID,
+    )
+}
+```
+
+### 计算请求耗时
+
+```go title="middleware/timing.go"
+func TimingMiddleware() gin.HandlerFunc {
+    return func(ctx *gin.Context) {
+        ctx.Next()
+
+        // [!code highlight:4]
+        // 获取开始时间并计算耗时
+        if startTime, exists := ctx.Get(xConsts.UserStartTimeKey.String()); exists {
+            elapsed := time.Since(startTime.(time.Time))
+            xLog.WithName(xLog.NamedMIDE).SugarInfo(ctx, "请求耗时",
+                "elapsed_ms", elapsed.Milliseconds(),
+            )
+        }
+    }
+}
+```
+
+### 传递到 Service 层
+
+```go title="handler/user.go"
+func GetUser(ctx *gin.Context) {
+    // [!code highlight:2]
+    // ctx 已包含 RequestKey，可直接传递
+    user, err := userService.FindByID(ctx, id)
+    // ...
+}
+```
+
+```go title="service/user.go"
+func (s *UserService) FindByID(ctx context.Context, id string) (*entity.User, error) {
+    // [!code highlight:2]
+    // 日志会自动提取 RequestKey 作为 Trace ID
+    xLog.WithName(xLog.NamedSERV).Info(ctx, "查询用户")
+
+    // [!code highlight:2]
+    // GORM 操作也会继承 Trace ID
+    return s.repo.FindByID(ctx, id)
+}
+```
+
+## 工作流程
+
+<Mermaid chart="
+sequenceDiagram
+    participant C as Client
+    participant RC as RequestContext
+    participant H as Handler
+    participant S as Service
+    participant R as Repository
+
+    C->>RC: HTTP 请求
+    RC->>RC: 生成 UUID
+    RC->>RC: 设置响应头
+    RC->>RC: 注入 Gin Context
+    RC->>RC: 注入 Request Context
+    RC->>H: ctx.Next()
+    H->>S: 传递 ctx
+    S->>R: 传递 ctx
+    R->>R: 日志自动关联 UUID
+    R->>S: 返回
+    S->>H: 返回
+    H->>C: 响应 (带 X-Request-UUID 头)
+"/>
+
+## 下一步
+
+<Cards>
+  <Card title="HTTP 日志" href="./http-logger" />
+  <Card title="Panic 恢复" href="./panic-recovery" />
+</Cards>

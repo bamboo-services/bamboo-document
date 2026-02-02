@@ -1,0 +1,242 @@
+---
+title: HTTP 日志
+description: HttpLogger 记录请求详情，支持敏感信息脱敏
+icon: FileText
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# HTTP 日志
+
+`HttpLogger` 提供完整的 HTTP 请求/响应日志记录，支持调试模式下的详细信息记录和敏感数据脱敏。
+
+## HttpLogger
+
+```go title="http_logger.go"
+// [!code highlight]
+func HttpLogger() gin.HandlerFunc
+```
+
+## 日志记录内容
+
+### 请求开始阶段
+
+**基础信息（始终记录）：**
+
+<TypeTable
+  type={{
+    method: {
+      description: '请求方法',
+      type: 'string',
+      required: true,
+    },
+    path: {
+      description: '请求路径',
+      type: 'string',
+      required: true,
+    },
+    client_ip: {
+      description: '客户端 IP',
+      type: 'string',
+      required: true,
+    },
+  }}
+/>
+
+**调试模式额外信息：**
+
+<TypeTable
+  type={{
+    query: {
+      description: '查询参数',
+      type: 'string',
+      required: false,
+    },
+    headers: {
+      description: '请求头（已脱敏）',
+      type: 'map[string]string',
+      required: false,
+    },
+    body: {
+      description: '请求体（已脱敏）',
+      type: 'string',
+      required: false,
+    },
+  }}
+/>
+
+### 请求完成阶段
+
+<TypeTable
+  type={{
+    status: {
+      description: '响应状态码',
+      type: 'int',
+      required: true,
+    },
+    latency_ms: {
+      description: '请求耗时（毫秒）',
+      type: 'float64',
+      required: true,
+    },
+    client_ip: {
+      description: '客户端 IP',
+      type: 'string',
+      required: true,
+    },
+  }}
+/>
+
+## 日志级别策略
+
+| 状态码范围 | 日志级别 | 说明 |
+|-----------|---------|------|
+| 2xx / 3xx | INFO | 成功请求 |
+| 4xx | WARN | 客户端错误 |
+| 5xx | ERROR | 服务器错误 |
+
+## 敏感信息脱敏
+
+### 请求头脱敏
+
+| 处理方式 | 字段 |
+|----------|------|
+| 完全移除 | `Set-Cookie` |
+| 中间隐藏 | `Authorization`, `Cookie`, `Proxy-Authorization`, `X-API-Key`, `Access-Token` |
+| 原样保留 | 其他字段 |
+
+### 请求体脱敏
+
+自动脱敏的 JSON 字段：
+
+```go
+sensitiveFields := map[string]bool{
+    // [!code highlight:6]
+    "password":         true,
+    "passwd":           true,
+    "token":            true,
+    "secret":           true,
+    "apikey":           true,
+    "api_key":          true,
+    "x-api-key":        true,
+    "access_token":     true,
+    "refresh_token":    true,
+    "old_password":     true,
+    "new_password":     true,
+    "confirm_password": true,
+}
+```
+
+### 脱敏规则
+
+```go title="http_logger.go"
+func maskSensitive(value string) string {
+    // [!code highlight:2]
+    // 短值（≤6字符）：全部隐藏
+    if len(value) <= 6 {
+        return "******"
+    }
+    // [!code highlight:2]
+    // 长值：保留首尾各3字符
+    return value[:3] + "..." + value[len(value)-3:]
+}
+```
+
+**示例：**
+
+| 原始值 | 脱敏后 |
+|--------|--------|
+| `abc` | `******` |
+| `mySecretToken123` | `myS...123` |
+| `Bearer eyJhbGciOiJIUzI1NiIs...` | `Bea...s...` |
+
+## 支持的 Content-Type
+
+请求体日志仅记录以下类型：
+
+- `application/json`
+- `application/x-www-form-urlencoded`
+- `text/xml`
+- `application/xml`
+
+## 使用示例
+
+### 基础使用
+
+```go title="main.go"
+func main() {
+    router := gin.New()
+
+    router.Use(xHelper.RequestContext())
+    router.Use(xHelper.PanicRecovery())
+    // [!code highlight:2]
+    // 注册 HTTP 日志中间件
+    router.Use(xHelper.HttpLogger())
+
+    router.Run(":8080")
+}
+```
+
+### 日志输出示例
+
+**请求开始：**
+
+```
+2024-01-15 10:30:00.123 [INFO] [abc123] [MIDE] 请求开始
+    method=POST
+    path=/api/users/login
+    client_ip=192.168.1.100
+    query=
+    headers={"Content-Type":"application/json","Authorization":"Bea...xyz"}
+    body={"username":"zhangsan","password":"******"}
+```
+
+**请求完成：**
+
+```
+2024-01-15 10:30:00.456 [INFO] [abc123] [MIDE] 请求完成
+    status=200
+    latency_ms=333.45
+    client_ip=192.168.1.100
+```
+
+**错误请求：**
+
+```
+2024-01-15 10:30:01.123 [WARN] [def456] [MIDE] 请求完成
+    status=400
+    latency_ms=12.34
+    client_ip=192.168.1.100
+```
+
+## 请求体缓存
+
+HttpLogger 会缓存请求体供后续中间件使用：
+
+```go title="http_logger.go"
+// [!code highlight:2]
+// 缓存请求体到 Context
+c.Set("cached_request_body", bodyBytes)
+```
+
+**在验证器中使用：**
+
+```go
+func ValidatorMiddleware() gin.HandlerFunc {
+    return func(ctx *gin.Context) {
+        // [!code highlight:2]
+        // 获取缓存的请求体
+        if body, exists := ctx.Get("cached_request_body"); exists {
+            // 使用缓存的请求体进行验证
+        }
+        ctx.Next()
+    }
+}
+```
+
+## 下一步
+
+<Cards>
+  <Card title="请求上下文" href="./context" />
+  <Card title="Panic 恢复" href="./panic-recovery" />
+</Cards>

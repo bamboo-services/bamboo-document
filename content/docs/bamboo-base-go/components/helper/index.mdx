@@ -1,0 +1,161 @@
+---
+title: 概述
+description: xHelper 提供请求上下文、HTTP 日志、Panic 恢复等辅助中间件
+icon: Shield
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# 辅助中间件
+
+`xHelper` 提供 Gin 框架的辅助中间件，包括请求上下文注入、HTTP 请求日志、Panic 恢复等。
+
+```go
+import xHelper "github.com/bamboo-services/bamboo-base-go/helper"
+```
+
+## 中间件列表
+
+<TypeTable
+  type={{
+    RequestContext: {
+      description: '请求上下文中间件，生成请求 UUID 和记录开始时间',
+      type: 'gin.HandlerFunc',
+      required: true,
+    },
+    HttpLogger: {
+      description: 'HTTP 请求日志中间件，支持敏感信息脱敏',
+      type: 'gin.HandlerFunc',
+      required: true,
+    },
+    PanicRecovery: {
+      description: 'Panic 恢复中间件，捕获异常并返回统一响应',
+      type: 'gin.HandlerFunc',
+      required: true,
+    },
+  }}
+/>
+
+## 快速使用
+
+```go title="main.go"
+func main() {
+    router := gin.New()
+
+    // [!code highlight:4]
+    // 推荐的注册顺序
+    router.Use(xHelper.RequestContext())   // 1. 请求上下文（最先）
+    router.Use(xHelper.PanicRecovery())    // 2. Panic 恢复
+    router.Use(xHelper.HttpLogger())       // 3. HTTP 日志
+
+    // 其他中间件...
+    router.Use(xMiddle.ReleaseAllCors)
+    router.Use(xMiddle.AllowOption)
+    router.Use(xMiddle.ResponseMiddleware)
+
+    router.Run(":8080")
+}
+```
+
+## 中间件执行顺序
+
+<Mermaid chart="
+sequenceDiagram
+    participant C as Client
+    participant RC as RequestContext
+    participant PR as PanicRecovery
+    participant HL as HttpLogger
+    participant H as Handler
+
+    C->>RC: 请求
+    RC->>RC: 生成 UUID
+    RC->>RC: 记录开始时间
+    RC->>PR: ctx.Next()
+    PR->>HL: ctx.Next()
+    HL->>HL: 记录请求开始日志
+    HL->>H: ctx.Next()
+
+    alt Handler Panic
+        H-->>PR: panic
+        PR->>PR: 捕获 Panic
+        PR->>C: 统一错误响应
+    else 正常返回
+        H->>HL: 返回
+        HL->>HL: 记录请求完成日志
+        HL->>C: 响应
+    end
+"/>
+
+## 推荐配置
+
+### 完整配置
+
+```go title="main.go"
+func main() {
+    router := gin.New()
+
+    // [!code highlight:4]
+    // 辅助中间件
+    router.Use(xHelper.RequestContext())
+    router.Use(xHelper.PanicRecovery())
+    router.Use(xHelper.HttpLogger())
+
+    // [!code highlight:4]
+    // 业务中间件
+    router.Use(xMiddle.ReleaseAllCors)
+    router.Use(xMiddle.AllowOption)
+    router.Use(xMiddle.ResponseMiddleware)
+
+    // [!code highlight:2]
+    // 资源注入
+    router.Use(InjectMiddleware(db, rdb, node))
+
+    router.Run(":8080")
+}
+```
+
+### 最小配置
+
+```go
+// [!code highlight:3]
+// 最小必要配置
+router.Use(xHelper.RequestContext())   // 请求追踪必需
+router.Use(xHelper.PanicRecovery())    // 防止服务崩溃
+```
+
+## 与其他组件配合
+
+### 配合 xLog 使用
+
+辅助中间件使用 `NamedMIDE` 日志标识：
+
+```go
+// HttpLogger 中的日志
+xLog.WithName(xLog.NamedMIDE).Info(ctx, "请求开始", ...)
+xLog.WithName(xLog.NamedMIDE).Info(ctx, "请求完成", ...)
+
+// PanicRecovery 中的日志
+xLog.WithName(xLog.NamedMIDE).Error(ctx, "Panic 恢复", ...)
+```
+
+### 配合 xResult 使用
+
+PanicRecovery 使用 `xBase.BaseResponse` 返回统一格式：
+
+```json
+{
+  "context": "abc123-uuid",
+  "output": "SERVER_INTERNAL_ERROR",
+  "code": 50000,
+  "message": "服务器内部错误",
+  "error_message": "具体错误描述"
+}
+```
+
+## 下一步
+
+<Cards>
+  <Card title="请求上下文" href="./context" />
+  <Card title="HTTP 日志" href="./http-logger" />
+  <Card title="Panic 恢复" href="./panic-recovery" />
+</Cards>

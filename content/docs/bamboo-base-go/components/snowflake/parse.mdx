@@ -1,0 +1,401 @@
+---
+title: ID 解析
+description: 从 SnowflakeID 解析时间戳、基因、节点等信息
+icon: Search
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# ID 解析
+
+SnowflakeID 提供丰富的解析方法，可以从 ID 中提取时间戳、基因、数据中心、节点等信息。
+
+## 字符串解析
+
+### ParseSnowflakeID
+
+从字符串解析 ID：
+
+```go title="global.go"
+// [!code highlight]
+func ParseSnowflakeID(s string) (SnowflakeID, error)
+```
+
+**示例：**
+
+```go
+// [!code highlight]
+id, err := xSnowflake.ParseSnowflakeID("1234567890123456789")
+if err != nil {
+    log.Error("解析失败:", err)
+    return
+}
+fmt.Println(id.Gene()) // User
+```
+
+### MustParseSnowflakeID
+
+解析 ID，失败则 panic：
+
+```go title="global.go"
+// [!code highlight]
+func MustParseSnowflakeID(s string) SnowflakeID
+```
+
+**示例：**
+
+```go
+// [!code highlight]
+id := xSnowflake.MustParseSnowflakeID("1234567890123456789")
+```
+
+## 信息提取
+
+### Timestamp
+
+提取创建时间：
+
+```go title="snowflake.go"
+// [!code highlight]
+func (s SnowflakeID) Timestamp() time.Time
+```
+
+**实现：**
+
+```go title="snowflake.go"
+func (s SnowflakeID) Timestamp() time.Time {
+    // [!code highlight:2]
+    ms := (int64(s) >> timestampShift) + epoch
+    return time.UnixMilli(ms)
+}
+```
+
+**示例：**
+
+```go
+id := xSnowflake.GenerateID()
+
+// [!code highlight]
+createTime := id.Timestamp()
+fmt.Println(createTime) // 2024-01-15 10:30:00.123 +0800 CST
+```
+
+### Gene
+
+提取业务基因：
+
+```go title="snowflake.go"
+// [!code highlight]
+func (s SnowflakeID) Gene() Gene
+```
+
+**实现：**
+
+```go title="snowflake.go"
+func (s SnowflakeID) Gene() Gene {
+    // [!code highlight]
+    return Gene((int64(s) >> geneShift) & maxGene)
+}
+```
+
+**示例：**
+
+```go
+id := xSnowflake.GenerateID(xSnowflake.GeneOrder)
+
+// [!code highlight:3]
+gene := id.Gene()
+fmt.Println(gene)          // 16
+fmt.Println(gene.String()) // "Order"
+
+// [!code highlight:2]
+if gene == xSnowflake.GeneOrder {
+    fmt.Println("这是订单 ID")
+}
+```
+
+### DatacenterID
+
+提取数据中心 ID：
+
+```go title="snowflake.go"
+// [!code highlight]
+func (s SnowflakeID) DatacenterID() int64
+```
+
+**实现：**
+
+```go title="snowflake.go"
+func (s SnowflakeID) DatacenterID() int64 {
+    // [!code highlight]
+    return (int64(s) >> datacenterShift) & maxDatacenterID
+}
+```
+
+### NodeID
+
+提取节点 ID：
+
+```go title="snowflake.go"
+// [!code highlight]
+func (s SnowflakeID) NodeID() int64
+```
+
+**实现：**
+
+```go title="snowflake.go"
+func (s SnowflakeID) NodeID() int64 {
+    // [!code highlight]
+    return (int64(s) >> nodeShift) & maxNodeID
+}
+```
+
+### Sequence
+
+提取序列号：
+
+```go title="snowflake.go"
+// [!code highlight]
+func (s SnowflakeID) Sequence() int64
+```
+
+**实现：**
+
+```go title="snowflake.go"
+func (s SnowflakeID) Sequence() int64 {
+    // [!code highlight]
+    return int64(s) & maxSequence
+}
+```
+
+## 完整解析示例
+
+```go
+id := xSnowflake.GenerateID(xSnowflake.GeneUser)
+
+// [!code highlight:6]
+fmt.Println("ID:", id.String())
+fmt.Println("创建时间:", id.Timestamp())
+fmt.Println("基因:", id.Gene().String())
+fmt.Println("数据中心:", id.DatacenterID())
+fmt.Println("节点:", id.NodeID())
+fmt.Println("序列号:", id.Sequence())
+
+// 输出：
+// ID: 1234567890123456789
+// 创建时间: 2024-01-15 10:30:00.123 +0800 CST
+// 基因: User
+// 数据中心: 1
+// 节点: 2
+// 序列号: 0
+```
+
+## 类型转换
+
+### Int64
+
+返回 int64 值：
+
+```go title="snowflake.go"
+// [!code highlight]
+func (s SnowflakeID) Int64() int64
+```
+
+**示例：**
+
+```go
+id := xSnowflake.GenerateID()
+
+// [!code highlight]
+num := id.Int64()
+fmt.Println(num) // 1234567890123456789
+```
+
+### String
+
+返回字符串表示：
+
+```go title="snowflake.go"
+// [!code highlight]
+func (s SnowflakeID) String() string
+```
+
+**示例：**
+
+```go
+id := xSnowflake.GenerateID()
+
+// [!code highlight]
+str := id.String()
+fmt.Println(str) // "1234567890123456789"
+```
+
+### IsZero
+
+判断是否为零值：
+
+```go title="snowflake.go"
+// [!code highlight]
+func (s SnowflakeID) IsZero() bool
+```
+
+**示例：**
+
+```go
+var id xSnowflake.SnowflakeID
+
+// [!code highlight]
+if id.IsZero() {
+    fmt.Println("ID 未初始化")
+}
+```
+
+## 序列化支持
+
+### JSON
+
+序列化为字符串，避免 JavaScript 精度丢失：
+
+```go title="snowflake.go"
+// [!code highlight]
+func (s SnowflakeID) MarshalJSON() ([]byte, error)
+
+// [!code highlight]
+func (s *SnowflakeID) UnmarshalJSON(data []byte) error
+```
+
+**示例：**
+
+```go
+type User struct {
+    ID   xSnowflake.SnowflakeID `json:"id"`
+    Name string                 `json:"name"`
+}
+
+user := User{
+    ID:   xSnowflake.GenerateID(xSnowflake.GeneUser),
+    Name: "张三",
+}
+
+// [!code highlight:2]
+// JSON 序列化
+data, _ := json.Marshal(user)
+// {"id":"1234567890123456789","name":"张三"}
+
+// [!code highlight:2]
+// JSON 反序列化（支持字符串和数字格式）
+json.Unmarshal([]byte(`{"id":"1234567890123456789"}`), &user)
+json.Unmarshal([]byte(`{"id":1234567890123456789}`), &user)
+```
+
+### GORM
+
+支持数据库读写：
+
+```go title="snowflake.go"
+// [!code highlight]
+func (s SnowflakeID) Value() (driver.Value, error)
+
+// [!code highlight]
+func (s *SnowflakeID) Scan(value interface{}) error
+```
+
+**示例：**
+
+```go
+type User struct {
+    // [!code highlight]
+    ID       xSnowflake.SnowflakeID `gorm:"type:bigint;primaryKey"`
+    Username string                 `gorm:"type:varchar(64)"`
+}
+
+// 写入数据库
+db.Create(&User{
+    ID:       xSnowflake.GenerateID(xSnowflake.GeneUser),
+    Username: "zhangsan",
+})
+
+// 从数据库读取
+var user User
+db.First(&user, "id = ?", "1234567890123456789")
+```
+
+### Redis
+
+支持二进制存储：
+
+```go title="snowflake.go"
+// [!code highlight]
+func (s SnowflakeID) MarshalBinary() ([]byte, error)
+
+// [!code highlight]
+func (s *SnowflakeID) UnmarshalBinary(data []byte) error
+```
+
+**示例：**
+
+```go
+id := xSnowflake.GenerateID()
+
+// [!code highlight:2]
+// 存储到 Redis
+rdb.Set(ctx, "user:id", id, time.Hour)
+
+// [!code highlight:2]
+// 从 Redis 读取
+var readID xSnowflake.SnowflakeID
+rdb.Get(ctx, "user:id").Scan(&readID)
+```
+
+## 实际应用
+
+### 根据 ID 判断数据类型
+
+```go
+func HandleData(id xSnowflake.SnowflakeID) {
+    // [!code highlight]
+    switch id.Gene() {
+    case xSnowflake.GeneUser:
+        handleUser(id)
+    case xSnowflake.GeneOrder:
+        handleOrder(id)
+    case xSnowflake.GenePayment:
+        handlePayment(id)
+    default:
+        handleDefault(id)
+    }
+}
+```
+
+### 根据 ID 判断创建时间
+
+```go
+func IsExpired(id xSnowflake.SnowflakeID, duration time.Duration) bool {
+    // [!code highlight]
+    createTime := id.Timestamp()
+    return time.Since(createTime) > duration
+}
+
+// 使用
+if IsExpired(tokenID, 24*time.Hour) {
+    fmt.Println("Token 已过期")
+}
+```
+
+### 根据 ID 定位节点
+
+```go
+func GetNodeInfo(id xSnowflake.SnowflakeID) string {
+    // [!code highlight:2]
+    return fmt.Sprintf("数据中心 %d，节点 %d",
+        id.DatacenterID(), id.NodeID())
+}
+```
+
+## 下一步
+
+<Cards>
+  <Card title="概述" href="./index" />
+  <Card title="业务基因" href="./gene" />
+  <Card title="节点管理" href="./node" />
+</Cards>

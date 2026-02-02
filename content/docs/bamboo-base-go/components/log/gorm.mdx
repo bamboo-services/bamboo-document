@@ -1,0 +1,344 @@
+---
+title: GORM 集成
+description: SlogLogger 适配器将 GORM 日志输出到 slog
+icon: Database
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# GORM 集成
+
+`SlogLogger` 是 GORM 日志适配器，实现 `gorm.io/gorm/logger.Interface` 接口，将数据库操作日志输出到 slog。
+
+## SlogLogger
+
+```go title="gorm.go"
+type SlogLogger struct {
+    logger                    *slog.Logger
+    config                    GormLoggerConfig
+    slowThreshold             time.Duration
+    logLevel                  LogLevel
+    ignoreRecordNotFoundError bool
+}
+```
+
+## GormLoggerConfig
+
+```go title="gorm.go"
+// [!code highlight:6]
+type GormLoggerConfig struct {
+    SlowThreshold             int      // 慢查询阈值（毫秒），超过此值以 WARN 级别记录
+    LogLevel                  LogLevel // 日志级别
+    IgnoreRecordNotFoundError bool     // 是否忽略 ErrRecordNotFound 错误
+    Colorful                  bool     // 是否启用彩色输出（预留字段）
+}
+```
+
+### 配置说明
+
+<TypeTable
+  type={{
+    SlowThreshold: {
+      description: '慢查询阈值（毫秒），超过此值以 WARN 级别记录',
+      type: 'int',
+      default: '200',
+    },
+    LogLevel: {
+      description: '日志级别',
+      type: 'LogLevel',
+      default: 'LevelInfo',
+    },
+    IgnoreRecordNotFoundError: {
+      description: '是否忽略 ErrRecordNotFound 错误',
+      type: 'bool',
+      default: 'false',
+    },
+    Colorful: {
+      description: '预留字段，slog 已自行处理颜色',
+      type: 'bool',
+      default: 'false',
+    },
+  }}
+/>
+
+## 日志级别
+
+```go title="gorm.go"
+type LogLevel int
+
+const (
+    // [!code highlight:4]
+    LevelSilent LogLevel = iota + 1  // 静默模式，不输出任何日志
+    LevelError                        // 仅输出错误日志
+    LevelWarn                         // 输出错误和警告日志
+    LevelInfo                         // 输出所有级别日志（包括 SQL 语句）
+)
+```
+
+<TypeTable
+  type={{
+    'LevelSilent (1)': {
+      description: '静默模式，不输出任何日志',
+      type: '生产环境',
+      required: true,
+    },
+    'LevelError (2)': {
+      description: '仅输出错误日志',
+      type: '生产环境',
+      required: true,
+    },
+    'LevelWarn (3)': {
+      description: '输出错误和警告日志',
+      type: '测试环境',
+      required: true,
+    },
+    'LevelInfo (4)': {
+      description: '输出所有级别日志（包括 SQL 语句）',
+      type: '开发环境',
+      required: true,
+    },
+  }}
+/>
+
+## NewSlogLogger
+
+创建 GORM slog 日志适配器：
+
+```go title="gorm.go"
+// [!code highlight]
+func NewSlogLogger(slogger *slog.Logger, config GormLoggerConfig) logger.Interface
+```
+
+**参数说明：**
+
+- `slogger`: slog.Logger 实例，推荐使用 `slog.Default().WithGroup(xLog.NamedREPO)`
+- `config`: GORM Logger 配置
+
+**示例：**
+
+```go
+// [!code highlight:6]
+gormLogger := xLog.NewSlogLogger(
+    slog.Default().WithGroup(xLog.NamedREPO),
+    xLog.GormLoggerConfig{
+        SlowThreshold:             200,            // 200ms 慢查询阈值
+        LogLevel:                  xLog.LevelInfo, // 日志级别
+        IgnoreRecordNotFoundError: true,           // 忽略记录未找到错误
+    },
+)
+```
+
+## 日志输出规则
+
+### SQL 追踪
+
+`Trace` 方法根据执行情况输出不同级别的日志：
+
+```go title="gorm.go"
+func (l *SlogLogger) Trace(ctx context.Context, begin time.Time, fc func() (sql string, rowsAffected int64), err error) {
+    switch {
+    // [!code highlight:2]
+    // 执行出错 → ERROR 级别
+    case err != nil && l.logLevel >= LevelError:
+        l.logger.LogAttrs(ctx, slog.LevelError, "执行SQL语句失败", ...)
+
+    // [!code highlight:2]
+    // 慢查询 → WARN 级别
+    case elapsed > l.slowThreshold && l.logLevel >= LevelWarn:
+        l.logger.LogAttrs(ctx, slog.LevelWarn, "发现SQL慢查询", ...)
+
+    // [!code highlight:2]
+    // 普通查询 → DEBUG 级别
+    case l.logLevel >= LevelInfo:
+        l.logger.LogAttrs(ctx, slog.LevelDebug, "成功执行SQL语句", ...)
+    }
+}
+```
+
+### 日志属性
+
+每条 SQL 日志包含以下属性：
+
+<TypeTable
+  type={{
+    elapsed_ms: {
+      description: 'SQL 执行耗时（毫秒）',
+      type: 'float64',
+      required: true,
+    },
+    rows: {
+      description: '受影响的行数',
+      type: 'int64',
+      required: true,
+    },
+    sql: {
+      description: '执行的 SQL 语句',
+      type: 'string',
+      required: true,
+    },
+    error: {
+      description: '错误信息（仅错误时）',
+      type: 'string',
+      required: false,
+    },
+    threshold: {
+      description: '慢查询阈值（仅慢查询时）',
+      type: 'Duration',
+      required: false,
+    },
+  }}
+/>
+
+## 使用示例
+
+### 基础集成
+
+```go title="register_database.go"
+func (r *Reg) DatabaseInit() {
+    dsn := "host=localhost user=postgres dbname=myapp"
+
+    // [!code highlight:7]
+    // 创建 GORM Logger
+    gormLogger := xLog.NewSlogLogger(
+        slog.Default().WithGroup(xLog.NamedREPO),
+        xLog.GormLoggerConfig{
+            SlowThreshold:             200,
+            LogLevel:                  xLog.LevelInfo,
+            IgnoreRecordNotFoundError: true,
+        },
+    )
+
+    // [!code highlight:4]
+    // 连接数据库
+    db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
+        Logger: gormLogger,
+    })
+    if err != nil {
+        panic(err)
+    }
+}
+```
+
+### 环境区分
+
+```go
+func createGormLogger(isDebug bool) logger.Interface {
+    config := xLog.GormLoggerConfig{
+        SlowThreshold:             200,
+        IgnoreRecordNotFoundError: true,
+    }
+
+    // [!code highlight:5]
+    if isDebug {
+        config.LogLevel = xLog.LevelInfo  // 开发环境：输出所有 SQL
+    } else {
+        config.LogLevel = xLog.LevelWarn  // 生产环境：仅输出警告和错误
+    }
+
+    return xLog.NewSlogLogger(
+        slog.Default().WithGroup(xLog.NamedREPO),
+        config,
+    )
+}
+```
+
+### 链路追踪
+
+GORM 操作自动继承 Context 中的 Trace ID：
+
+```go title="repository/user.go"
+func (r *UserRepo) FindByID(ctx context.Context, id int64) (*entity.User, error) {
+    var user entity.User
+    // [!code highlight:2]
+    // WithContext 传递 Trace ID，日志会自动关联
+    err := r.db.WithContext(ctx).First(&user, id).Error
+    return &user, err
+}
+```
+
+**日志输出：**
+
+```
+2024-01-15 10:30:00.123 [DEBU] [abc123] [REPO] 成功执行SQL语句
+    elapsed_ms=1.234
+    rows=1
+    sql=SELECT * FROM users WHERE id = 12345 LIMIT 1
+```
+
+### 慢查询监控
+
+```go
+// [!code highlight:4]
+// 设置较低的阈值以捕获更多慢查询
+gormLogger := xLog.NewSlogLogger(
+    slog.Default().WithGroup(xLog.NamedREPO),
+    xLog.GormLoggerConfig{
+        SlowThreshold: 100, // 100ms
+        LogLevel:      xLog.LevelWarn,
+    },
+)
+```
+
+**慢查询日志：**
+
+```
+2024-01-15 10:30:00.123 [WARN] [abc123] [REPO] 发现SQL慢查询
+    elapsed_ms=156.789
+    rows=1000
+    sql=SELECT * FROM orders WHERE created_at > '2024-01-01'
+    threshold=100ms
+```
+
+## 完整示例
+
+```go title="startup/startup_database.go"
+package startup
+
+import (
+    "log/slog"
+    "os"
+
+    xLog "github.com/bamboo-services/bamboo-base-go/log"
+    "gorm.io/driver/postgres"
+    "gorm.io/gorm"
+)
+
+func InitDatabase() *gorm.DB {
+    dsn := os.Getenv("DATABASE_URL")
+    isDebug := os.Getenv("APP_ENV") == "development"
+
+    // [!code highlight:2]
+    // 根据环境配置日志级别
+    logLevel := xLog.LevelWarn
+    if isDebug {
+        logLevel = xLog.LevelInfo
+    }
+
+    // [!code highlight:7]
+    gormLogger := xLog.NewSlogLogger(
+        slog.Default().WithGroup(xLog.NamedREPO),
+        xLog.GormLoggerConfig{
+            SlowThreshold:             200,
+            LogLevel:                  logLevel,
+            IgnoreRecordNotFoundError: true,
+        },
+    )
+
+    // [!code highlight:3]
+    db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
+        Logger: gormLogger,
+    })
+    if err != nil {
+        panic(err)
+    }
+
+    return db
+}
+```
+
+## 下一步
+
+<Cards>
+  <Card title="命名常量" href="./named" />
+  <Card title="自定义 Handler" href="./handler" />
+</Cards>

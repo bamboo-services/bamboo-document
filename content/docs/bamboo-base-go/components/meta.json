@@ -3,10 +3,8 @@
   "icon": "Component",
   "pages": [
     "snowflake",
-    "snowflake-gene",
     "models",
     "log",
-    "log-advanced",
     "middleware",
     "helper"
   ]

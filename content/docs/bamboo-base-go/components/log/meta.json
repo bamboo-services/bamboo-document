@@ -1,0 +1,11 @@
+{
+  "title": "日志系统",
+  "icon": "FileText",
+  "pages": [
+    "index",
+    "named",
+    "handler",
+    "rotator",
+    "gorm"
+  ]
+}

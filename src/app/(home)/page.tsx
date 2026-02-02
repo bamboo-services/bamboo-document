@@ -75,12 +75,12 @@ export default function HomePage() {
         <p>
           由{' '}
           <a
-            href="https://github.com/bamboo-services"
+            href="https://www.x-lf.com"
             target="_blank"
             rel="noopener noreferrer"
             className="text-primary hover:underline"
           >
-            Bamboo Services
+            筱锋xiao_lfeng
           </a>{' '}
           维护
         </p>

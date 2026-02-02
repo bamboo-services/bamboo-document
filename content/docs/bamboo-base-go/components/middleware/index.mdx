@@ -1,0 +1,137 @@
+---
+title: 概述
+description: xMiddle 提供 CORS、OPTIONS 预检、统一响应等常用中间件
+icon: Puzzle
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# 中间件
+
+`xMiddle` 提供 Gin 框架常用的中间件，包括 CORS 跨域处理、OPTIONS 预检请求、统一响应处理等。
+
+```go
+import xMiddle "github.com/bamboo-services/bamboo-base-go/middleware"
+```
+
+## 中间件列表
+
+<TypeTable
+  type={{
+    ReleaseAllCors: {
+      description: 'CORS 跨域中间件，允许所有来源',
+      type: 'gin.HandlerFunc',
+      required: true,
+    },
+    AllowOption: {
+      description: 'OPTIONS 预检请求处理',
+      type: 'gin.HandlerFunc',
+      required: true,
+    },
+    ResponseMiddleware: {
+      description: '统一响应处理中间件',
+      type: 'gin.HandlerFunc',
+      required: true,
+    },
+  }}
+/>
+
+## 快速使用
+
+```go title="main.go"
+func main() {
+    router := gin.Default()
+
+    // [!code highlight:4]
+    // 按顺序注册中间件
+    router.Use(xMiddle.ReleaseAllCors)      // 1. 设置 CORS 头
+    router.Use(xMiddle.AllowOption)          // 2. 处理 OPTIONS 请求
+    router.Use(xMiddle.ResponseMiddleware)   // 3. 统一响应处理
+
+    // 路由定义...
+    router.Run(":8080")
+}
+```
+
+## 中间件执行顺序
+
+<Mermaid chart="
+sequenceDiagram
+    participant C as Client
+    participant CORS as ReleaseAllCors
+    participant OPT as AllowOption
+    participant RESP as ResponseMiddleware
+    participant H as Handler
+
+    C->>CORS: 请求
+    CORS->>CORS: 设置 CORS 头
+    CORS->>OPT: ctx.Next()
+
+    alt OPTIONS 请求
+        OPT->>C: 200 OK (终止)
+    else 其他请求
+        OPT->>RESP: ctx.Next()
+        RESP->>H: ctx.Next()
+        H->>RESP: 返回
+        RESP->>RESP: 检查响应
+        RESP->>C: 统一格式响应
+    end
+"/>
+
+## 推荐配置
+
+### 开发环境
+
+```go
+// [!code highlight:4]
+// 开发环境：全开放 CORS
+router.Use(xMiddle.ReleaseAllCors)
+router.Use(xMiddle.AllowOption)
+router.Use(xMiddle.ResponseMiddleware)
+```
+
+### 生产环境
+
+```go
+// [!code highlight:2]
+// 生产环境：建议自定义 CORS 配置
+router.Use(customCorsMiddleware())  // 自定义 CORS
+router.Use(xMiddle.AllowOption)
+router.Use(xMiddle.ResponseMiddleware)
+```
+
+## 与其他组件配合
+
+### 配合 xResult 使用
+
+```go title="handler/user.go"
+func GetUser(ctx *gin.Context) {
+    user, err := userService.FindByID(ctx, id)
+    if err != nil {
+        // [!code highlight:2]
+        // 使用 xError 抛出错误，ResponseMiddleware 自动处理
+        ctx.Error(xError.NewError(ctx, xError.NotFound, "用户不存在", true))
+        return
+    }
+
+    // [!code highlight:2]
+    // 使用 xResult 输出成功响应
+    xResult.Success(ctx, user)
+}
+```
+
+### 配合 xLog 使用
+
+中间件内部使用 `NamedMIDE` 日志标识：
+
+```go
+// AllowOption 中的日志
+xLog.WithName(xLog.NamedMIDE).Debug(ctx, "检测到 OPTIONS 请求，继续处理")
+```
+
+## 下一步
+
+<Cards>
+  <Card title="CORS 跨域" href="./cors" />
+  <Card title="统一响应" href="./response" />
+</Cards>

@@ -1,0 +1,234 @@
+---
+title: 软删除实体
+description: BaseEntityWithSoftDelete 提供逻辑删除支持
+icon: Trash2
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# 软删除实体
+
+`BaseEntityWithSoftDelete` 在 `BaseEntity` 基础上增加了软删除支持，删除操作不会物理删除数据，而是设置删除时间戳。
+
+## BaseEntityWithSoftDelete
+
+```go title="base_entity_soft_delete.go"
+type BaseEntityWithSoftDelete struct {
+    // [!code highlight:4]
+    ID        xSnowflake.SnowflakeID `json:"id" gorm:"type:bigint;primaryKey;comment:主键"`
+    CreatedAt time.Time              `json:"-" gorm:"autoCreateTime:milli;not null;comment:创建时间"`
+    UpdatedAt time.Time              `json:"updated_at" gorm:"autoUpdateTime:milli;not null;comment:更新时间"`
+    DeletedAt gorm.DeletedAt         `json:"-" gorm:"type:timestamp;index;comment:删除时间"`
+}
+```
+
+### 字段说明
+
+<TypeTable
+  type={{
+    ID: {
+      description: '雪花算法生成的主键',
+      type: 'xSnowflake.SnowflakeID',
+      required: true,
+    },
+    CreatedAt: {
+      description: '创建时间，JSON 不输出',
+      type: 'time.Time',
+      required: true,
+    },
+    UpdatedAt: {
+      description: '更新时间',
+      type: 'time.Time',
+      required: true,
+    },
+    DeletedAt: {
+      description: '删除时间，为空表示未删除，JSON 不输出',
+      type: 'gorm.DeletedAt',
+      required: true,
+    },
+  }}
+/>
+
+## 与 BaseEntity 的区别
+
+| 特性 | BaseEntity | BaseEntityWithSoftDelete |
+|------|------------|--------------------------|
+| 软删除支持 | 无 | 有 |
+| DeletedAt 字段 | 无 | `gorm.DeletedAt` |
+| 删除行为 | 物理删除 | 逻辑删除 |
+| 查询行为 | 查询所有记录 | 自动过滤已删除记录 |
+
+## 使用示例
+
+### 定义实体
+
+```go title="entity/order.go"
+package entity
+
+import (
+    xModels "github.com/bamboo-services/bamboo-base-go/models"
+    xSnowflake "github.com/bamboo-services/bamboo-base-go/snowflake"
+)
+
+// [!code highlight:5]
+type Order struct {
+    xModels.BaseEntityWithSoftDelete              // 继承软删除实体
+    UserID  xSnowflake.SnowflakeID `json:"user_id" gorm:"type:bigint;index"`
+    OrderNo string                 `json:"order_no" gorm:"type:varchar(64);uniqueIndex"`
+    Amount  int64                  `json:"amount" gorm:"type:bigint"`
+}
+
+// [!code highlight:3]
+func (o *Order) GetGene() xSnowflake.Gene {
+    return xSnowflake.GeneOrder
+}
+```
+
+### 创建记录
+
+```go
+order := &entity.Order{
+    UserID:  userID,
+    OrderNo: "ORD202401150001",
+    Amount:  9900,
+}
+
+// [!code highlight]
+db.Create(order)
+```
+
+### 软删除
+
+```go
+// [!code highlight:2]
+// 软删除：设置 DeletedAt 为当前时间，不物理删除
+db.Delete(&order)
+
+// 数据库中：
+// deleted_at = '2024-01-15 10:30:00'
+```
+
+### 查询记录
+
+```go
+var orders []entity.Order
+
+// [!code highlight:2]
+// 普通查询：自动过滤已删除记录
+db.Find(&orders)
+
+// [!code highlight:2]
+// 查询包含已删除的记录
+db.Unscoped().Find(&orders)
+
+// [!code highlight:2]
+// 只查询已删除的记录
+db.Unscoped().Where("deleted_at IS NOT NULL").Find(&orders)
+```
+
+### 恢复数据
+
+```go
+// [!code highlight:2]
+// 恢复已删除的记录
+db.Unscoped().Model(&order).Update("deleted_at", nil)
+```
+
+### 物理删除
+
+```go
+// [!code highlight:2]
+// 真正删除数据（慎用）
+db.Unscoped().Delete(&order)
+```
+
+## 数据库表结构
+
+使用 `BaseEntityWithSoftDelete` 的实体会生成如下表结构：
+
+```sql
+CREATE TABLE orders (
+    -- [!code highlight:4]
+    id         BIGINT PRIMARY KEY,
+    created_at TIMESTAMP(3) NOT NULL,
+    updated_at TIMESTAMP(3) NOT NULL,
+    deleted_at TIMESTAMP,              -- 软删除字段
+    user_id    BIGINT,
+    order_no   VARCHAR(64) UNIQUE,
+    amount     BIGINT
+);
+
+-- [!code highlight:2]
+-- 软删除字段索引
+CREATE INDEX idx_orders_deleted_at ON orders(deleted_at);
+```
+
+## 软删除机制
+
+### 删除操作
+
+```go
+// 调用 Delete
+db.Delete(&order)
+
+// 实际执行的 SQL
+// UPDATE orders SET deleted_at = '2024-01-15 10:30:00' WHERE id = ?
+```
+
+### 查询操作
+
+```go
+// 普通查询
+db.Find(&orders)
+
+// 实际执行的 SQL
+// SELECT * FROM orders WHERE deleted_at IS NULL
+```
+
+### Unscoped 查询
+
+```go
+// 忽略软删除条件
+db.Unscoped().Find(&orders)
+
+// 实际执行的 SQL
+// SELECT * FROM orders
+```
+
+## 最佳实践
+
+### 选择合适的基类
+
+| 场景 | 推荐基类 |
+|------|---------|
+| 用户数据 | `BaseEntityWithSoftDelete` |
+| 订单数据 | `BaseEntityWithSoftDelete` |
+| 日志数据 | `BaseEntity` |
+| 配置数据 | `BaseEntity` |
+| 临时数据 | `BaseEntity` |
+
+### 软删除注意事项
+
+```go
+// [!code highlight:2]
+// 1. 唯一索引问题：软删除后唯一索引仍然生效
+// 解决方案：使用复合唯一索引包含 deleted_at
+
+type User struct {
+    xModels.BaseEntityWithSoftDelete
+    // [!code highlight:2]
+    // 复合唯一索引，允许同名用户（一个已删除，一个未删除）
+    Username string `gorm:"type:varchar(64);uniqueIndex:idx_username_deleted"`
+}
+
+// [!code highlight:2]
+// 2. 关联查询：关联表也需要考虑软删除
+db.Preload("Orders", "deleted_at IS NULL").Find(&users)
+```
+
+## 下一步
+
+<Cards>
+  <Card title="基础实体" href="./index" />
+  <Card title="基因提供者" href="./gene-provider" />
+</Cards>

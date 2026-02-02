@@ -1,0 +1,201 @@
+---
+title: 概述
+description: xSnowflake 包提供带业务基因的分布式唯一 ID 生成器
+icon: Snowflake
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# 雪花算法
+
+`xSnowflake` 包实现了带业务基因的雪花算法（Gene Snowflake ID），在标准雪花算法基础上嵌入 6 位业务基因，便于从 ID 直接识别数据类型。
+
+```go
+import xSnowflake "github.com/bamboo-services/bamboo-base-go/snowflake"
+```
+
+## ID 结构
+
+64 位 ID 的位分配：
+
+```
+┌─────────┬──────────────────────────────────────────┬────────┬────────────┬────────┬────────────┐
+│ 符号位  │              时间戳                       │  基因  │ 数据中心ID │ 节点ID │   序列号   │
+│  1 bit  │              41 bits                     │ 6 bits │   3 bits   │ 3 bits │  10 bits   │
+│ (不用)  │         (毫秒级，约69年)                  │ (0-63) │   (0-7)    │ (0-7)  │  (0-1023)  │
+└─────────┴──────────────────────────────────────────┴────────┴────────────┴────────┴────────────┘
+   63        62                              22         21-16      15-13      12-10       9-0
+```
+
+<TypeTable
+  type={{
+    '符号位': {
+      description: '不使用，保持 ID 为正数',
+      type: '1 bit',
+      required: true,
+    },
+    '时间戳': {
+      description: '毫秒级时间戳，从 epoch (2023-07-25) 开始计算，可用约 69 年',
+      type: '41 bits',
+      required: true,
+    },
+    '基因': {
+      description: '业务类型标识，支持 64 种业务类型 (0-63)',
+      type: '6 bits',
+      required: true,
+    },
+    '数据中心 ID': {
+      description: '数据中心标识，支持 8 个数据中心 (0-7)',
+      type: '3 bits',
+      required: true,
+    },
+    '节点 ID': {
+      description: '节点标识，每个数据中心支持 8 个节点 (0-7)',
+      type: '3 bits',
+      required: true,
+    },
+    '序列号': {
+      description: '毫秒内序列号，每毫秒可生成 1024 个 ID (0-1023)',
+      type: '10 bits',
+      required: true,
+    },
+  }}
+/>
+
+## 快速使用
+
+### 生成 ID
+
+```go
+// [!code highlight:2]
+// 使用默认节点生成普通 ID
+id := xSnowflake.GenerateID()
+
+// [!code highlight:2]
+// 生成带业务基因的 ID
+userID := xSnowflake.GenerateID(xSnowflake.GeneUser)
+orderID := xSnowflake.GenerateID(xSnowflake.GeneOrder)
+```
+
+### 解析 ID
+
+```go
+id := xSnowflake.GenerateID(xSnowflake.GeneUser)
+
+// [!code highlight:5]
+fmt.Println("时间:", id.Timestamp())       // 2024-01-15 10:30:00
+fmt.Println("基因:", id.Gene())            // User
+fmt.Println("数据中心:", id.DatacenterID()) // 1
+fmt.Println("节点:", id.NodeID())          // 2
+fmt.Println("序列号:", id.Sequence())      // 0
+```
+
+### 字符串转换
+
+```go
+// [!code highlight:2]
+// ID 转字符串
+str := id.String() // "1234567890123456789"
+
+// [!code highlight:2]
+// 字符串转 ID
+id, err := xSnowflake.ParseSnowflakeID("1234567890123456789")
+```
+
+## SnowflakeID 类型
+
+```go title="snowflake.go"
+// [!code highlight]
+type SnowflakeID int64
+```
+
+### 方法列表
+
+<TypeTable
+  type={{
+    'Int64()': {
+      description: '返回 int64 值',
+      type: 'int64',
+      required: true,
+    },
+    'String()': {
+      description: '返回字符串表示',
+      type: 'string',
+      required: true,
+    },
+    'IsZero()': {
+      description: '判断是否为零值',
+      type: 'bool',
+      required: true,
+    },
+    'Timestamp()': {
+      description: '提取创建时间',
+      type: 'time.Time',
+      required: true,
+    },
+    'Gene()': {
+      description: '提取业务基因',
+      type: 'Gene',
+      required: true,
+    },
+    'DatacenterID()': {
+      description: '提取数据中心 ID',
+      type: 'int64',
+      required: true,
+    },
+    'NodeID()': {
+      description: '提取节点 ID',
+      type: 'int64',
+      required: true,
+    },
+    'Sequence()': {
+      description: '提取序列号',
+      type: 'int64',
+      required: true,
+    },
+  }}
+/>
+
+### 序列化支持
+
+SnowflakeID 实现了多种序列化接口：
+
+```go
+// [!code highlight:2]
+// JSON 序列化为字符串（避免 JavaScript 精度丢失）
+json.Marshal(id) // "1234567890123456789"
+
+// [!code highlight:2]
+// GORM 数据库读写
+type User struct {
+    ID xSnowflake.SnowflakeID `gorm:"type:bigint;primaryKey"`
+}
+
+// [!code highlight:2]
+// Redis 二进制存储
+rdb.Set(ctx, "key", id, 0)
+```
+
+## 性能与容量
+
+| 指标 | 数值 |
+|------|------|
+| 每毫秒每节点 | 1,024 个 ID |
+| 每秒每节点 | 1,024,000 个 ID |
+| 集群节点数 | 8 × 8 = 64 个 |
+| 集群每秒总量 | 65,536,000 个 ID |
+| 时间有效期 | 约 69 年（至 2092 年） |
+
+## 线程安全
+
+- 使用 `sync.Mutex` 保证并发安全
+- 序列号用尽时自旋等待下一毫秒
+- 支持高并发场景
+
+## 下一步
+
+<Cards>
+  <Card title="业务基因" href="./gene" />
+  <Card title="节点管理" href="./node" />
+  <Card title="ID 解析" href="./parse" />
+</Cards>

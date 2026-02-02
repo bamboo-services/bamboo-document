@@ -1,0 +1,10 @@
+{
+  "title": "雪花算法",
+  "icon": "Snowflake",
+  "pages": [
+    "index",
+    "gene",
+    "node",
+    "parse"
+  ]
+}

@@ -1,0 +1,252 @@
+---
+title: 基因提供者
+description: GeneProvider 接口允许实体定义自己的业务基因
+icon: Dna
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# 基因提供者
+
+`GeneProvider` 接口允许每个实体类型定义自己的业务基因，在创建记录时自动使用对应的基因生成雪花 ID。
+
+## GeneProvider 接口
+
+```go title="provider.go"
+// [!code highlight:4]
+type GeneProvider interface {
+    // GetGene 返回实体的基因类型，用于生成雪花 ID 时指定业务基因
+    GetGene() xSnowflake.Gene
+}
+```
+
+## 工作原理
+
+在 `BaseEntity.BeforeCreate` 钩子中，会检查实体是否实现了 `GeneProvider` 接口：
+
+```go title="base_entity.go"
+func (e *BaseEntity) BeforeCreate(tx *gorm.DB) error {
+    if e.ID.IsZero() {
+        // [!code highlight:5]
+        // 默认使用 GeneDefault
+        gene := xSnowflake.GeneDefault
+        // 检查实体是否实现了 GeneProvider 接口
+        if provider, ok := tx.Statement.Dest.(GeneProvider); ok {
+            gene = provider.GetGene()
+        }
+        // [!code highlight]
+        e.ID = xSnowflake.GenerateID(gene)
+    }
+    // ...
+}
+```
+
+## 使用示例
+
+### 实现接口
+
+```go title="entity/user.go"
+package entity
+
+import (
+    xModels "github.com/bamboo-services/bamboo-base-go/models"
+    xSnowflake "github.com/bamboo-services/bamboo-base-go/snowflake"
+)
+
+type User struct {
+    xModels.BaseEntity
+    Username string `gorm:"type:varchar(64)"`
+}
+
+// [!code highlight:4]
+// 实现 GeneProvider 接口
+func (u *User) GetGene() xSnowflake.Gene {
+    return xSnowflake.GeneUser
+}
+```
+
+```go title="entity/order.go"
+type Order struct {
+    xModels.BaseEntityWithSoftDelete
+    OrderNo string `gorm:"type:varchar(64)"`
+}
+
+// [!code highlight:3]
+func (o *Order) GetGene() xSnowflake.Gene {
+    return xSnowflake.GeneOrder
+}
+```
+
+```go title="entity/payment.go"
+type Payment struct {
+    xModels.BaseEntity
+    Amount int64 `gorm:"type:bigint"`
+}
+
+// [!code highlight:3]
+func (p *Payment) GetGene() xSnowflake.Gene {
+    return xSnowflake.GenePayment
+}
+```
+
+### 创建记录
+
+```go
+// [!code highlight:2]
+// 创建用户，ID 会使用 GeneUser 基因
+user := &entity.User{Username: "zhangsan"}
+db.Create(user)
+fmt.Println(user.ID.Gene()) // User
+
+// [!code highlight:2]
+// 创建订单，ID 会使用 GeneOrder 基因
+order := &entity.Order{OrderNo: "ORD001"}
+db.Create(order)
+fmt.Println(order.ID.Gene()) // Order
+
+// [!code highlight:2]
+// 创建支付，ID 会使用 GenePayment 基因
+payment := &entity.Payment{Amount: 9900}
+db.Create(payment)
+fmt.Println(payment.ID.Gene()) // Payment
+```
+
+### 不实现接口
+
+如果实体不实现 `GeneProvider` 接口，会使用默认基因 `GeneDefault(0)`：
+
+```go title="entity/log.go"
+type Log struct {
+    xModels.BaseEntity
+    Message string `gorm:"type:text"`
+}
+
+// [!code highlight]
+// 不实现 GeneProvider，使用默认基因
+```
+
+```go
+log := &entity.Log{Message: "操作日志"}
+db.Create(log)
+fmt.Println(log.ID.Gene()) // Default
+```
+
+## 基因分片
+
+可以使用 `GeneCalc` 基于关联 ID 计算基因，实现数据分片：
+
+```go title="entity/order_item.go"
+type OrderItem struct {
+    xModels.BaseEntity
+    OrderID   xSnowflake.SnowflakeID `gorm:"type:bigint;index"`
+    ProductID xSnowflake.SnowflakeID `gorm:"type:bigint"`
+    Quantity  int                    `gorm:"type:int"`
+}
+
+// [!code highlight:4]
+// 基于订单 ID 计算基因，同一订单的商品项具有相同基因
+func (o *OrderItem) GetGene() xSnowflake.Gene {
+    return xSnowflake.CalcGene().Hash(o.OrderID)
+}
+```
+
+**效果：**
+- 同一订单的所有商品项具有相同的基因值
+- 便于按订单维度进行数据分片
+- 查询同一订单的商品项时可以定位到同一分片
+
+## 预定义基因
+
+<TypeTable
+  type={{
+    'GeneDefault (0)': {
+      description: '默认/未指定类型',
+      type: '系统级',
+      required: true,
+    },
+    'GeneSystem (1)': {
+      description: '系统内部数据',
+      type: '系统级',
+      required: true,
+    },
+    'GeneUser (2)': {
+      description: '用户相关数据',
+      type: '系统级',
+      required: true,
+    },
+    'GeneRole (3)': {
+      description: '角色权限数据',
+      type: '系统级',
+      required: true,
+    },
+    'GeneLog (4)': {
+      description: '日志记录数据',
+      type: '系统级',
+      required: true,
+    },
+    'GeneOrder (16)': {
+      description: '订单数据',
+      type: '业务级',
+      required: true,
+    },
+    'GeneProduct (17)': {
+      description: '商品数据',
+      type: '业务级',
+      required: true,
+    },
+    'GenePayment (18)': {
+      description: '支付数据',
+      type: '业务级',
+      required: true,
+    },
+  }}
+/>
+
+## 完整示例
+
+```go title="entity/merchant.go"
+package entity
+
+import (
+    xModels "github.com/bamboo-services/bamboo-base-go/models"
+    xSnowflake "github.com/bamboo-services/bamboo-base-go/snowflake"
+)
+
+// [!code highlight:2]
+// 自定义基因常量
+const GeneMerchant xSnowflake.Gene = 32
+
+type Merchant struct {
+    xModels.BaseEntityWithSoftDelete
+    Name    string `gorm:"type:varchar(128)" json:"name"`
+    Contact string `gorm:"type:varchar(64)" json:"contact"`
+    Status  int    `gorm:"type:smallint;default:1" json:"status"`
+}
+
+// [!code highlight:4]
+// 使用自定义基因
+func (m *Merchant) GetGene() xSnowflake.Gene {
+    return GeneMerchant
+}
+```
+
+```go
+// 创建商户
+merchant := &entity.Merchant{
+    Name:    "测试商户",
+    Contact: "13800138000",
+}
+db.Create(merchant)
+
+// [!code highlight:2]
+// 从 ID 识别数据类型
+fmt.Println(merchant.ID.Gene()) // Custom(32)
+```
+
+## 下一步
+
+<Cards>
+  <Card title="基础实体" href="./index" />
+  <Card title="软删除实体" href="./soft-delete" />
+  <Card title="雪花算法" href="../snowflake" />
+</Cards>

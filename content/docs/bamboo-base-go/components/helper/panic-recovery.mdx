@@ -1,0 +1,250 @@
+---
+title: Panic 恢复
+description: PanicRecovery 捕获异常并返回统一错误响应
+icon: ShieldAlert
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# Panic 恢复
+
+`PanicRecovery` 全局 Panic 捕获与恢复中间件，防止服务因未处理的异常而崩溃，并返回统一的 JSON 错误响应。
+
+## PanicRecovery
+
+```go title="panic_recovery.go"
+// [!code highlight]
+func PanicRecovery() gin.HandlerFunc
+```
+
+**实现：**
+
+```go title="panic_recovery.go"
+func PanicRecovery() gin.HandlerFunc {
+    return gin.RecoveryWithWriter(io.Discard, func(c *gin.Context, recovered interface{}) {
+        // [!code highlight:2]
+        // 1. 从上下文提取错误码
+        value, exists := c.Get(xConsts.ErrorCodeKey.String())
+        getErrMessage, msgExist := c.Get(xConsts.ErrorMessageKey.String())
+
+        // [!code highlight:2]
+        // 2. 默认错误码: ServerInternalError (50000)
+        errorCode := xError.ServerInternalError
+        if exists && value != nil {
+            if ec, ok := value.(*xError.ErrorCode); ok && ec != nil {
+                errorCode = ec
+            }
+        }
+
+        // [!code highlight:2]
+        // 3. 默认错误消息
+        if !msgExist {
+            getErrMessage = "未知错误，请稍后再试"
+        }
+
+        // [!code highlight:2]
+        // 4. 记录日志
+        xLog.WithName(xLog.NamedMIDE).Error(c.Request.Context(), "Panic 恢复", ...)
+
+        // [!code highlight:2]
+        // 5. 返回统一 JSON 响应
+        c.JSON(int(errorCode.Code/100), xBase.BaseResponse{...})
+        c.Abort()
+    })
+}
+```
+
+## 错误码提取
+
+中间件会尝试从上下文获取错误信息：
+
+<TypeTable
+  type={{
+    ErrorCodeKey: {
+      description: '错误码对象',
+      type: '*xError.ErrorCode',
+      default: 'ServerInternalError',
+    },
+    ErrorMessageKey: {
+      description: '错误描述',
+      type: 'string',
+      default: '"未知错误，请稍后再试"',
+    },
+  }}
+/>
+
+## 响应格式
+
+```json
+{
+  "context": "abc123-uuid",
+  "output": "SERVER_INTERNAL_ERROR",
+  "code": 50000,
+  "message": "服务器内部错误",
+  "error_message": "具体错误描述"
+}
+```
+
+### 响应字段说明
+
+<TypeTable
+  type={{
+    context: {
+      description: '请求 UUID（来自 RequestContext）',
+      type: 'string',
+      required: true,
+    },
+    output: {
+      description: '错误标识（大写下划线格式）',
+      type: 'string',
+      required: true,
+    },
+    code: {
+      description: '错误码',
+      type: 'uint',
+      required: true,
+    },
+    message: {
+      description: '错误消息（中文）',
+      type: 'string',
+      required: true,
+    },
+    error_message: {
+      description: '详细错误描述',
+      type: 'string',
+      required: false,
+    },
+  }}
+/>
+
+## 使用示例
+
+### 基础使用
+
+```go title="main.go"
+func main() {
+    router := gin.New()
+
+    router.Use(xHelper.RequestContext())
+    // [!code highlight:2]
+    // 注册 Panic 恢复中间件
+    router.Use(xHelper.PanicRecovery())
+    router.Use(xHelper.HttpLogger())
+
+    router.Run(":8080")
+}
+```
+
+### 测试 Panic 恢复
+
+```go title="handler/test.go"
+func TestPanic(ctx *gin.Context) {
+    // [!code highlight:2]
+    // 触发 Panic
+    panic("测试 Panic 恢复")
+}
+```
+
+**响应：**
+
+```json
+{
+  "context": "550e8400-e29b-41d4-a716-446655440000",
+  "output": "SERVER_INTERNAL_ERROR",
+  "code": 50000,
+  "message": "服务器内部错误",
+  "error_message": "未知错误，请稍后再试"
+}
+```
+
+### 带错误码的 Panic
+
+```go title="handler/user.go"
+func GetUser(ctx *gin.Context) {
+    // [!code highlight:3]
+    // 设置错误码后再 Panic
+    ctx.Set(xConsts.ErrorCodeKey.String(), xError.NotFound)
+    ctx.Set(xConsts.ErrorMessageKey.String(), "用户不存在")
+    panic("user not found")
+}
+```
+
+**响应：**
+
+```json
+{
+  "context": "550e8400-e29b-41d4-a716-446655440000",
+  "output": "NOT_EXIST",
+  "code": 40004,
+  "message": "数据不存在",
+  "error_message": "用户不存在"
+}
+```
+
+## 日志输出
+
+Panic 发生时会记录 ERROR 级别日志：
+
+```
+2024-01-15 10:30:00.123 [ERRO] [abc123] [MIDE] Panic 恢复
+    code=50000
+    output=SERVER_INTERNAL_ERROR
+    message=服务器内部错误
+    errorMessage=未知错误，请稍后再试
+goroutine 1 [running]:
+...
+```
+
+## 工作流程
+
+<Mermaid chart="
+flowchart TD
+    A[请求进入] --> B[PanicRecovery]
+    B --> C[ctx.Next]
+    C --> D{Handler 执行}
+    D -->|正常| E[返回响应]
+    D -->|Panic| F[捕获 Panic]
+    F --> G[提取错误码]
+    G --> H{ErrorCodeKey 存在?}
+    H -->|是| I[使用自定义错误码]
+    H -->|否| J[使用 ServerInternalError]
+    I --> K[记录日志]
+    J --> K
+    K --> L[返回 JSON 响应]
+    L --> M[ctx.Abort]
+"/>
+
+## 注意事项
+
+### 中间件顺序
+
+```go
+// [!code highlight:3]
+// PanicRecovery 应该在 HttpLogger 之前
+router.Use(xHelper.RequestContext())
+router.Use(xHelper.PanicRecovery())  // 先注册
+router.Use(xHelper.HttpLogger())      // 后注册
+```
+
+### 与 xError 配合
+
+推荐使用 `xError.NewError` 而不是直接 Panic：
+
+```go
+// [!code highlight:3]
+// 推荐：使用 xError
+ctx.Error(xError.NewError(ctx, xError.NotFound, "用户不存在", true))
+return
+
+// [!code highlight:2]
+// 不推荐：直接 Panic
+panic("user not found")
+```
+
+## 下一步
+
+<Cards>
+  <Card title="请求上下文" href="./context" />
+  <Card title="HTTP 日志" href="./http-logger" />
+  <Card title="错误处理" href="../../core/error" />
+</Cards>

@@ -1,0 +1,337 @@
+---
+title: 业务基因
+description: Gene 类型定义业务数据类型，支持 64 种业务分类
+icon: Dna
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# 业务基因
+
+业务基因（Gene）是雪花 ID 中嵌入的 6 位业务类型标识，支持 64 种业务分类（0-63）。
+
+## Gene 类型
+
+```go title="gene.go"
+// [!code highlight]
+type Gene int64
+```
+
+### 方法列表
+
+```go title="gene.go"
+// [!code highlight]
+// 返回基因名称，未定义则返回 "Custom(n)"
+func (g Gene) String() string
+
+// [!code highlight]
+// 判断是否为系统级别 (0-15)
+func (g Gene) IsSystem() bool
+
+// [!code highlight]
+// 判断是否为业务级别 (16-63)
+func (g Gene) IsBusiness() bool
+
+// [!code highlight]
+// 判断是否在有效范围 (0-63)
+func (g Gene) IsValid() bool
+
+// [!code highlight]
+// 返回 int64 值
+func (g Gene) Int64() int64
+```
+
+## 预定义基因
+
+### 系统级别 (0-15)
+
+用于框架和系统内部数据：
+
+<TypeTable
+  type={{
+    'GeneDefault': {
+      description: '默认/未指定类型',
+      type: '0',
+      required: true,
+    },
+    'GeneSystem': {
+      description: '系统内部数据',
+      type: '1',
+      required: true,
+    },
+    'GeneUser': {
+      description: '用户相关数据',
+      type: '2',
+      required: true,
+    },
+    'GeneRole': {
+      description: '角色权限数据',
+      type: '3',
+      required: true,
+    },
+    'GeneLog': {
+      description: '日志记录数据',
+      type: '4',
+      required: true,
+    },
+    'GeneConfig': {
+      description: '配置数据',
+      type: '5',
+      required: true,
+    },
+    'GeneFile': {
+      description: '文件/附件数据',
+      type: '6',
+      required: true,
+    },
+    'GeneSession': {
+      description: '会话数据',
+      type: '7',
+      required: true,
+    },
+    'GeneToken': {
+      description: '令牌数据',
+      type: '8',
+      required: true,
+    },
+    'GeneCache': {
+      description: '缓存数据',
+      type: '9',
+      required: true,
+    },
+  }}
+/>
+
+### 业务级别 (16-63)
+
+用于业务数据：
+
+<TypeTable
+  type={{
+    'GeneOrder': {
+      description: '订单数据',
+      type: '16',
+      required: true,
+    },
+    'GeneProduct': {
+      description: '商品数据',
+      type: '17',
+      required: true,
+    },
+    'GenePayment': {
+      description: '支付数据',
+      type: '18',
+      required: true,
+    },
+    'GeneInventory': {
+      description: '库存数据',
+      type: '19',
+      required: true,
+    },
+    'GeneCustomer': {
+      description: '客户数据',
+      type: '20',
+      required: true,
+    },
+    'GeneVendor': {
+      description: '供应商数据',
+      type: '21',
+      required: true,
+    },
+    'GeneContract': {
+      description: '合同数据',
+      type: '22',
+      required: true,
+    },
+    'GeneInvoice': {
+      description: '发票数据',
+      type: '23',
+      required: true,
+    },
+    'GeneShipment': {
+      description: '物流数据',
+      type: '24',
+      required: true,
+    },
+    'GeneRefund': {
+      description: '退款数据',
+      type: '25',
+      required: true,
+    },
+    'GeneCoupon': {
+      description: '优惠券数据',
+      type: '26',
+      required: true,
+    },
+    'GenePromotion': {
+      description: '促销活动数据',
+      type: '27',
+      required: true,
+    },
+    'GeneReview': {
+      description: '评价数据',
+      type: '28',
+      required: true,
+    },
+    'GeneMessage': {
+      description: '消息数据',
+      type: '29',
+      required: true,
+    },
+    'GeneNotify': {
+      description: '通知数据',
+      type: '30',
+      required: true,
+    },
+    'GeneTask': {
+      description: '任务数据',
+      type: '31',
+      required: true,
+    },
+  }}
+/>
+
+## 使用示例
+
+### 生成带基因的 ID
+
+```go
+// [!code highlight:2]
+// 生成用户 ID
+userID := xSnowflake.GenerateID(xSnowflake.GeneUser)
+
+// [!code highlight:2]
+// 生成订单 ID
+orderID := xSnowflake.GenerateID(xSnowflake.GeneOrder)
+
+// [!code highlight:2]
+// 生成支付 ID
+paymentID := xSnowflake.GenerateID(xSnowflake.GenePayment)
+```
+
+### 从 ID 提取基因
+
+```go
+id := xSnowflake.GenerateID(xSnowflake.GeneOrder)
+
+// [!code highlight:2]
+gene := id.Gene()
+fmt.Println(gene.String()) // "Order"
+
+// [!code highlight:2]
+// 判断基因类型
+if gene.IsBusiness() {
+    fmt.Println("这是业务数据")
+}
+
+// [!code highlight:2]
+if gene == xSnowflake.GeneOrder {
+    fmt.Println("这是订单数据")
+}
+```
+
+### 在实体中使用
+
+```go title="entity/user.go"
+package entity
+
+import (
+    xModels "github.com/bamboo-services/bamboo-base-go/models"
+    xSnowflake "github.com/bamboo-services/bamboo-base-go/snowflake"
+)
+
+type User struct {
+    xModels.BaseEntity
+    Username string `gorm:"type:varchar(64)"`
+}
+
+// [!code highlight:4]
+// 实现 GeneProvider 接口
+func (u *User) GetGene() xSnowflake.Gene {
+    return xSnowflake.GeneUser
+}
+```
+
+```go title="entity/order.go"
+type Order struct {
+    xModels.BaseEntity
+    UserID  xSnowflake.SnowflakeID
+    OrderNo string
+}
+
+// [!code highlight:3]
+func (o *Order) GetGene() xSnowflake.Gene {
+    return xSnowflake.GeneOrder
+}
+```
+
+## 基因计算
+
+`GeneCalc` 提供基于哈希的基因计算，用于分片定位：
+
+```go title="gene_calc.go"
+// [!code highlight]
+func CalcGene() GeneCalc
+```
+
+### 计算方法
+
+```go
+// [!code highlight:2]
+// 基于单个 ID 计算基因
+gene := xSnowflake.CalcGene().Hash(userID)
+
+// [!code highlight:2]
+// 基于多个 ID 计算组合基因
+gene := xSnowflake.CalcGene().HashMulti(userID, merchantID)
+
+// [!code highlight:2]
+// 基于字符串计算基因
+gene := xSnowflake.CalcGene().HashString("user_123")
+```
+
+### 分片定位示例
+
+同一用户的所有订单使用相同基因，便于数据分片：
+
+```go title="entity/order.go"
+type Order struct {
+    xModels.BaseEntity
+    UserID  xSnowflake.SnowflakeID
+    OrderNo string
+}
+
+// [!code highlight:4]
+// 基于用户 ID 计算基因，实现同用户数据分片
+func (o *Order) GetGene() xSnowflake.Gene {
+    return xSnowflake.CalcGene().Hash(o.UserID)
+}
+```
+
+**效果：**
+- 同一用户的所有订单具有相同的基因值
+- 便于按用户维度进行数据分片
+- 查询同一用户的订单时可以定位到同一分片
+
+## 自定义基因
+
+可以使用 32-63 范围内未定义的值作为自定义基因：
+
+```go
+const (
+    // [!code highlight:3]
+    // 自定义业务基因
+    GeneMyBusiness xSnowflake.Gene = 32
+    GeneMyData     xSnowflake.Gene = 33
+)
+
+// 使用自定义基因
+id := xSnowflake.GenerateID(GeneMyBusiness)
+```
+
+## 下一步
+
+<Cards>
+  <Card title="节点管理" href="./node" />
+  <Card title="ID 解析" href="./parse" />
+</Cards>

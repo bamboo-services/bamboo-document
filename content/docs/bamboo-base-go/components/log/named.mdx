@@ -1,0 +1,328 @@
+---
+title: 命名常量
+description: 预定义的日志命名常量，按模块分类管理日志
+icon: Tag
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# 命名常量
+
+`xLog` 提供了丰富的预定义命名常量，用于按模块分类管理日志。所有常量均为 4 字符，便于日志输出对齐。
+
+## LogNamedLogger
+
+```go title="command.go"
+type LogNamedLogger struct {
+    logger *slog.Logger
+}
+```
+
+### WithName
+
+创建带名称的日志器：
+
+```go title="command.go"
+// [!code highlight]
+func WithName(name string) *LogNamedLogger
+```
+
+**示例：**
+
+```go
+// [!code highlight]
+log := xLog.WithName(xLog.NamedCORE)
+log.Info(ctx, "服务启动成功")
+
+// 输出: 2024-01-15 10:30:00 [INFO] [abc123] [CORE] 服务启动成功
+```
+
+## 四层架构类
+
+用于标准分层架构：
+
+<TypeTable
+  type={{
+    'NamedCONT': {
+      description: '控制层日志 (Controller)',
+      type: '"CONT"',
+      required: true,
+    },
+    'NamedSERV': {
+      description: '服务层日志 (Service)',
+      type: '"SERV"',
+      required: true,
+    },
+    'NamedROUT': {
+      description: '路由层日志 (Router)',
+      type: '"ROUT"',
+      required: true,
+    },
+    'NamedREPO': {
+      description: '数据层日志 (Repository)',
+      type: '"REPO"',
+      required: true,
+    },
+  }}
+/>
+
+**示例：**
+
+```go
+// [!code highlight:4]
+// Handler 层
+handlerLog := xLog.WithName(xLog.NamedCONT)
+// Service 层
+serviceLog := xLog.WithName(xLog.NamedSERV)
+// Repository 层
+repoLog := xLog.WithName(xLog.NamedREPO)
+```
+
+## 业务逻辑类
+
+用于业务处理模块：
+
+<TypeTable
+  type={{
+    'NamedBUSI': {
+      description: '业务层日志',
+      type: '"BUSI"',
+      required: true,
+    },
+    'NamedLOGC': {
+      description: '逻辑处理日志',
+      type: '"LOGC"',
+      required: true,
+    },
+    'NamedPROC': {
+      description: '流程处理日志',
+      type: '"PROC"',
+      required: true,
+    },
+    'NamedFLOW': {
+      description: '工作流日志',
+      type: '"FLOW"',
+      required: true,
+    },
+    'NamedTASK': {
+      description: '任务处理日志',
+      type: '"TASK"',
+      required: true,
+    },
+    'NamedJOBS': {
+      description: '作业调度日志',
+      type: '"JOBS"',
+      required: true,
+    },
+  }}
+/>
+
+## 核心服务类
+
+用于核心模块：
+
+<TypeTable
+  type={{
+    'NamedCORE': {
+      description: '核心服务日志',
+      type: '"CORE"',
+      required: true,
+    },
+    'NamedBASE': {
+      description: '基础组件日志',
+      type: '"BASE"',
+      required: true,
+    },
+    'NamedMAIN': {
+      description: '主程序日志',
+      type: '"MAIN"',
+      required: true,
+    },
+    'NamedINIT': {
+      description: '初始化日志',
+      type: '"INIT"',
+      required: true,
+    },
+  }}
+/>
+
+## 网络通信类
+
+用于网络相关模块：
+
+<TypeTable
+  type={{
+    'NamedHTTP': {
+      description: 'HTTP 服务日志',
+      type: '"HTTP"',
+      required: true,
+    },
+    'NamedGRPC': {
+      description: 'gRPC 服务日志',
+      type: '"GRPC"',
+      required: true,
+    },
+    'NamedSOCK': {
+      description: 'Socket 连接日志',
+      type: '"SOCK"',
+      required: true,
+    },
+    'NamedCONN': {
+      description: '连接管理日志',
+      type: '"CONN"',
+      required: true,
+    },
+    'NamedLINK': {
+      description: '链路层日志',
+      type: '"LINK"',
+      required: true,
+    },
+  }}
+/>
+
+## 安全认证类
+
+用于安全相关模块：
+
+<TypeTable
+  type={{
+    'NamedAUTH': {
+      description: '认证层日志',
+      type: '"AUTH"',
+      required: true,
+    },
+    'NamedUSER': {
+      description: '用户管理日志',
+      type: '"USER"',
+      required: true,
+    },
+    'NamedPERM': {
+      description: '权限管理日志',
+      type: '"PERM"',
+      required: true,
+    },
+    'NamedROLE': {
+      description: '角色管理日志',
+      type: '"ROLE"',
+      required: true,
+    },
+    'NamedTOKN': {
+      description: '令牌管理日志',
+      type: '"TOKN"',
+      required: true,
+    },
+    'NamedSIGN': {
+      description: '签名验证日志',
+      type: '"SIGN"',
+      required: true,
+    },
+  }}
+/>
+
+## 通用工具类
+
+用于工具和中间件：
+
+<TypeTable
+  type={{
+    'NamedUTIL': {
+      description: '工具层日志',
+      type: '"UTIL"',
+      required: true,
+    },
+    'NamedFILT': {
+      description: '过滤器层日志',
+      type: '"FILT"',
+      required: true,
+    },
+    'NamedMIDE': {
+      description: '中间件层日志',
+      type: '"MIDE"',
+      required: true,
+    },
+    'NamedVALD': {
+      description: '验证器层日志',
+      type: '"VALD"',
+      required: true,
+    },
+    'NamedTHOW': {
+      description: '抛出错误日志',
+      type: '"THOW"',
+      required: true,
+    },
+    'NamedRESU': {
+      description: '响应结果日志',
+      type: '"RESU"',
+      required: true,
+    },
+    'NamedRECO': {
+      description: '恢复层系统日志',
+      type: '"RECO"',
+      required: true,
+    },
+  }}
+/>
+
+## 控制台颜色
+
+不同类别的命名常量在控制台显示不同颜色：
+
+| 类别 | 颜色 | 包含常量 |
+|------|------|----------|
+| 核心服务类 | 蓝色 | CONT, SERV, LOGC, REPO, CORE, BASE, MAIN |
+| 路由网络类 | 黄色 | ROUT, HTTP, GRPC, SOCK, CONN, LINK |
+| 安全认证类 | 红色 | AUTH, USER, PERM, ROLE, TOKN, SIGN |
+| 业务逻辑类 | 白色 | BUSI, PROC, FLOW, TASK, JOBS |
+| 其他已定义 | 橙色 | RECO, UTIL, FILT, MIDE, VALD, INIT, THOW, RESU |
+| 未定义 | 紫色 | 其他自定义名称 |
+
+## 使用示例
+
+```go title="handler/user.go"
+package handler
+
+type UserHandler struct {
+    // [!code highlight]
+    log *xLog.LogNamedLogger
+}
+
+func NewUserHandler() *UserHandler {
+    return &UserHandler{
+        // [!code highlight]
+        log: xLog.WithName(xLog.NamedCONT),
+    }
+}
+
+func (h *UserHandler) Login(ctx *gin.Context) {
+    // [!code highlight]
+    h.log.Info(ctx, "开始处理登录请求")
+
+    // ... 业务逻辑 ...
+
+    // [!code highlight]
+    h.log.SugarInfo(ctx, "登录成功", "user_id", userID)
+}
+```
+
+```go title="logic/user.go"
+package logic
+
+type UserLogic struct {
+    // [!code highlight]
+    log *xLog.LogNamedLogger
+}
+
+func NewUserLogic() *UserLogic {
+    return &UserLogic{
+        // [!code highlight]
+        log: xLog.WithName(xLog.NamedLOGC),
+    }
+}
+```
+
+## 下一步
+
+<Cards>
+  <Card title="自定义 Handler" href="./handler" />
+  <Card title="日志切割" href="./rotator" />
+</Cards>

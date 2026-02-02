@@ -1,0 +1,303 @@
+---
+title: 节点管理
+description: Node 结构体管理雪花算法节点，支持自动和手动配置
+icon: Server
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# 节点管理
+
+`Node` 结构体是雪花算法的核心，负责生成唯一 ID。每个节点由数据中心 ID 和节点 ID 唯一标识。
+
+## Node 结构体
+
+```go title="snowflake.go"
+type Node struct {
+    // [!code highlight:5]
+    mu           sync.Mutex  // 互斥锁，保证线程安全
+    datacenterID int64       // 数据中心 ID (0-7)
+    nodeID       int64       // 节点 ID (0-7)
+    lastTime     int64       // 上次生成 ID 的时间戳
+    sequence     int64       // 当前毫秒内的序列号
+}
+```
+
+## 创建节点
+
+### 手动创建
+
+```go title="snowflake.go"
+// [!code highlight]
+func NewNode(datacenterID, nodeID int64) (*Node, error)
+```
+
+**参数范围：**
+
+| 参数 | 范围 | 说明 |
+|------|------|------|
+| `datacenterID` | 0-7 | 数据中心 ID |
+| `nodeID` | 0-7 | 节点 ID |
+
+**示例：**
+
+```go
+// [!code highlight:2]
+// 创建数据中心 1，节点 2 的节点
+node, err := xSnowflake.NewNode(1, 2)
+if err != nil {
+    panic(err)
+}
+
+// 使用节点生成 ID
+id := node.MustGenerate(xSnowflake.GeneUser)
+```
+
+### 默认节点
+
+框架提供全局默认节点，自动初始化：
+
+```go title="global.go"
+// [!code highlight]
+// 初始化默认节点
+func InitDefaultNode() error
+
+// [!code highlight]
+// 获取默认节点（自动初始化）
+func GetDefaultNode() *Node
+
+// [!code highlight]
+// 使用默认节点生成 ID
+func GenerateID(gene ...Gene) SnowflakeID
+```
+
+**示例：**
+
+```go
+// [!code highlight:2]
+// 方式一：直接使用全局函数
+id := xSnowflake.GenerateID(xSnowflake.GeneUser)
+
+// [!code highlight:2]
+// 方式二：获取默认节点后使用
+node := xSnowflake.GetDefaultNode()
+id := node.MustGenerate(xSnowflake.GeneUser)
+```
+
+## 节点 ID 获取逻辑
+
+默认节点的 ID 获取优先级：
+
+### 1. 环境变量（优先）
+
+```bash title=".env"
+# [!code highlight:2]
+SNOWFLAKE_DATACENTER_ID=1
+SNOWFLAKE_NODE_ID=2
+```
+
+### 2. 自动生成（回退）
+
+未配置环境变量时，自动生成节点 ID：
+
+```go title="global.go"
+func autoGenerateIDs() (datacenterID, nodeID int64) {
+    var hashInput []byte
+
+    // [!code highlight:2]
+    // 优先使用 MAC 地址
+    interfaces, err := net.Interfaces()
+    if err == nil {
+        for _, iface := range interfaces {
+            if iface.Flags&net.FlagLoopback != 0 || len(iface.HardwareAddr) < 6 {
+                continue
+            }
+            hashInput = iface.HardwareAddr
+            break
+        }
+    }
+
+    // [!code highlight:2]
+    // 回退到主机名
+    if len(hashInput) == 0 {
+        hostname, _ := os.Hostname()
+        if hostname == "" {
+            hostname = "unknown-host"
+        }
+        hashInput = []byte(hostname)
+    }
+
+    // [!code highlight:2]
+    // 使用 FNV-1a 哈希算法
+    h := fnv.New64a()
+    _, _ = h.Write(hashInput)
+    hash := h.Sum64()
+
+    // [!code highlight:2]
+    // 从哈希值中提取 ID
+    datacenterID = int64(hash % uint64(maxDatacenterID+1))
+    nodeID = int64((hash >> 3) % uint64(maxNodeID+1))
+
+    return
+}
+```
+
+**特点：**
+- 同一台机器重启后获得相同的节点 ID
+- 不同机器大概率获得不同的节点 ID
+- 无需手动配置，开箱即用
+
+## Node 方法
+
+### Generate
+
+生成 ID，线程安全：
+
+```go title="snowflake.go"
+// [!code highlight]
+func (n *Node) Generate(gene ...Gene) (SnowflakeID, error)
+```
+
+**示例：**
+
+```go
+node, _ := xSnowflake.NewNode(1, 1)
+
+// [!code highlight:2]
+// 生成普通 ID
+id, err := node.Generate()
+
+// [!code highlight:2]
+// 生成带基因的 ID
+id, err := node.Generate(xSnowflake.GeneUser)
+```
+
+### MustGenerate
+
+生成 ID，失败则 panic：
+
+```go title="snowflake.go"
+// [!code highlight]
+func (n *Node) MustGenerate(gene ...Gene) SnowflakeID
+```
+
+**示例：**
+
+```go
+// [!code highlight]
+id := node.MustGenerate(xSnowflake.GeneOrder)
+```
+
+### 获取节点信息
+
+```go title="snowflake.go"
+// [!code highlight]
+func (n *Node) DatacenterID() int64
+
+// [!code highlight]
+func (n *Node) NodeID() int64
+```
+
+**示例：**
+
+```go
+node := xSnowflake.GetDefaultNode()
+
+// [!code highlight:2]
+fmt.Println("数据中心:", node.DatacenterID()) // 1
+fmt.Println("节点:", node.NodeID())          // 2
+```
+
+## ID 生成核心逻辑
+
+```go title="snowflake.go"
+func (n *Node) Generate(gene ...Gene) (SnowflakeID, error) {
+    g := GeneDefault
+    if len(gene) > 0 {
+        g = gene[0]
+    }
+
+    // [!code highlight:3]
+    if !g.IsValid() {
+        return 0, fmt.Errorf("基因类型必须在 0-%d 之间", maxGene)
+    }
+
+    n.mu.Lock()
+    defer n.mu.Unlock()
+
+    now := time.Now().UnixMilli()
+
+    if now == n.lastTime {
+        // [!code highlight:2]
+        // 同一毫秒内，序列号递增
+        n.sequence = (n.sequence + 1) & maxSequence
+        if n.sequence == 0 {
+            // [!code highlight:2]
+            // 序列号用尽，等待下一毫秒
+            for now <= n.lastTime {
+                now = time.Now().UnixMilli()
+            }
+        }
+    } else {
+        // [!code highlight:2]
+        // 新的毫秒，序列号重置
+        n.sequence = 0
+    }
+
+    n.lastTime = now
+
+    // [!code highlight:6]
+    // 组装 ID
+    id := ((now - epoch) << timestampShift) |
+        (int64(g) << geneShift) |
+        (n.datacenterID << datacenterShift) |
+        (n.nodeID << nodeShift) |
+        n.sequence
+
+    return SnowflakeID(id), nil
+}
+```
+
+## 分布式部署
+
+在分布式环境中，确保不同节点配置不同的 ID：
+
+### 方式一：环境变量
+
+```yaml title="docker-compose.yml"
+services:
+  app-1:
+    environment:
+      # [!code highlight:2]
+      - SNOWFLAKE_DATACENTER_ID=1
+      - SNOWFLAKE_NODE_ID=1
+
+  app-2:
+    environment:
+      # [!code highlight:2]
+      - SNOWFLAKE_DATACENTER_ID=1
+      - SNOWFLAKE_NODE_ID=2
+
+  app-3:
+    environment:
+      # [!code highlight:2]
+      - SNOWFLAKE_DATACENTER_ID=2
+      - SNOWFLAKE_NODE_ID=1
+```
+
+### 方式二：自动生成
+
+不配置环境变量，依赖 MAC 地址自动生成：
+
+```go
+// [!code highlight:2]
+// 每台机器自动获得唯一的节点 ID
+reg := xReg.Register()
+```
+
+## 下一步
+
+<Cards>
+  <Card title="业务基因" href="./gene" />
+  <Card title="ID 解析" href="./parse" />
+</Cards>

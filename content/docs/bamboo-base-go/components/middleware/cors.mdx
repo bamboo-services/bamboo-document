@@ -1,0 +1,197 @@
+---
+title: CORS 跨域
+description: ReleaseAllCors 和 AllowOption 处理跨域请求
+icon: Globe
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# CORS 跨域
+
+`xMiddle` 提供两个中间件处理跨域请求：`ReleaseAllCors` 设置 CORS 头部，`AllowOption` 处理预检请求。
+
+## ReleaseAllCors
+
+设置跨域请求的 HTTP 头部信息，允许所有来源：
+
+```go title="cors.go"
+// [!code highlight]
+func ReleaseAllCors(ctx *gin.Context)
+```
+
+**实现：**
+
+```go title="cors.go"
+func ReleaseAllCors(ctx *gin.Context) {
+    // [!code highlight:3]
+    ctx.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+    ctx.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+    ctx.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+    ctx.Next()
+}
+```
+
+### 设置的头部
+
+<TypeTable
+  type={{
+    'Access-Control-Allow-Origin': {
+      description: '允许的来源',
+      type: '"*"',
+      required: true,
+    },
+    'Access-Control-Allow-Methods': {
+      description: '允许的 HTTP 方法',
+      type: '"GET, POST, PUT, DELETE, OPTIONS"',
+      required: true,
+    },
+    'Access-Control-Allow-Headers': {
+      description: '允许的请求头',
+      type: '"Content-Type, Authorization"',
+      required: true,
+    },
+  }}
+/>
+
+## AllowOption
+
+处理 CORS 预检请求（OPTIONS 方法），直接返回 200 状态码并终止请求链：
+
+```go title="option.go"
+// [!code highlight]
+func AllowOption(ctx *gin.Context)
+```
+
+**实现：**
+
+```go title="option.go"
+func AllowOption(ctx *gin.Context) {
+    // [!code highlight:4]
+    if ctx.Request.Method == "OPTIONS" {
+        xLog.WithName(xLog.NamedMIDE).Debug(ctx, "检测到 OPTIONS 请求，继续处理")
+        ctx.AbortWithStatus(200)
+    }
+}
+```
+
+**特性：**
+
+- 检测请求方法是否为 `OPTIONS`
+- 记录 Debug 级别日志（使用 `NamedMIDE` 标识）
+- 返回 HTTP 200 并终止后续中间件执行
+
+## 使用示例
+
+### 基础使用
+
+```go title="main.go"
+func main() {
+    router := gin.Default()
+
+    // [!code highlight:3]
+    // 先设置 CORS 头，再处理 OPTIONS
+    router.Use(xMiddle.ReleaseAllCors)
+    router.Use(xMiddle.AllowOption)
+
+    router.GET("/api/users", getUsers)
+    router.Run(":8080")
+}
+```
+
+### 执行流程
+
+<Mermaid chart="
+sequenceDiagram
+    participant B as Browser
+    participant CORS as ReleaseAllCors
+    participant OPT as AllowOption
+    participant H as Handler
+
+    Note over B: 跨域请求前先发送预检
+    B->>CORS: OPTIONS /api/users
+    CORS->>CORS: 设置 CORS 头
+    CORS->>OPT: ctx.Next()
+    OPT->>OPT: 检测到 OPTIONS
+    OPT->>B: 200 OK (终止)
+
+    Note over B: 预检通过，发送实际请求
+    B->>CORS: GET /api/users
+    CORS->>CORS: 设置 CORS 头
+    CORS->>OPT: ctx.Next()
+    OPT->>H: ctx.Next() (非 OPTIONS)
+    H->>B: 响应数据
+"/>
+
+## 自定义 CORS
+
+生产环境建议自定义 CORS 配置：
+
+```go title="middleware/custom_cors.go"
+func CustomCors(allowedOrigins []string) gin.HandlerFunc {
+    return func(ctx *gin.Context) {
+        origin := ctx.Request.Header.Get("Origin")
+
+        // [!code highlight:5]
+        // 检查是否在允许列表中
+        for _, allowed := range allowedOrigins {
+            if origin == allowed {
+                ctx.Writer.Header().Set("Access-Control-Allow-Origin", origin)
+                break
+            }
+        }
+
+        ctx.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+        ctx.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+        // [!code highlight]
+        ctx.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+        ctx.Next()
+    }
+}
+```
+
+**使用：**
+
+```go
+// [!code highlight:4]
+router.Use(CustomCors([]string{
+    "https://example.com",
+    "https://app.example.com",
+}))
+router.Use(xMiddle.AllowOption)
+```
+
+## 注意事项
+
+### 中间件顺序
+
+```go
+// [!code highlight:3]
+// 正确顺序：先 CORS，后 OPTIONS
+router.Use(xMiddle.ReleaseAllCors)  // 1. 设置头部
+router.Use(xMiddle.AllowOption)      // 2. 处理预检
+```
+
+### 开发 vs 生产
+
+| 环境 | 推荐配置 |
+|------|----------|
+| 开发环境 | `ReleaseAllCors`（允许所有来源） |
+| 生产环境 | 自定义 CORS（限制允许的来源） |
+
+### 携带凭证
+
+如果需要携带 Cookie，需要自定义 CORS：
+
+```go
+// [!code highlight:3]
+// ReleaseAllCors 使用 "*"，不支持 credentials
+// 需要自定义中间件设置具体的 Origin
+ctx.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+```
+
+## 下一步
+
+<Cards>
+  <Card title="统一响应" href="./response" />
+  <Card title="中间件概述" href="./index" />
+</Cards>

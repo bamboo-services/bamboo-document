@@ -1,0 +1,9 @@
+{
+  "title": "模型基类",
+  "icon": "Database",
+  "pages": [
+    "index",
+    "soft-delete",
+    "gene-provider"
+  ]
+}

@@ -1,0 +1,257 @@
+---
+title: 自定义 Handler
+description: LogHandler 实现双通道输出，支持彩色控制台和 JSON 文件
+icon: Palette
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# 自定义 Handler
+
+`LogHandler` 是基于 `slog.Handler` 接口的自定义实现，支持控制台彩色输出和文件 JSON 输出双通道。
+
+## LogHandler
+
+```go title="handler.go"
+type LogHandler struct {
+    opts        slog.HandlerOptions
+    mu          *sync.Mutex
+    console     io.Writer
+    file        io.Writer
+    group       string // logger 名称（通过 WithGroup 设置）
+    attrs       []slog.Attr
+    isDebugMode bool
+}
+```
+
+## HandlerConfig
+
+```go title="handler.go"
+// [!code highlight:6]
+type HandlerConfig struct {
+    Console     io.Writer  // 控制台输出（可选，默认 os.Stdout）
+    File        io.Writer  // 文件输出（可选）
+    Level       slog.Level // 日志级别
+    IsDebugMode bool       // 是否调试模式
+}
+```
+
+### 配置说明
+
+<TypeTable
+  type={{
+    Console: {
+      description: '控制台输出目标，默认 os.Stdout',
+      type: 'io.Writer',
+      required: false,
+    },
+    File: {
+      description: '文件输出目标，通常使用 RotatingWriter',
+      type: 'io.Writer',
+      required: false,
+    },
+    Level: {
+      description: '最低日志级别',
+      type: 'slog.Level',
+      required: true,
+    },
+    IsDebugMode: {
+      description: '调试模式标志',
+      type: 'bool',
+      required: false,
+    },
+  }}
+/>
+
+## NewLogHandler
+
+创建自定义 slog Handler：
+
+```go title="handler.go"
+// [!code highlight]
+func NewLogHandler(config HandlerConfig) slog.Handler
+```
+
+**示例：**
+
+```go
+// [!code highlight:7]
+handler := xLog.NewLogHandler(xLog.HandlerConfig{
+    Console:     os.Stdout,
+    File:        rotator,           // RotatingWriter 实例
+    Level:       slog.LevelDebug,
+    IsDebugMode: true,
+})
+
+// [!code highlight]
+slog.SetDefault(slog.New(handler))
+```
+
+## 双通道输出
+
+### 控制台输出
+
+彩色格式，便于开发调试：
+
+```
+2024-01-15 10:30:00.123 [INFO] [abc123] [CORE] 服务启动成功
+    config=production
+    port=8080
+```
+
+**格式说明：**
+
+| 部分 | 说明 | 颜色 |
+|------|------|------|
+| 时间戳 | `2006-01-02 15:04:05.000` | 灰色 |
+| 日志级别 | `[DEBU]` `[INFO]` `[WARN]` `[ERRO]` | 见下表 |
+| Trace ID | 请求追踪标识 | 蓝色 |
+| Logger 名称 | 模块标识 | 按类别着色 |
+| 消息 | 日志内容 | 默认色 |
+| 属性 | key=value 格式 | 棕色 |
+
+### 文件输出
+
+JSON 格式，便于日志分析：
+
+```json
+{
+  "time": "2024-01-15T10:30:00.123456789+08:00",
+  "level": "INFO",
+  "message": "服务启动成功",
+  "trace": "abc123",
+  "logger": "CORE",
+  "config": "production",
+  "port": 8080
+}
+```
+
+## 日志级别颜色
+
+<TypeTable
+  type={{
+    'DEBUG': {
+      description: '调试信息',
+      type: '青色 [DEBU]',
+      required: true,
+    },
+    'INFO': {
+      description: '一般信息',
+      type: '绿色 [INFO]',
+      required: true,
+    },
+    'WARN': {
+      description: '警告信息',
+      type: '黄色 [WARN]',
+      required: true,
+    },
+    'ERROR': {
+      description: '错误信息',
+      type: '红色 [ERRO]',
+      required: true,
+    },
+  }}
+/>
+
+## Logger 名称颜色
+
+不同类别的命名常量显示不同颜色：
+
+| 类别 | 颜色 | 包含常量 |
+|------|------|----------|
+| 核心服务类 | 蓝色 | CONT, SERV, LOGC, REPO, CORE, BASE, MAIN |
+| 路由网络类 | 黄色 | ROUT, HTTP, GRPC, SOCK, CONN, LINK |
+| 安全认证类 | 红色 | AUTH, USER, PERM, ROLE, TOKN, SIGN |
+| 业务逻辑类 | 白色 | BUSI, PROC, FLOW, TASK, JOBS |
+| 其他已定义 | 橙色 | RECO, UTIL, FILT, MIDE, VALD, INIT, THOW, RESU |
+| 未定义 | 紫色 | 其他自定义名称 |
+
+## Trace ID 提取
+
+Handler 自动从 Context 中提取 Trace ID：
+
+```go title="handler.go"
+func (h *LogHandler) extractContextUUID(ctx context.Context) string {
+    // [!code highlight:3]
+    // 1. 从 gin.Context 提取
+    if ginCtx, ok := ctx.(*gin.Context); ok {
+        if contextUUID, exists := ginCtx.Get(string(xConsts.RequestKey)); exists {
+            return contextUUID.(string)
+        }
+    }
+
+    // [!code highlight:2]
+    // 2. 从标准 context.Context 提取（包括 GORM 场景）
+    if contextUUID := ctx.Value(xConsts.RequestKey); contextUUID != nil {
+        return contextUUID.(string)
+    }
+
+    return ""
+}
+```
+
+**支持的 Context 类型：**
+
+- `*gin.Context` - HTTP 请求场景
+- `context.Context` - 标准 Context（包括 GORM 数据库操作）
+
+## 错误堆栈
+
+ERROR 级别日志自动附加堆栈信息：
+
+```go
+// [!code highlight:4]
+// 错误级别添加堆栈
+if r.Level >= slog.LevelError {
+    buf.WriteString(h.getStack())
+}
+```
+
+**输出示例：**
+
+```
+2024-01-15 10:30:00.123 [ERRO] [abc123] [REPO] 数据库连接失败
+    error=connection refused
+goroutine 1 [running]:
+github.com/bamboo-services/bamboo-base-go/log.(*LogHandler).getStack(...)
+    /path/to/handler.go:310
+...
+```
+
+## 完整初始化示例
+
+```go title="register_logger.go"
+func (r *Reg) LoggerInit() {
+    // [!code highlight:7]
+    // 1. 创建日志切割器
+    rotator, err := xLog.NewRotatingWriter(xLog.RotatorConfig{
+        Dir:      ".logs",
+        BaseName: "log",
+        Ext:      ".log",
+        MaxSize:  10 * 1024 * 1024,
+    })
+    if err != nil {
+        panic(err)
+    }
+
+    // [!code highlight:7]
+    // 2. 创建自定义 Handler
+    handler := xLog.NewLogHandler(xLog.HandlerConfig{
+        Console:     os.Stdout,
+        File:        rotator,
+        Level:       slog.LevelDebug,
+        IsDebugMode: true,
+    })
+
+    // [!code highlight:2]
+    // 3. 设置为全局默认 Logger
+    slog.SetDefault(slog.New(handler))
+}
+```
+
+## 下一步
+
+<Cards>
+  <Card title="日志切割" href="./rotator" />
+  <Card title="GORM 集成" href="./gorm" />
+</Cards>
