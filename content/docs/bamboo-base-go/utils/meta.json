@@ -1,12 +1,15 @@
 {
-  "title": "工具集",
+  "title": "工具函数",
   "icon": "Wrench",
   "pages": [
-    "utility",
-    "utility-advanced",
-    "ctxutil",
-    "env",
-    "route",
-    "hook"
+    "index",
+    "common",
+    "string",
+    "time",
+    "validate",
+    "encryption",
+    "password",
+    "security",
+    "generate"
   ]
 }

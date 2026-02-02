@@ -1,0 +1,290 @@
+---
+title: 时间处理
+description: 时间格式化、解析、范围计算、年龄计算等
+icon: Clock
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# 时间处理
+
+`xUtil` 提供丰富的时间处理函数，包括格式化、解析、范围计算、年龄计算等。
+
+## 时间格式常量
+
+```go title="time.go"
+const (
+    // [!code highlight:5]
+    TimeFormatDate     = "2006-01-02"
+    TimeFormatDateTime = "2006-01-02 15:04:05"
+    TimeFormatTime     = "15:04:05"
+    TimeFormatISO8601  = "2006-01-02T15:04:05Z07:00"
+    TimeFormatUnix     = "1136239445"
+)
+```
+
+## 获取当前时间
+
+### Now
+
+获取当前时间：
+
+```go title="time.go"
+// [!code highlight]
+func Now() time.Time
+```
+
+### NowUnix
+
+获取当前 Unix 时间戳（秒）：
+
+```go title="time.go"
+// [!code highlight]
+func NowUnix() int64
+```
+
+### NowUnixMilli
+
+获取当前 Unix 时间戳（毫秒）：
+
+```go title="time.go"
+// [!code highlight]
+func NowUnixMilli() int64
+```
+
+```go
+xUtil.Now()           // 2026-02-02 10:30:00 +0800 CST
+xUtil.NowUnix()       // 1770000000
+xUtil.NowUnixMilli()  // 1770000000000
+```
+
+## 时间格式化
+
+### FormatTime
+
+格式化时间：
+
+```go title="time.go"
+// [!code highlight]
+func FormatTime(t time.Time, layout string) string
+```
+
+### FormatNow
+
+格式化当前时间：
+
+```go title="time.go"
+// [!code highlight]
+func FormatNow(layout string) string
+```
+
+```go
+// [!code highlight:3]
+xUtil.FormatNow(xUtil.TimeFormatDate)      // "2026-02-02"
+xUtil.FormatNow(xUtil.TimeFormatDateTime)  // "2026-02-02 10:30:00"
+xUtil.FormatNow(xUtil.TimeFormatTime)      // "10:30:00"
+
+t := time.Now()
+xUtil.FormatTime(t, "2006年01月02日")       // "2026年02月02日"
+```
+
+## 时间解析
+
+### ParseTime
+
+解析时间字符串：
+
+```go title="time.go"
+// [!code highlight]
+func ParseTime(layout, value string) (time.Time, error)
+```
+
+### MustParseTime
+
+解析时间字符串，失败时 panic：
+
+```go title="time.go"
+// [!code highlight]
+func MustParseTime(layout, value string) time.Time
+```
+
+```go
+// [!code highlight:2]
+t, err := xUtil.ParseTime(xUtil.TimeFormatDate, "2026-02-02")
+t := xUtil.MustParseTime(xUtil.TimeFormatDateTime, "2026-02-02 10:30:00")
+```
+
+## 时间戳转换
+
+### UnixToTime
+
+Unix 时间戳（秒）转时间：
+
+```go title="time.go"
+// [!code highlight]
+func UnixToTime(unix int64) time.Time
+```
+
+### UnixMilliToTime
+
+Unix 时间戳（毫秒）转时间：
+
+```go title="time.go"
+// [!code highlight]
+func UnixMilliToTime(unixMilli int64) time.Time
+```
+
+```go
+xUtil.UnixToTime(1770000000)        // 2026-02-02 10:30:00
+xUtil.UnixMilliToTime(1770000000000) // 2026-02-02 10:30:00
+```
+
+## 时间判断
+
+### IsToday
+
+检查是否为今天：
+
+```go title="time.go"
+// [!code highlight]
+func IsToday(t time.Time) bool
+```
+
+### IsYesterday
+
+检查是否为昨天：
+
+```go title="time.go"
+// [!code highlight]
+func IsYesterday(t time.Time) bool
+```
+
+### IsWeekend
+
+检查是否为周末：
+
+```go title="time.go"
+// [!code highlight]
+func IsWeekend(t time.Time) bool
+```
+
+```go
+xUtil.IsToday(time.Now())                    // true
+xUtil.IsYesterday(time.Now().AddDate(0,0,-1)) // true
+xUtil.IsWeekend(time.Now())                  // 取决于当前日期
+```
+
+## 时间范围
+
+### StartOfDay / EndOfDay
+
+获取当天的开始和结束时间：
+
+```go title="time.go"
+// [!code highlight:2]
+func StartOfDay(t time.Time) time.Time   // 00:00:00
+func EndOfDay(t time.Time) time.Time     // 23:59:59.999999999
+```
+
+### StartOfWeek / EndOfWeek
+
+获取本周的开始和结束时间（周一为一周开始）：
+
+```go title="time.go"
+// [!code highlight:2]
+func StartOfWeek(t time.Time) time.Time  // 周一 00:00:00
+func EndOfWeek(t time.Time) time.Time    // 周日 23:59:59.999999999
+```
+
+### StartOfMonth / EndOfMonth
+
+获取本月的开始和结束时间：
+
+```go title="time.go"
+// [!code highlight:2]
+func StartOfMonth(t time.Time) time.Time // 1日 00:00:00
+func EndOfMonth(t time.Time) time.Time   // 月末 23:59:59.999999999
+```
+
+**示例：**
+
+```go
+now := time.Now()
+
+// [!code highlight:2]
+// 今天的时间范围
+start := xUtil.StartOfDay(now)   // 2026-02-02 00:00:00
+end := xUtil.EndOfDay(now)       // 2026-02-02 23:59:59.999999999
+
+// [!code highlight:2]
+// 本周的时间范围
+weekStart := xUtil.StartOfWeek(now)  // 2026-02-02 00:00:00（周一）
+weekEnd := xUtil.EndOfWeek(now)      // 2026-02-08 23:59:59.999999999（周日）
+
+// [!code highlight:2]
+// 本月的时间范围
+monthStart := xUtil.StartOfMonth(now)  // 2026-02-01 00:00:00
+monthEnd := xUtil.EndOfMonth(now)      // 2026-02-28 23:59:59.999999999
+```
+
+## 时间差计算
+
+### DiffDays
+
+计算天数差：
+
+```go title="time.go"
+// [!code highlight]
+func DiffDays(t1, t2 time.Time) int
+```
+
+### DiffHours
+
+计算小时差：
+
+```go title="time.go"
+// [!code highlight]
+func DiffHours(t1, t2 time.Time) float64
+```
+
+### DiffMinutes
+
+计算分钟差：
+
+```go title="time.go"
+// [!code highlight]
+func DiffMinutes(t1, t2 time.Time) float64
+```
+
+```go
+t1 := time.Now()
+t2 := t1.AddDate(0, 0, -7)
+
+xUtil.DiffDays(t1, t2)     // 7
+xUtil.DiffHours(t1, t2)    // 168.0
+xUtil.DiffMinutes(t1, t2)  // 10080.0
+```
+
+## 年龄计算
+
+### Age
+
+根据生日计算年龄：
+
+```go title="time.go"
+// [!code highlight]
+func Age(birthday time.Time) int
+```
+
+```go
+birthday := xUtil.MustParseTime(xUtil.TimeFormatDate, "2000-01-01")
+// [!code highlight]
+age := xUtil.Age(birthday)  // 26（假设当前是 2026 年）
+```
+
+## 下一步
+
+<Cards>
+  <Card title="数据验证" href="./validate" />
+  <Card title="加密哈希" href="./encryption" />
+</Cards>

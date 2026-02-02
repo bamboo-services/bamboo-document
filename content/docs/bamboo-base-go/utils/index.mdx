@@ -1,0 +1,146 @@
+---
+title: 概述
+description: xUtil 提供字符串、时间、加密、验证等常用工具函数
+icon: Wrench
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# 工具函数
+
+`xUtil` 提供丰富的工具函数，涵盖字符串处理、时间操作、数据验证、加密哈希、密码处理等常用场景。
+
+```go
+import xUtil "github.com/bamboo-services/bamboo-base-go/utility"
+```
+
+## 功能分类
+
+<TypeTable
+  type={{
+    common: {
+      description: '通用工具：泛型指针、切片操作、布尔转换',
+      type: 'common.go',
+      required: true,
+    },
+    string: {
+      description: '字符串处理：空白检查、截断、命名转换、脱敏',
+      type: 'string.go',
+      required: true,
+    },
+    time: {
+      description: '时间处理：格式化、解析、范围计算、年龄计算',
+      type: 'time.go',
+      required: true,
+    },
+    validate: {
+      description: '数据验证：手机号、身份证、邮箱、URL、密码强度',
+      type: 'validate.go',
+      required: true,
+    },
+    encryption: {
+      description: '加密哈希：SHA-256、MD5',
+      type: 'encryption.go',
+      required: true,
+    },
+    password: {
+      description: '密码处理：bcrypt 加密与验证',
+      type: 'password.go',
+      required: true,
+    },
+    security: {
+      description: '安全密钥：生成与验证安全密钥',
+      type: 'security.go',
+      required: true,
+    },
+    generate: {
+      description: '随机生成：随机字符串、数字串',
+      type: 'generate.go',
+      required: true,
+    },
+  }}
+/>
+
+## 快速示例
+
+### 字符串处理
+
+```go
+// [!code highlight:2]
+// 空白检查
+xUtil.IsBlank("  ")                    // true
+xUtil.DefaultIfBlank("", "default")    // "default"
+
+// [!code highlight:2]
+// 字符串脱敏
+xUtil.MaskString("13812345678", 3, 4, "*")  // "138****5678"
+
+// [!code highlight:2]
+// 命名转换
+xUtil.CamelToSnake("userName")         // "user_name"
+```
+
+### 时间处理
+
+```go
+// [!code highlight:2]
+// 格式化
+dateStr := xUtil.FormatNow(xUtil.TimeFormatDate)  // "2026-02-02"
+
+// [!code highlight:2]
+// 时间范围
+start := xUtil.StartOfDay(time.Now())   // 今天 00:00:00
+end := xUtil.EndOfMonth(time.Now())     // 本月最后一天 23:59:59
+
+// [!code highlight:2]
+// 年龄计算
+age := xUtil.Age(birthday)              // 26
+```
+
+### 数据验证
+
+```go
+// [!code highlight:2]
+// 格式验证
+xUtil.IsValidPhone("13812345678")       // true
+xUtil.IsValidEmail("test@example.com")  // true
+xUtil.IsValidUUID("550e8400-...")       // true
+
+// [!code highlight:2]
+// 密码强度
+xUtil.IsStrongPassword("Abc123!@#")     // true
+```
+
+### 密码加密
+
+```go
+// [!code highlight:2]
+// 加密密码
+hash := xUtil.MustEncryptPasswordString("myPassword123")
+
+// [!code highlight:2]
+// 验证密码
+isValid := xUtil.IsPasswordValid("myPassword123", hash)  // true
+```
+
+### 随机生成
+
+```go
+// [!code highlight:2]
+// 随机字符串
+code := xUtil.GenerateRandomString(16)        // "aB3xY9kLmN2pQ5wR"
+numCode := xUtil.GenerateRandomNumberString(6) // "384729"
+
+// [!code highlight:2]
+// 安全密钥
+key := xUtil.GenerateSecurityKey()            // "cs_a1b2c3d4..."
+```
+
+## 下一步
+
+<Cards>
+  <Card title="通用工具" href="./common" />
+  <Card title="字符串处理" href="./string" />
+  <Card title="时间处理" href="./time" />
+  <Card title="数据验证" href="./validate" />
+</Cards>

@@ -1,0 +1,178 @@
+---
+title: 通用工具
+description: 泛型指针操作、切片查找、布尔值转换
+icon: Box
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# 通用工具
+
+`xUtil` 提供泛型指针操作、切片查找、布尔值转换等通用工具函数。
+
+## Ptr
+
+返回给定值的指针：
+
+```go title="common.go"
+// [!code highlight]
+func Ptr[T any](data T) *T
+```
+
+**示例：**
+
+```go
+// [!code highlight:3]
+name := xUtil.Ptr("hello")     // *string
+age := xUtil.Ptr(18)           // *int
+enabled := xUtil.Ptr(true)     // *bool
+
+// nil 值返回 nil
+var nilPtr *string = nil
+result := xUtil.Ptr(nilPtr)    // nil
+```
+
+**使用场景：**
+
+```go
+type User struct {
+    Name     string
+    Nickname *string  // 可选字段
+}
+
+// [!code highlight:2]
+// 快速创建可选字段
+user := User{
+    Name:     "张三",
+    Nickname: xUtil.Ptr("小张"),
+}
+```
+
+## Val
+
+从指针中安全地获取值，如果指针为 nil 则返回零值：
+
+```go title="common.go"
+// [!code highlight]
+func Val[T any](ptr *T) T
+```
+
+**示例：**
+
+```go
+name := xUtil.Ptr("hello")
+// [!code highlight]
+value := xUtil.Val(name)       // "hello"
+
+var nilPtr *string = nil
+// [!code highlight]
+value2 := xUtil.Val(nilPtr)    // ""（零值）
+
+var nilInt *int = nil
+// [!code highlight]
+value3 := xUtil.Val(nilInt)    // 0（零值）
+```
+
+**使用场景：**
+
+```go
+type Config struct {
+    Timeout *int
+}
+
+func GetTimeout(cfg *Config) int {
+    // [!code highlight:2]
+    // 安全获取可选配置，避免空指针
+    return xUtil.Val(cfg.Timeout)
+}
+```
+
+## Contains
+
+检查切片中是否包含指定元素：
+
+```go title="common.go"
+// [!code highlight]
+func Contains[T comparable](slice []T, item T) bool
+```
+
+**示例：**
+
+```go
+// [!code highlight:2]
+// 整数切片
+xUtil.Contains([]int{1, 2, 3}, 2)        // true
+xUtil.Contains([]int{1, 2, 3}, 4)        // false
+
+// [!code highlight:2]
+// 字符串切片
+xUtil.Contains([]string{"a", "b", "c"}, "b")  // true
+xUtil.Contains([]string{"a", "b", "c"}, "d")  // false
+```
+
+**使用场景：**
+
+```go
+allowedRoles := []string{"admin", "user", "guest"}
+
+func CheckRole(role string) bool {
+    // [!code highlight]
+    return xUtil.Contains(allowedRoles, role)
+}
+```
+
+## ToBool
+
+将字符串转换为布尔值，支持多种格式：
+
+```go title="common.go"
+// [!code highlight]
+func ToBool(str string, defaultValue bool) bool
+```
+
+**支持的格式：**
+
+| 值 | 结果 |
+|-----|------|
+| `true`, `1`, `yes`, `on`, `enabled` | `true` |
+| `false`, `0`, `no`, `off`, `disabled` | `false` |
+| 其他 | `defaultValue` |
+
+**示例：**
+
+```go
+// [!code highlight:4]
+xUtil.ToBool("true", false)      // true
+xUtil.ToBool("1", false)         // true
+xUtil.ToBool("yes", false)       // true
+xUtil.ToBool("enabled", false)   // true
+
+// [!code highlight:4]
+xUtil.ToBool("false", true)      // false
+xUtil.ToBool("0", true)          // false
+xUtil.ToBool("no", true)         // false
+xUtil.ToBool("disabled", true)   // false
+
+// [!code highlight:2]
+// 无法识别时返回默认值
+xUtil.ToBool("invalid", true)    // true
+xUtil.ToBool("", false)          // false
+```
+
+**使用场景：**
+
+```go
+func LoadConfig() {
+    // [!code highlight:2]
+    // 从环境变量读取布尔配置
+    debugMode := xUtil.ToBool(os.Getenv("DEBUG"), false)
+    enableCache := xUtil.ToBool(os.Getenv("ENABLE_CACHE"), true)
+}
+```
+
+## 下一步
+
+<Cards>
+  <Card title="字符串处理" href="./string" />
+  <Card title="时间处理" href="./time" />
+</Cards>

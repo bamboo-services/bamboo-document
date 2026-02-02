@@ -1,0 +1,133 @@
+---
+title: 随机生成
+description: 生成随机字符串、数字串
+icon: Shuffle
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# 随机生成
+
+`xUtil` 提供各种格式的随机字符串生成函数。
+
+## GenerateRandomString
+
+生成包含大小写字母和数字的随机字符串：
+
+```go title="generate.go"
+// [!code highlight]
+func GenerateRandomString(length int) string
+```
+
+**字符集：** `a-z` `A-Z` `0-9`
+
+```go
+xUtil.GenerateRandomString(16)   // "aB3xY9kLmN2pQ5wR"
+xUtil.GenerateRandomString(8)    // "Kj7mNp2Q"
+xUtil.GenerateRandomString(32)   // "aB3xY9kLmN2pQ5wRaB3xY9kLmN2pQ5wR"
+```
+
+## GenerateRandomUpperString
+
+生成仅包含大写字母和数字的随机字符串：
+
+```go title="generate.go"
+// [!code highlight]
+func GenerateRandomUpperString(length int) string
+```
+
+**字符集：** `A-Z` `0-9`
+
+```go
+xUtil.GenerateRandomUpperString(8)    // "A3X9K2N5"
+xUtil.GenerateRandomUpperString(6)    // "K7M2N9"
+```
+
+## GenerateRandomNumberString
+
+生成仅包含数字的随机字符串：
+
+```go title="generate.go"
+// [!code highlight]
+func GenerateRandomNumberString(length int) string
+```
+
+**字符集：** `0-9`
+
+```go
+xUtil.GenerateRandomNumberString(6)   // "384729"
+xUtil.GenerateRandomNumberString(4)   // "9527"
+```
+
+## 使用场景
+
+### 验证码
+
+```go title="service/captcha.go"
+func (s *CaptchaService) Generate() string {
+    // [!code highlight:2]
+    // 6 位数字验证码
+    return xUtil.GenerateRandomNumberString(6)
+}
+```
+
+### 邀请码
+
+```go title="service/invite.go"
+func (s *InviteService) GenerateCode() string {
+    // [!code highlight:2]
+    // 8 位大写字母数字邀请码
+    return xUtil.GenerateRandomUpperString(8)
+}
+```
+
+### 临时密码
+
+```go title="service/user.go"
+func (s *UserService) ResetPassword(ctx context.Context, userID int64) (string, error) {
+    // [!code highlight:2]
+    // 生成 12 位临时密码
+    tempPassword := xUtil.GenerateRandomString(12)
+
+    hash, err := xUtil.EncryptPasswordString(tempPassword)
+    if err != nil {
+        return "", err
+    }
+
+    err = s.repo.UpdatePassword(ctx, userID, hash)
+    if err != nil {
+        return "", err
+    }
+
+    return tempPassword, nil
+}
+```
+
+### 文件名
+
+```go title="service/upload.go"
+func (s *UploadService) GenerateFileName(ext string) string {
+    // [!code highlight:2]
+    // 生成唯一文件名
+    return xUtil.GenerateRandomString(16) + ext
+}
+```
+
+### 订单号
+
+```go title="service/order.go"
+func (s *OrderService) GenerateOrderNo() string {
+    // [!code highlight:2]
+    // 日期 + 随机数字
+    date := xUtil.FormatNow("20060102")
+    random := xUtil.GenerateRandomNumberString(8)
+    return "ORD" + date + random
+}
+```
+
+## 下一步
+
+<Cards>
+  <Card title="安全密钥" href="./security" />
+  <Card title="通用工具" href="./common" />
+</Cards>

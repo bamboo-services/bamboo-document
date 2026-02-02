@@ -1,0 +1,125 @@
+---
+title: 加密哈希
+description: SHA-256 和 MD5 哈希计算
+icon: Hash
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# 加密哈希
+
+`xUtil` 提供 SHA-256 和 MD5 哈希计算函数。
+
+## SHA-256 哈希
+
+### Hash
+
+计算字符串的 SHA-256 哈希：
+
+```go title="encryption.go"
+// [!code highlight]
+func Hash(data string) string
+```
+
+**返回：** 64 位小写十六进制字符串。
+
+```go
+// [!code highlight]
+hash := xUtil.Hash("password123")
+// "ef92b778bafe771e89245b89ecbc08a44a4e166c06659911881f383d4473e94f"
+```
+
+### HashBytes
+
+计算字节切片的 SHA-256 哈希：
+
+```go title="encryption.go"
+// [!code highlight]
+func HashBytes(data []byte) string
+```
+
+```go
+data := []byte("password123")
+// [!code highlight]
+hash := xUtil.HashBytes(data)
+```
+
+## MD5 哈希
+
+### MD5Hash
+
+计算字符串的 MD5 哈希：
+
+```go title="encryption.go"
+// [!code highlight]
+func MD5Hash(str string) string
+```
+
+**返回：** 32 位小写十六进制字符串。
+
+```go
+// [!code highlight]
+hash := xUtil.MD5Hash("password123")
+// "482c811da5d5b4bc6d497ffa98491e38"
+```
+
+### MD5HashBytes
+
+计算字节切片的 MD5 哈希：
+
+```go title="encryption.go"
+// [!code highlight]
+func MD5HashBytes(data []byte) string
+```
+
+```go
+data := []byte("password123")
+// [!code highlight]
+hash := xUtil.MD5HashBytes(data)
+```
+
+## 使用场景
+
+### 数据签名
+
+```go
+func SignRequest(data string, secret string) string {
+    // [!code highlight:2]
+    // 使用 SHA-256 生成签名
+    return xUtil.Hash(data + secret)
+}
+```
+
+### 文件校验
+
+```go
+func ChecksumFile(content []byte) string {
+    // [!code highlight:2]
+    // 使用 MD5 生成文件校验和
+    return xUtil.MD5HashBytes(content)
+}
+```
+
+### 缓存键生成
+
+```go
+func GenerateCacheKey(params map[string]string) string {
+    // [!code highlight:2]
+    // 使用 MD5 生成缓存键
+    data, _ := json.Marshal(params)
+    return "cache:" + xUtil.MD5HashBytes(data)
+}
+```
+
+## 注意事项
+
+- **MD5 不安全**：MD5 已被证明存在碰撞漏洞，不应用于密码存储或安全敏感场景
+- **密码存储**：请使用 `xUtil.EncryptPassword` 进行密码加密，它使用 bcrypt 算法
+- **SHA-256**：适用于数据签名、完整性校验等场景
+
+## 下一步
+
+<Cards>
+  <Card title="密码处理" href="./password" />
+  <Card title="安全密钥" href="./security" />
+</Cards>

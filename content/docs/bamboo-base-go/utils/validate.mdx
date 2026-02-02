@@ -1,0 +1,238 @@
+---
+title: 数据验证
+description: 手机号、身份证、邮箱、URL、密码强度等格式验证
+icon: TicketCheck
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# 数据验证
+
+`xUtil` 提供各种数据格式的验证函数，用于快速校验用户输入。
+
+## 手机号验证
+
+### IsValidPhone
+
+验证中国大陆手机号（1[3-9] 开头，11 位）：
+
+```go title="validate.go"
+// [!code highlight]
+func IsValidPhone(phone string) bool
+```
+
+```go
+xUtil.IsValidPhone("13812345678")   // true
+xUtil.IsValidPhone("12345678901")   // false（第二位不是 3-9）
+xUtil.IsValidPhone("1381234567")    // false（不足 11 位）
+```
+
+## 身份证验证
+
+### IsValidIDCard
+
+验证中国大陆身份证号（18 位）：
+
+```go title="validate.go"
+// [!code highlight]
+func IsValidIDCard(idCard string) bool
+```
+
+```go
+xUtil.IsValidIDCard("110101199001011234")  // true
+xUtil.IsValidIDCard("11010119900101123X")  // true（X 结尾）
+xUtil.IsValidIDCard("123456789012345678")  // false
+```
+
+## URL 验证
+
+### IsValidURL
+
+验证 URL 格式：
+
+```go title="validate.go"
+// [!code highlight]
+func IsValidURL(url string) bool
+```
+
+```go
+xUtil.IsValidURL("https://example.com")        // true
+xUtil.IsValidURL("http://localhost:8080/path") // true
+xUtil.IsValidURL("ftp://example.com")          // false
+xUtil.IsValidURL("example.com")                // false
+```
+
+## IP 地址验证
+
+### IsValidIP
+
+验证 IPv4 地址：
+
+```go title="validate.go"
+// [!code highlight]
+func IsValidIP(ip string) bool
+```
+
+```go
+xUtil.IsValidIP("192.168.1.1")     // true
+xUtil.IsValidIP("255.255.255.255") // true
+xUtil.IsValidIP("256.1.1.1")       // false
+xUtil.IsValidIP("192.168.1")       // false
+```
+
+## UUID 验证
+
+### IsValidUUID
+
+验证 UUID 格式：
+
+```go title="validate.go"
+// [!code highlight]
+func IsValidUUID(uuid string) bool
+```
+
+```go
+xUtil.IsValidUUID("550e8400-e29b-41d4-a716-446655440000")  // true
+xUtil.IsValidUUID("550e8400e29b41d4a716446655440000")      // false（缺少连字符）
+xUtil.IsValidUUID("invalid-uuid")                          // false
+```
+
+## 字符类型验证
+
+### IsNumeric
+
+检查是否只包含数字：
+
+```go title="validate.go"
+// [!code highlight]
+func IsNumeric(str string) bool
+```
+
+```go
+xUtil.IsNumeric("123456")    // true
+xUtil.IsNumeric("123abc")    // false
+xUtil.IsNumeric("")          // false
+```
+
+### IsAlpha
+
+检查是否只包含字母：
+
+```go title="validate.go"
+// [!code highlight]
+func IsAlpha(str string) bool
+```
+
+```go
+xUtil.IsAlpha("Hello")       // true
+xUtil.IsAlpha("Hello123")    // false
+xUtil.IsAlpha("")            // false
+```
+
+### IsAlphaNumeric
+
+检查是否只包含字母和数字：
+
+```go title="validate.go"
+// [!code highlight]
+func IsAlphaNumeric(str string) bool
+```
+
+```go
+xUtil.IsAlphaNumeric("Hello123")  // true
+xUtil.IsAlphaNumeric("Hello_123") // false（包含下划线）
+xUtil.IsAlphaNumeric("")          // false
+```
+
+## 用户名验证
+
+### IsValidUsername
+
+验证用户名（4-20 位，字母开头，只能包含字母、数字、下划线）：
+
+```go title="validate.go"
+// [!code highlight]
+func IsValidUsername(username string) bool
+```
+
+```go
+xUtil.IsValidUsername("xiao_lfeng")   // true
+xUtil.IsValidUsername("user123")      // true
+xUtil.IsValidUsername("123user")      // false（数字开头）
+xUtil.IsValidUsername("ab")           // false（少于 4 位）
+```
+
+## 密码强度验证
+
+### IsStrongPassword
+
+验证强密码（至少 8 位，包含大写、小写、数字、特殊字符）：
+
+```go title="validate.go"
+// [!code highlight]
+func IsStrongPassword(password string) bool
+```
+
+```go
+xUtil.IsStrongPassword("Abc123!@#")   // true
+xUtil.IsStrongPassword("abc123!@#")   // false（缺少大写）
+xUtil.IsStrongPassword("Abc12345")    // false（缺少特殊字符）
+xUtil.IsStrongPassword("Abc!@#")      // false（少于 8 位）
+```
+
+## 范围验证
+
+### InRange
+
+检查数值是否在指定范围内：
+
+```go title="validate.go"
+// [!code highlight]
+func InRange(value, min, max float64) bool
+```
+
+```go
+xUtil.InRange(5.5, 1.0, 10.0)   // true
+xUtil.InRange(0.5, 1.0, 10.0)   // false
+xUtil.InRange(10.5, 1.0, 10.0)  // false
+```
+
+### IsValidLength
+
+检查字符串长度是否在指定范围内：
+
+```go title="validate.go"
+// [!code highlight]
+func IsValidLength(str string, minLen, maxLen int) bool
+```
+
+```go
+xUtil.IsValidLength("hello", 1, 10)   // true
+xUtil.IsValidLength("hi", 3, 10)      // false
+xUtil.IsValidLength("hello world", 1, 5)  // false
+```
+
+## JSON 格式验证
+
+### IsValidJSON
+
+简单检查 JSON 格式：
+
+```go title="validate.go"
+// [!code highlight]
+func IsValidJSON(jsonStr string) bool
+```
+
+```go
+xUtil.IsValidJSON(`{"name":"test"}`)  // true
+xUtil.IsValidJSON(`[1, 2, 3]`)        // true
+xUtil.IsValidJSON(`invalid`)          // false
+xUtil.IsValidJSON(``)                 // false
+```
+
+## 下一步
+
+<Cards>
+  <Card title="加密哈希" href="./encryption" />
+  <Card title="密码处理" href="./password" />
+</Cards>

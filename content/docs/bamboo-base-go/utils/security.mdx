@@ -1,0 +1,125 @@
+---
+title: 安全密钥
+description: 生成和验证安全密钥
+icon: Key
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# 安全密钥
+
+`xUtil` 提供安全密钥的生成和验证函数，密钥以 `cs_` 为前缀。
+
+## 密钥格式
+
+| 类型 | 格式 | 长度 |
+|------|------|------|
+| 长密钥 | `cs_` + 64 位十六进制 | 67 字符 |
+| 标准密钥 | `cs_` + 32 位十六进制 | 35 字符 |
+
+## 生成密钥
+
+### GenerateLongSecurityKey
+
+生成长安全密钥（67 字符）：
+
+```go title="security.go"
+// [!code highlight]
+func GenerateLongSecurityKey() string
+```
+
+```go
+key := xUtil.GenerateLongSecurityKey()
+// "cs_550e8400e29b41d4a716446655440000550e8400e29b41d4a716446655440000"
+```
+
+### GenerateSecurityKey
+
+生成标准安全密钥（35 字符）：
+
+```go title="security.go"
+// [!code highlight]
+func GenerateSecurityKey() string
+```
+
+```go
+key := xUtil.GenerateSecurityKey()
+// "cs_550e8400e29b41d4a716446655440000"
+```
+
+## 验证密钥
+
+### VerifySecurityKey
+
+验证密钥格式是否正确：
+
+```go title="security.go"
+// [!code highlight]
+func VerifySecurityKey(input string) bool
+```
+
+```go
+// [!code highlight:2]
+// 有效密钥
+xUtil.VerifySecurityKey("cs_550e8400e29b41d4a716446655440000")  // true（35 字符）
+xUtil.VerifySecurityKey("cs_550e8400e29b41d4a716446655440000550e8400e29b41d4a716446655440000")  // true（67 字符）
+
+// [!code highlight:2]
+// 无效密钥
+xUtil.VerifySecurityKey("550e8400e29b41d4a716446655440000")     // false（缺少 cs_ 前缀）
+xUtil.VerifySecurityKey("cs_invalid")                            // false（长度不对）
+xUtil.VerifySecurityKey("cs_GGGG8400e29b41d4a716446655440000")  // false（非十六进制）
+```
+
+## 使用场景
+
+### API 密钥
+
+```go title="service/api_key.go"
+func (s *APIKeyService) Create(ctx context.Context, userID int64) (*entity.APIKey, error) {
+    apiKey := &entity.APIKey{
+        UserID: userID,
+        // [!code highlight]
+        Key:    xUtil.GenerateLongSecurityKey(),
+        Status: 1,
+    }
+
+    return s.repo.Create(ctx, apiKey)
+}
+```
+
+### 访问令牌
+
+```go title="service/token.go"
+func (s *TokenService) GenerateAccessToken(userID int64) string {
+    // [!code highlight]
+    return xUtil.GenerateSecurityKey()
+}
+```
+
+### 密钥验证中间件
+
+```go title="middleware/api_key.go"
+func APIKeyMiddleware() gin.HandlerFunc {
+    return func(ctx *gin.Context) {
+        apiKey := ctx.GetHeader("X-API-Key")
+
+        // [!code highlight:4]
+        // 验证密钥格式
+        if !xUtil.VerifySecurityKey(apiKey) {
+            ctx.Error(xError.NewError(ctx, xError.Unauthorized, "无效的 API 密钥", true))
+            return
+        }
+
+        // 验证密钥是否存在于数据库...
+        ctx.Next()
+    }
+}
+```
+
+## 下一步
+
+<Cards>
+  <Card title="随机生成" href="./generate" />
+  <Card title="加密哈希" href="./encryption" />
+</Cards>

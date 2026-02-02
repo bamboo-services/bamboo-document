@@ -41,13 +41,13 @@ package main
 
 import (
     "github.com/bamboo-services/bamboo-base-go/web"
-    "github.com/bamboo-services/bamboo-base-go/web/result"
+    xResult "github.com/bamboo-services/bamboo-base-go/web/result"
 )
 
 func main() {
     r := web.Default()
     r.GET("/ping", func(c *gin.Context) {
-        result.Success(c, "pong")
+        xResult.Success(c, "pong")
     })
     r.Run(":8080")
 }
