@@ -6,6 +6,7 @@
     "models",
     "log",
     "middleware",
-    "helper"
+    "helper",
+    "validator"
   ]
 }

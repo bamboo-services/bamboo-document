@@ -2,8 +2,6 @@
   "title": "工具集",
   "icon": "Wrench",
   "pages": [
-    "validator",
-    "validator-custom",
     "utility",
     "utility-advanced",
     "ctxutil",

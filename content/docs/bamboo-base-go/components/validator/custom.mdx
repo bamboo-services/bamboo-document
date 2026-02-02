@@ -1,0 +1,447 @@
+---
+title: 自定义验证器
+description: 注册 strict_url、enum_int、regexp 等自定义验证规则
+icon: ListChecks
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# 自定义验证器
+
+`xVaild` 提供多个自定义验证器，扩展 `go-playground/validator` 的验证能力。
+
+## RegisterCustomValidators
+
+注册所有自定义验证器：
+
+```go title="custom.go"
+// [!code highlight]
+func RegisterCustomValidators(validate *validator.Validate) error
+```
+
+**使用：**
+
+```go
+validate := validator.New()
+// [!code highlight]
+if err := xVaild.RegisterCustomValidators(validate); err != nil {
+    log.Fatal("验证器注册失败:", err)
+}
+```
+
+## 验证器列表
+
+### strict_url
+
+严格的 URL 验证，仅允许 HTTP/HTTPS 协议：
+
+```go
+type Request struct {
+    // [!code highlight]
+    Website string `json:"website" binding:"required,strict_url"`
+}
+```
+
+**有效值：**
+- `https://example.com`
+- `http://localhost:8080/path`
+
+**无效值：**
+- `ftp://example.com`
+- `example.com`（缺少协议）
+
+### strict_uuid
+
+严格的 UUID 格式验证：
+
+```go
+type Request struct {
+    // [!code highlight]
+    ID string `json:"id" binding:"required,strict_uuid"`
+}
+```
+
+**有效值：**
+- `550e8400-e29b-41d4-a716-446655440000`
+
+**无效值：**
+- `550e8400e29b41d4a716446655440000`（缺少连字符）
+- `invalid-uuid`
+
+### alphanum_underscore
+
+字母、数字和下划线验证：
+
+```go
+type Request struct {
+    // [!code highlight]
+    Username string `json:"username" binding:"required,alphanum_underscore"`
+}
+```
+
+**有效值：**
+- `user_name`
+- `User123`
+- `test_user_01`
+
+**无效值：**
+- `user-name`（包含连字符）
+- `user@name`（包含特殊字符）
+
+### regexp
+
+正则表达式验证：
+
+```go
+type Request struct {
+    // [!code highlight:2]
+    // 中国大陆手机号
+    Phone string `json:"phone" binding:"required,regexp=^1[3-9]\\d{9}$"`
+    // [!code highlight:2]
+    // 邮政编码
+    ZipCode string `json:"zip_code" binding:"required,regexp=^\\d{6}$"`
+}
+```
+
+**注意：** 正则表达式中的 `\` 需要转义为 `\\`。
+
+### enum_int
+
+整数枚举值验证：
+
+```go
+type Request struct {
+    // [!code highlight:2]
+    // 状态：1=启用, 2=禁用, 3=待审核
+    Status int `json:"status" binding:"required,enum_int=1 2 3"`
+}
+```
+
+**有效值：** `1`, `2`, `3`
+
+**无效值：** `0`, `4`, `100`
+
+### enum_string
+
+字符串枚举值验证：
+
+```go
+type Request struct {
+    // [!code highlight:2]
+    // 角色：admin, user, guest
+    Role string `json:"role" binding:"required,enum_string=admin user guest"`
+}
+```
+
+**有效值：** `admin`, `user`, `guest`
+
+**无效值：** `Admin`（大小写敏感）, `superadmin`
+
+### enum_float
+
+浮点数枚举值验证：
+
+```go
+type Request struct {
+    // [!code highlight:2]
+    // 折扣：0.5, 0.7, 0.8, 0.9, 1.0
+    Discount float64 `json:"discount" binding:"required,enum_float=0.5 0.7 0.8 0.9 1.0"`
+}
+```
+
+## 完整示例
+
+```go title="dto/product.go"
+type CreateProductRequest struct {
+    // [!code highlight:2]
+    // 商品名称：字母数字下划线
+    Code string `json:"code" label:"商品编码" binding:"required,alphanum_underscore,min=4,max=32"`
+
+    // [!code highlight:2]
+    // 商品链接：严格 URL
+    Link string `json:"link" label:"商品链接" binding:"omitempty,strict_url"`
+
+    // [!code highlight:2]
+    // 商品状态：枚举值
+    Status int `json:"status" label:"商品状态" binding:"required,enum_int=1 2 3"`
+
+    // [!code highlight:2]
+    // SKU 编码：正则验证
+    SKU string `json:"sku" label:"SKU编码" binding:"required,regexp=^SKU-\\d{8}$"`
+}
+```
+
+```go title="handler/product.go"
+func CreateProduct(ctx *gin.Context) {
+    var req dto.CreateProductRequest
+    if err := ctx.ShouldBindJSON(&req); err != nil {
+        xVaild.HandleValidationError(ctx, err)
+        return
+    }
+    // 业务逻辑...
+}
+```
+
+---
+
+## 编写自定义验证器
+
+如果内置验证器不满足需求，可以编写自己的验证器。
+
+### 验证器函数签名
+
+```go
+// [!code highlight]
+type Func func(fl validator.FieldLevel) bool
+```
+
+`validator.FieldLevel` 提供以下方法：
+
+<TypeTable
+  type={{
+    'Field()': {
+      description: '获取字段的反射值',
+      type: 'reflect.Value',
+      required: true,
+    },
+    'Param()': {
+      description: '获取验证器参数（如 enum_int=1 2 3 中的 "1 2 3"）',
+      type: 'string',
+      required: true,
+    },
+    'FieldName()': {
+      description: '获取字段名',
+      type: 'string',
+      required: true,
+    },
+    'StructFieldName()': {
+      description: '获取结构体字段名',
+      type: 'string',
+      required: true,
+    },
+    'Parent()': {
+      description: '获取父结构体的反射值',
+      type: 'reflect.Value',
+      required: true,
+    },
+    'Top()': {
+      description: '获取顶层结构体的反射值',
+      type: 'reflect.Value',
+      required: true,
+    },
+  }}
+/>
+
+### 示例一：简单验证器
+
+验证字符串是否以特定前缀开头：
+
+```go title="validator/validator_prefix.go"
+package validator
+
+import (
+    "strings"
+    "github.com/go-playground/validator/v10"
+)
+
+// [!code highlight:2]
+// ValidatePrefix 验证字符串是否以指定前缀开头
+// 使用: binding:"prefix=SKU-"
+func ValidatePrefix(fl validator.FieldLevel) bool {
+    // [!code highlight:2]
+    // 获取参数（前缀）
+    prefix := fl.Param()
+    if prefix == "" {
+        return false
+    }
+
+    // [!code highlight:2]
+    // 获取字段值
+    value := fl.Field().String()
+
+    // [!code highlight]
+    return strings.HasPrefix(value, prefix)
+}
+```
+
+### 示例二：带参数的验证器
+
+验证整数是否在指定范围内：
+
+```go title="validator/validator_between.go"
+package validator
+
+import (
+    "strconv"
+    "strings"
+    "github.com/go-playground/validator/v10"
+)
+
+// [!code highlight:2]
+// ValidateBetween 验证整数是否在指定范围内
+// 使用: binding:"between=1-100"
+func ValidateBetween(fl validator.FieldLevel) bool {
+    // [!code highlight:2]
+    // 解析参数 "min-max"
+    param := fl.Param()
+    parts := strings.Split(param, "-")
+    if len(parts) != 2 {
+        return false
+    }
+
+    min, err1 := strconv.ParseInt(parts[0], 10, 64)
+    max, err2 := strconv.ParseInt(parts[1], 10, 64)
+    if err1 != nil || err2 != nil {
+        return false
+    }
+
+    // [!code highlight:2]
+    // 获取字段值
+    value := fl.Field().Int()
+
+    // [!code highlight]
+    return value >= min && value <= max
+}
+```
+
+### 示例三：跨字段验证器
+
+验证确认密码是否与密码一致：
+
+```go title="validator/validator_confirm.go"
+package validator
+
+import (
+    "github.com/go-playground/validator/v10"
+)
+
+// [!code highlight:2]
+// ValidateConfirmPassword 验证确认密码是否与密码一致
+// 使用: binding:"confirm_password=Password"
+func ValidateConfirmPassword(fl validator.FieldLevel) bool {
+    // [!code highlight:2]
+    // 获取参数（要比较的字段名）
+    fieldName := fl.Param()
+    if fieldName == "" {
+        return false
+    }
+
+    // [!code highlight:2]
+    // 获取父结构体中的目标字段
+    parent := fl.Parent()
+    targetField := parent.FieldByName(fieldName)
+    if !targetField.IsValid() {
+        return false
+    }
+
+    // [!code highlight:2]
+    // 比较两个字段的值
+    return fl.Field().String() == targetField.String()
+}
+```
+
+**使用：**
+
+```go
+type RegisterRequest struct {
+    Password        string `json:"password" label:"密码" binding:"required,min=8"`
+    // [!code highlight]
+    ConfirmPassword string `json:"confirm_password" label:"确认密码" binding:"required,confirm_password=Password"`
+}
+```
+
+### 注册自定义验证器
+
+由于 `xReg.EngineInit()` 已经注册了内置验证器，第三方项目需要在 **路由注册之前** 额外注册自己的验证器。
+
+```go title="startup/startup_validator.go"
+package startup
+
+import (
+    "github.com/gin-gonic/gin/binding"
+    "github.com/go-playground/validator/v10"
+)
+
+// [!code highlight:2]
+// RegisterCustomValidators 注册项目自定义验证器
+// 在 xReg.Register() 之后、路由注册之前调用
+func RegisterCustomValidators() {
+    if v, ok := binding.Validator.Engine().(*validator.Validate); ok {
+        // [!code highlight:4]
+        // 注册自己的验证器
+        _ = v.RegisterValidation("prefix", ValidatePrefix)
+        _ = v.RegisterValidation("between", ValidateBetween)
+        _ = v.RegisterValidation("confirm_password", ValidateConfirmPassword)
+    }
+}
+```
+
+```go title="main.go"
+func main() {
+    ctx := context.Background()
+
+    // [!code highlight:2]
+    // 1. 初始化基础库（已注册内置验证器）
+    reg := xReg.Register(ctx)
+
+    // [!code highlight:2]
+    // 2. 注册项目自定义验证器
+    startup.RegisterCustomValidators()
+
+    // [!code highlight:2]
+    // 3. 注册路由
+    router.RegisterRouter(reg.Serve)
+
+    // 4. 启动服务
+    _ = reg.Serve.Run(":8080")
+}
+```
+
+### 完整的验证器文件结构
+
+```
+your-project/
+├── main.go
+├── startup/
+│   └── startup_validator.go    # 自定义验证器注册
+├── validator/
+│   ├── validator_prefix.go     # 前缀验证器
+│   ├── validator_between.go    # 范围验证器
+│   └── validator_confirm.go    # 确认密码验证器
+└── dto/
+    └── user.go                 # 使用验证器的 DTO
+```
+```
+
+### 添加中文错误消息
+
+在 `messages.go` 中添加自定义验证器的错误消息：
+
+```go title="validator/messages.go"
+var CustomValidationMessages = map[string]string{
+    // [!code highlight:3]
+    "prefix":           "必须以 %s 开头",
+    "between":          "必须在 %s 范围内",
+    "confirm_password": "与密码不一致",
+}
+```
+
+或者在注册翻译器时添加：
+
+```go
+// [!code highlight:6]
+// 注册自定义验证器的翻译
+_ = v.RegisterTranslation("prefix", trans, func(ut ut.Translator) error {
+    return ut.Add("prefix", "{0}必须以 {1} 开头", true)
+}, func(ut ut.Translator, fe validator.FieldError) string {
+    t, _ := ut.T("prefix", fe.Field(), fe.Param())
+    return t
+})
+```
+
+## 下一步
+
+<Cards>
+  <Card title="中文翻译" href="./translator" />
+  <Card title="错误响应" href="./response" />
+</Cards>

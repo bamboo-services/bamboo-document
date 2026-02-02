@@ -1,0 +1,225 @@
+---
+title: 中文翻译
+description: 为验证错误提供中文翻译支持
+icon: Languages
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# 中文翻译
+
+`xVaild` 为 `go-playground/validator` 提供中文翻译支持，将验证错误消息转换为友好的中文提示。
+
+## RegisterTranslator
+
+注册中文翻译器：
+
+```go title="translator.go"
+// [!code highlight]
+func RegisterTranslator(validate *validator.Validate) error
+```
+
+**使用：**
+
+```go
+validate := validator.New()
+xVaild.RegisterCustomValidators(validate)
+// [!code highlight]
+xVaild.RegisterTranslator(validate)
+```
+
+## GetTranslator
+
+获取翻译器实例：
+
+```go title="translator.go"
+// [!code highlight]
+func GetTranslator() ut.Translator
+```
+
+## TranslateError
+
+翻译验证错误为中文：
+
+```go title="translator.go"
+// [!code highlight]
+func TranslateError(err error) map[string]string
+```
+
+**返回：** 字段名到错误消息的映射。
+
+## label 标签
+
+使用 `label` 标签定义字段的中文名称：
+
+```go
+type User struct {
+    // [!code highlight:2]
+    // label 优先于 json 作为字段名
+    Username string `json:"username" label:"用户名" binding:"required,min=4"`
+    Password string `json:"password" label:"密码" binding:"required,min=8"`
+    Email    string `json:"email" label:"邮箱" binding:"required,email"`
+}
+```
+
+**错误消息示例：**
+- `用户名为必填项`
+- `密码长度不能少于 8 个字符`
+- `邮箱必须是有效的邮箱地址`
+
+## 内置消息映射
+
+<TypeTable
+  type={{
+    required: {
+      description: '为必填项',
+      type: 'string',
+      required: true,
+    },
+    min: {
+      description: '长度不能少于 %s 个字符',
+      type: 'string',
+      required: true,
+    },
+    max: {
+      description: '长度不能超过 %s 个字符',
+      type: 'string',
+      required: true,
+    },
+    email: {
+      description: '必须是有效的邮箱地址',
+      type: 'string',
+      required: true,
+    },
+    url: {
+      description: '必须是有效的URL',
+      type: 'string',
+      required: true,
+    },
+    uuid: {
+      description: '必须是有效的UUID格式',
+      type: 'string',
+      required: true,
+    },
+    alphanum: {
+      description: '只能包含字母和数字',
+      type: 'string',
+      required: true,
+    },
+    oneof: {
+      description: '必须是以下值之一: %s',
+      type: 'string',
+      required: true,
+    },
+  }}
+/>
+
+## 自定义验证器消息
+
+<TypeTable
+  type={{
+    strict_url: {
+      description: '必须是有效的 HTTP 或 HTTPS URL',
+      type: 'string',
+      required: true,
+    },
+    strict_uuid: {
+      description: '必须是标准的 UUID 格式',
+      type: 'string',
+      required: true,
+    },
+    alphanum_underscore: {
+      description: '只能包含字母、数字和下划线',
+      type: 'string',
+      required: true,
+    },
+    regexp: {
+      description: '格式不正确',
+      type: 'string',
+      required: true,
+    },
+    enum_int: {
+      description: '必须是以下值之一: %s',
+      type: 'string',
+      required: true,
+    },
+    enum_string: {
+      description: '必须是以下值之一: %s',
+      type: 'string',
+      required: true,
+    },
+    enum_float: {
+      description: '必须是以下值之一: %s',
+      type: 'string',
+      required: true,
+    },
+  }}
+/>
+
+## 使用示例
+
+### 基础使用
+
+```go title="handler/user.go"
+func CreateUser(ctx *gin.Context) {
+    var req dto.CreateUserRequest
+    if err := ctx.ShouldBindJSON(&req); err != nil {
+        // [!code highlight:2]
+        // 获取翻译后的错误消息
+        errors := xVaild.TranslateError(err)
+        for field, msg := range errors {
+            fmt.Printf("%s: %s\n", field, msg)
+        }
+        return
+    }
+}
+```
+
+### 配合 HandleValidationError
+
+```go title="handler/user.go"
+func CreateUser(ctx *gin.Context) {
+    var req dto.CreateUserRequest
+    if err := ctx.ShouldBindJSON(&req); err != nil {
+        // [!code highlight:2]
+        // 自动翻译并返回响应
+        xVaild.HandleValidationError(ctx, err)
+        return
+    }
+}
+```
+
+## 完整初始化
+
+```go title="register_engine.go"
+func (r *Reg) EngineInit() {
+    engine := gin.Default()
+
+    if v, ok := binding.Validator.Engine().(*validator.Validate); ok {
+        // [!code highlight:2]
+        // 1. 注册自定义验证器
+        _ = xVaild.RegisterCustomValidators(v)
+
+        // [!code highlight:2]
+        // 2. 注册中文翻译器
+        _ = xVaild.RegisterTranslator(v)
+
+        // [!code highlight:3]
+        // 3. 使用 label 标签作为字段名
+        v.RegisterTagNameFunc(func(fld reflect.StructField) string {
+            name := fld.Tag.Get("label")
+            if name == "" {
+                name = fld.Tag.Get("json")
+            }
+            return name
+        })
+    }
+}
+```
+
+## 下一步
+
+<Cards>
+  <Card title="自定义验证器" href="./custom" />
+  <Card title="错误响应" href="./response" />
+</Cards>

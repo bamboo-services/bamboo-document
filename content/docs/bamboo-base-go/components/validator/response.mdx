@@ -1,0 +1,236 @@
+---
+title: 错误响应
+description: HandleValidationError 统一处理验证错误并返回友好响应
+icon: CircleOff
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# 错误响应
+
+`xVaild` 提供统一的验证错误响应处理，将验证错误转换为友好的 JSON 格式。
+
+## HandleValidationError
+
+处理验证错误并返回响应：
+
+```go title="response.go"
+// [!code highlight]
+func HandleValidationError(ctx *gin.Context, bindErr error)
+```
+
+**功能：**
+- 解析验证错误
+- 翻译为中文消息
+- 返回统一格式的 JSON 响应
+
+## ValidationErrorDetail
+
+错误详情结构：
+
+```go title="response.go"
+type ValidationErrorDetail struct {
+    // [!code highlight:4]
+    Field   string      `json:"field"`   // 字段名（英文）
+    Tag     string      `json:"tag"`     // 验证标签
+    Message string      `json:"message"` // 错误消息（中文）
+    Value   interface{} `json:"value"`   // 字段值
+}
+```
+
+## 响应格式
+
+### 单个错误
+
+```json
+{
+  "context": "abc123",
+  "output": "REQUEST_BODY_ERROR",
+  "code": 40014,
+  "message": "请求体错误",
+  "error_message": "用户名为必填项",
+  "data": [
+    {
+      "field": "username",
+      "tag": "required",
+      "message": "用户名为必填项",
+      "value": ""
+    }
+  ]
+}
+```
+
+### 多个错误
+
+```json
+{
+  "context": "abc123",
+  "output": "REQUEST_BODY_ERROR",
+  "code": 40014,
+  "message": "请求体错误",
+  "error_message": "用户名为必填项",
+  "data": [
+    {
+      "field": "username",
+      "tag": "required",
+      "message": "用户名为必填项",
+      "value": ""
+    },
+    {
+      "field": "password",
+      "tag": "min",
+      "message": "密码长度不能少于 8 个字符",
+      "value": "123"
+    },
+    {
+      "field": "email",
+      "tag": "email",
+      "message": "邮箱必须是有效的邮箱地址",
+      "value": "invalid-email"
+    }
+  ]
+}
+```
+
+## 使用示例
+
+### 基础使用
+
+```go title="handler/user.go"
+func CreateUser(ctx *gin.Context) {
+    var req dto.CreateUserRequest
+    if err := ctx.ShouldBindJSON(&req); err != nil {
+        // [!code highlight:2]
+        // 自动处理验证错误
+        xVaild.HandleValidationError(ctx, err)
+        return
+    }
+
+    // 业务逻辑...
+    xResult.Success(ctx, user)
+}
+```
+
+### 完整示例
+
+```go title="dto/user.go"
+type CreateUserRequest struct {
+    Username string `json:"username" label:"用户名" binding:"required,min=4,max=20,alphanum_underscore"`
+    Password string `json:"password" label:"密码" binding:"required,min=8"`
+    Email    string `json:"email" label:"邮箱" binding:"required,email"`
+    Phone    string `json:"phone" label:"手机号" binding:"required,regexp=^1[3-9]\\d{9}$"`
+    Role     string `json:"role" label:"角色" binding:"required,enum_string=admin user guest"`
+}
+```
+
+```go title="handler/user.go"
+func CreateUser(ctx *gin.Context) {
+    var req dto.CreateUserRequest
+
+    // [!code highlight:4]
+    // 绑定并验证请求
+    if err := ctx.ShouldBindJSON(&req); err != nil {
+        xVaild.HandleValidationError(ctx, err)
+        return
+    }
+
+    // 创建用户...
+    user, err := userService.Create(ctx, &req)
+    if err != nil {
+        ctx.Error(err)
+        return
+    }
+
+    xResult.Success(ctx, user)
+}
+```
+
+### 请求示例
+
+**请求：**
+
+```json
+{
+  "username": "ab",
+  "password": "123",
+  "email": "invalid",
+  "phone": "123456",
+  "role": "superadmin"
+}
+```
+
+**响应：**
+
+```json
+{
+  "context": "550e8400-e29b-41d4-a716-446655440000",
+  "output": "REQUEST_BODY_ERROR",
+  "code": 40014,
+  "message": "请求体错误",
+  "error_message": "用户名长度不能少于 4 个字符",
+  "data": [
+    {
+      "field": "username",
+      "tag": "min",
+      "message": "用户名长度不能少于 4 个字符",
+      "value": "ab"
+    },
+    {
+      "field": "password",
+      "tag": "min",
+      "message": "密码长度不能少于 8 个字符",
+      "value": "123"
+    },
+    {
+      "field": "email",
+      "tag": "email",
+      "message": "邮箱必须是有效的邮箱地址",
+      "value": "invalid"
+    },
+    {
+      "field": "phone",
+      "tag": "regexp",
+      "message": "手机号格式不正确",
+      "value": "123456"
+    },
+    {
+      "field": "role",
+      "tag": "enum_string",
+      "message": "角色必须是以下值之一: admin user guest",
+      "value": "superadmin"
+    }
+  ]
+}
+```
+
+## 错误码
+
+验证错误使用 `RequestBodyError` 错误码：
+
+<TypeTable
+  type={{
+    code: {
+      description: '40014',
+      type: 'uint',
+      required: true,
+    },
+    output: {
+      description: 'REQUEST_BODY_ERROR',
+      type: 'string',
+      required: true,
+    },
+    message: {
+      description: '请求体错误',
+      type: 'string',
+      required: true,
+    },
+  }}
+/>
+
+## 下一步
+
+<Cards>
+  <Card title="自定义验证器" href="./custom" />
+  <Card title="中文翻译" href="./translator" />
+  <Card title="错误处理" href="../../core/error" />
+</Cards>

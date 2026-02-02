@@ -1,0 +1,10 @@
+{
+  "title": "验证器",
+  "icon": "ShieldCheck",
+  "pages": [
+    "index",
+    "custom",
+    "translator",
+    "response"
+  ]
+}
