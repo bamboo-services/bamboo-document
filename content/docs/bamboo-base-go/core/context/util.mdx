@@ -1,0 +1,307 @@
+---
+title: 工具函数
+description: xCtxUtil 包提供便捷的上下文操作函数
+icon: Wrench
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# 工具函数
+
+`xCtxUtil` 包提供便捷的上下文操作函数，简化从 Gin 上下文获取数据的操作。
+
+```go
+import xCtxUtil "github.com/bamboo-services/bamboo-base-go/utility/ctxutil"
+```
+
+## 通用函数
+
+### IsDebugMode
+
+判断当前是否处于调试模式。
+
+```go title="common.go"
+// [!code highlight]
+func IsDebugMode() bool
+```
+
+**实现：**
+
+```go title="common.go"
+func IsDebugMode() bool {
+    // [!code highlight]
+    return xEnv.GetEnvBool(xEnv.Debug, false)
+}
+```
+
+**示例：**
+
+```go
+if xCtxUtil.IsDebugMode() {
+    // [!code highlight]
+    // 调试模式下的特殊处理
+    log.Debug(ctx, "调试信息")
+}
+```
+
+### CalcOverheadTime
+
+计算当前请求的耗时（微秒级）。
+
+```go title="common.go"
+// [!code highlight]
+func CalcOverheadTime(c *gin.Context) int64
+```
+
+**说明：**
+- 仅在调试模式下计算耗时
+- 非调试模式始终返回 0
+- 单位为微秒（microseconds）
+
+**示例：**
+
+```go
+// [!code highlight]
+overhead := xCtxUtil.CalcOverheadTime(ctx)
+// overhead = 1234 (微秒)
+```
+
+### GetRequestKey
+
+获取请求唯一标识。
+
+```go title="common.go"
+// [!code highlight]
+func GetRequestKey(c *gin.Context) string
+```
+
+**示例：**
+
+```go
+// [!code highlight]
+requestID := xCtxUtil.GetRequestKey(ctx)
+// requestID = "550e8400-e29b-41d4-a716-446655440000"
+```
+
+### GetErrorMessage
+
+获取上下文中的错误消息。
+
+```go title="common.go"
+// [!code highlight]
+func GetErrorMessage(c *gin.Context) string
+```
+
+## 数据库函数
+
+### GetDB
+
+从上下文获取 GORM 数据库连接。
+
+```go title="database.go"
+// [!code highlight]
+func GetDB(c *gin.Context) *gorm.DB
+```
+
+**注意：**
+- 如果上下文中未找到数据库连接，会触发 `panic`
+- 返回的连接已自动绑定当前上下文（`WithContext`）
+
+**示例：**
+
+```go
+func GetUser(ctx *gin.Context, id string) (*entity.User, error) {
+    // [!code highlight]
+    db := xCtxUtil.GetDB(ctx)
+
+    var user entity.User
+    if err := db.Where("id = ?", id).First(&user).Error; err != nil {
+        return nil, err
+    }
+    return &user, nil
+}
+```
+
+## Redis 函数
+
+### GetRDB
+
+从上下文获取 Redis 客户端。
+
+```go title="nosql.go"
+// [!code highlight]
+func GetRDB(c *gin.Context) *redis.Client
+```
+
+**注意：**
+- 如果上下文中未找到 Redis 客户端，会触发 `panic`
+
+**示例：**
+
+```go
+func GetCache(ctx *gin.Context, key string) (string, error) {
+    // [!code highlight]
+    rdb := xCtxUtil.GetRDB(ctx)
+
+    return rdb.Get(ctx, key).Result()
+}
+```
+
+## 雪花算法函数
+
+### GetSnowflakeNode
+
+从上下文获取雪花算法节点。
+
+```go title="snowflake.go"
+// [!code highlight]
+func GetSnowflakeNode(c *gin.Context) *xSnowflake.Node
+```
+
+**说明：**
+- 如果上下文中不存在节点，会回退到默认节点
+- 确保即使在非 HTTP 请求上下文中也能正常生成 ID
+
+**示例：**
+
+```go
+// [!code highlight]
+node := xCtxUtil.GetSnowflakeNode(ctx)
+id := node.MustGenerate()
+```
+
+### GenerateSnowflakeID
+
+生成普通雪花 ID（Gene=0）。
+
+```go title="snowflake.go"
+// [!code highlight]
+func GenerateSnowflakeID(c *gin.Context) xSnowflake.SnowflakeID
+```
+
+**示例：**
+
+```go
+// [!code highlight]
+id := xCtxUtil.GenerateSnowflakeID(ctx)
+// id = 1234567890123456789
+```
+
+### GenerateGeneSnowflakeID
+
+生成带业务基因的雪花 ID。
+
+```go title="snowflake.go"
+// [!code highlight]
+func GenerateGeneSnowflakeID(c *gin.Context, gene xSnowflake.Gene) xSnowflake.SnowflakeID
+```
+
+**示例：**
+
+```go
+// [!code highlight:2]
+// 生成用户 ID
+userID := xCtxUtil.GenerateGeneSnowflakeID(ctx, xSnowflake.GeneUser)
+
+// [!code highlight:2]
+// 生成订单 ID
+orderID := xCtxUtil.GenerateGeneSnowflakeID(ctx, xSnowflake.GeneOrder)
+```
+
+## 函数一览
+
+<TypeTable
+  type={{
+    IsDebugMode: {
+      description: '判断是否处于调试模式',
+      type: '() bool',
+      required: true,
+    },
+    CalcOverheadTime: {
+      description: '计算请求耗时（微秒）',
+      type: '(c *gin.Context) int64',
+      required: true,
+    },
+    GetRequestKey: {
+      description: '获取请求唯一标识',
+      type: '(c *gin.Context) string',
+      required: true,
+    },
+    GetErrorMessage: {
+      description: '获取错误消息',
+      type: '(c *gin.Context) string',
+      required: true,
+    },
+    GetDB: {
+      description: '获取 GORM 数据库连接',
+      type: '(c *gin.Context) *gorm.DB',
+      required: true,
+    },
+    GetRDB: {
+      description: '获取 Redis 客户端',
+      type: '(c *gin.Context) *redis.Client',
+      required: true,
+    },
+    GetSnowflakeNode: {
+      description: '获取雪花算法节点',
+      type: '(c *gin.Context) *xSnowflake.Node',
+      required: true,
+    },
+    GenerateSnowflakeID: {
+      description: '生成普通雪花 ID',
+      type: '(c *gin.Context) SnowflakeID',
+      required: true,
+    },
+    GenerateGeneSnowflakeID: {
+      description: '生成带基因的雪花 ID',
+      type: '(c *gin.Context, gene Gene) SnowflakeID',
+      required: true,
+    },
+  }}
+/>
+
+## 完整示例
+
+```go title="service.go"
+package logic
+
+import (
+    xError "github.com/bamboo-services/bamboo-base-go/error"
+    xSnowflake "github.com/bamboo-services/bamboo-base-go/snowflake"
+    xCtxUtil "github.com/bamboo-services/bamboo-base-go/utility/ctxutil"
+    "github.com/gin-gonic/gin"
+)
+
+func (l *UserLogic) CreateUser(ctx *gin.Context, username string) (*entity.User, *xError.Error) {
+    // [!code highlight:2]
+    // 获取数据库连接
+    db := xCtxUtil.GetDB(ctx)
+
+    // [!code highlight:2]
+    // 生成用户 ID
+    userID := xCtxUtil.GenerateGeneSnowflakeID(ctx, xSnowflake.GeneUser)
+
+    user := &entity.User{
+        Username: username,
+    }
+    user.ID = userID
+
+    if err := db.Create(user).Error; err != nil {
+        return nil, xError.NewInternalServerError(ctx, "创建用户失败", err)
+    }
+
+    // [!code highlight:2]
+    // 缓存用户信息
+    rdb := xCtxUtil.GetRDB(ctx)
+    rdb.Set(ctx, "user:"+userID.String(), user, time.Hour)
+
+    return user, nil
+}
+```
+
+## 下一步
+
+<Cards>
+  <Card title="上下文键" href="./keys" />
+  <Card title="概述" href="./index" />
+</Cards>

@@ -1,0 +1,587 @@
+---
+title: 快速开始
+description: 5 分钟快速上手 Bamboo Base Go
+icon: Zap
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# 快速开始
+
+本指南将帮助你快速搭建一个基于 Bamboo Base Go 的 Web 服务。
+
+## 安装
+
+```bash
+go get github.com/bamboo-services/bamboo-base-go
+```
+
+## 项目结构
+
+推荐的项目结构：
+
+```
+your-project/
+├── main.go                     # 入口文件
+├── .env                        # 环境变量配置
+├── api/                        # API 请求/响应结构定义
+│   └── user/
+│       └── user.go
+├── internal/
+│   ├── app/
+│   │   ├── middleware/         # 中间件
+│   │   ├── route/              # 路由注册
+│   │   └── startup/            # 启动初始化
+│   ├── entity/                 # 数据库实体
+│   ├── handler/                # HTTP 处理器
+│   └── logic/                  # 业务逻辑层
+└── go.mod
+```
+
+## 环境配置
+
+创建 `.env` 文件：
+
+```bash title=".env"
+# 调试模式
+XLF_DEBUG=true
+
+# 服务配置
+XLF_HOST=localhost
+XLF_PORT=8080
+
+# 数据库配置
+DATABASE_HOST=localhost
+DATABASE_PORT=5432
+DATABASE_USER=postgres
+DATABASE_PASS=your_password
+DATABASE_NAME=your_database
+DATABASE_PREFIX=app_
+DATABASE_TIMEZONE=Asia/Shanghai
+
+# Redis 配置
+NOSQL_HOST=localhost
+NOSQL_PORT=6379
+NOSQL_PASS=
+NOSQL_DB=0
+NOSQL_POOL_SIZE=10
+
+# 雪花算法配置（可选，默认自动生成）
+SNOWFLAKE_DATACENTER_ID=1
+SNOWFLAKE_NODE_ID=1
+```
+
+## 入口文件
+
+```go title="main.go"
+package main
+
+import (
+    "context"
+    "errors"
+    "log/slog"
+    "net/http"
+    "os"
+    "os/signal"
+    "syscall"
+
+    xEnv "github.com/bamboo-services/bamboo-base-go/env"
+    xLog "github.com/bamboo-services/bamboo-base-go/log"
+    xReg "github.com/bamboo-services/bamboo-base-go/register"
+    "your-project/internal/app/route"
+    "your-project/internal/app/startup"
+)
+
+func main() {
+    // [!code highlight:2]
+    // 1. 初始化 bamboo-base-go 核心组件
+    reg := xReg.Register()
+
+    // [!code highlight:2]
+    // 2. 初始化业务层（数据库、Redis 等）
+    start := startup.Register(reg)
+
+    log := xLog.WithName(xLog.NamedMAIN)
+
+    // 3. 创建上下文
+    ctx, cancel := context.WithCancel(reg.Context)
+    defer cancel()
+
+    // 4. 监听中断信号
+    sigChan := make(chan os.Signal, 1)
+    signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+
+    // [!code highlight:2]
+    // 5. 注册路由
+    route.NewRoute(reg, start)
+
+    // 6. 创建 HTTP 服务器
+    getHost := xEnv.GetEnvString(xEnv.Host, "localhost")
+    getPort := xEnv.GetEnvString(xEnv.Port, "8080")
+    server := &http.Server{
+        Addr:    getHost + ":" + getPort,
+        Handler: reg.Serve,
+    }
+
+    // 7. 启动服务
+    go func() {
+        log.Info(reg.Context, "服务器启动成功", slog.String("addr", "http://"+server.Addr))
+        if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+            log.Error(reg.Context, err.Error())
+        }
+    }()
+
+    // 8. 优雅关闭
+    <-sigChan
+    log.Warn(reg.Context, "正在关闭服务器...")
+    if err := server.Shutdown(ctx); err != nil {
+        log.Error(reg.Context, err.Error())
+    }
+    log.Info(reg.Context, "服务器已安全退出")
+}
+```
+
+## 业务初始化
+
+```go title="internal/app/startup/startup.go"
+package startup
+
+import (
+    "context"
+
+    xReg "github.com/bamboo-services/bamboo-base-go/register"
+    "github.com/gin-gonic/gin"
+    "github.com/redis/go-redis/v9"
+    "gorm.io/gorm"
+)
+
+// [!code highlight:6]
+// Reg 业务注册结构
+type Reg struct {
+    Context context.Context
+    Serve   *gin.Engine
+    DB      *gorm.DB
+    RDB     *redis.Client
+}
+
+func Register(reg *xReg.Reg) *Reg {
+    r := &Reg{
+        Context: reg.Context,
+        Serve:   reg.Serve,
+    }
+
+    // [!code highlight:3]
+    // 初始化业务组件
+    r.databaseInit()  // 数据库
+    r.redisInit()     // Redis
+
+    return r
+}
+```
+
+## 数据库初始化
+
+```go title="internal/app/startup/startup_database.go"
+package startup
+
+import (
+    "log/slog"
+    "strings"
+
+    xEnv "github.com/bamboo-services/bamboo-base-go/env"
+    xLog "github.com/bamboo-services/bamboo-base-go/log"
+    "your-project/internal/entity"
+    "gorm.io/driver/postgres"
+    "gorm.io/gorm"
+    "gorm.io/gorm/schema"
+)
+
+// [!code highlight:4]
+// 需要自动迁移的数据表
+var migrateTables = []interface{}{
+    &entity.User{},
+}
+
+func (r *Reg) databaseInit() {
+    log := xLog.WithName(xLog.NamedINIT)
+    log.Debug(r.Context, "正在连接数据库...")
+
+    // [!code highlight:12]
+    // 构建 DSN
+    dsn := strings.Builder{}
+    dsn.WriteString("host=")
+    dsn.WriteString(xEnv.GetEnvString(xEnv.DatabaseHost, "localhost"))
+    dsn.WriteString(" user=")
+    dsn.WriteString(xEnv.GetEnvString(xEnv.DatabaseUser, "postgres"))
+    dsn.WriteString(" password=")
+    dsn.WriteString(xEnv.GetEnvString(xEnv.DatabasePass, ""))
+    dsn.WriteString(" dbname=")
+    dsn.WriteString(xEnv.GetEnvString(xEnv.DatabaseName, "postgres"))
+    dsn.WriteString(" port=")
+    dsn.WriteString(xEnv.GetEnvString(xEnv.DatabasePort, "5432"))
+    dsn.WriteString(" sslmode=disable")
+
+    // [!code highlight:11]
+    db, err := gorm.Open(postgres.Open(dsn.String()), &gorm.Config{
+        NamingStrategy: schema.NamingStrategy{
+            TablePrefix:   xEnv.GetEnvString(xEnv.DatabasePrefix, "app_"),
+            SingularTable: true,
+        },
+        Logger: xLog.NewSlogLogger(slog.Default().WithGroup(xLog.NamedREPO), xLog.GormLoggerConfig{
+            SlowThreshold:             200,
+            LogLevel:                  xLog.LevelInfo,
+            IgnoreRecordNotFoundError: true,
+        }),
+    })
+    if err != nil {
+        log.SugarPanic(r.Context, "连接数据库失败", "error", err.Error())
+    }
+
+    // [!code highlight:2]
+    // 自动迁移
+    _ = db.AutoMigrate(migrateTables...)
+
+    log.Info(r.Context, "数据库连接成功")
+    r.DB = db
+}
+```
+
+## Redis 初始化
+
+```go title="internal/app/startup/startup_redis.go"
+package startup
+
+import (
+    xEnv "github.com/bamboo-services/bamboo-base-go/env"
+    xLog "github.com/bamboo-services/bamboo-base-go/log"
+    "github.com/redis/go-redis/v9"
+)
+
+func (r *Reg) redisInit() {
+    log := xLog.WithName(xLog.NamedINIT)
+    log.Debug(r.Context, "正在连接 Redis...")
+
+    // [!code highlight:7]
+    rdb := redis.NewClient(&redis.Options{
+        Addr:     xEnv.GetEnvString(xEnv.NoSqlHost, "localhost") + ":" + xEnv.GetEnvString(xEnv.NoSqlPort, "6379"),
+        Password: xEnv.GetEnvString(xEnv.NoSqlPass, ""),
+        DB:       xEnv.GetEnvInt(xEnv.NoSqlDB, 0),
+        PoolSize: xEnv.GetEnvInt(xEnv.NoSqlPoolSize, 10),
+    })
+
+    log.Info(r.Context, "Redis 连接成功")
+    r.RDB = rdb
+}
+```
+
+## 实体定义
+
+```go title="internal/entity/user.go"
+package entity
+
+import (
+    xModels "github.com/bamboo-services/bamboo-base-go/models"
+    xSnowflake "github.com/bamboo-services/bamboo-base-go/snowflake"
+)
+
+// [!code highlight:7]
+// User 用户实体
+type User struct {
+    xModels.BaseEntity                    // 继承基础实体（ID、CreatedAt、UpdatedAt）
+    Username string `gorm:"type:varchar(64);uniqueIndex" json:"username"`
+    Email    string `gorm:"type:varchar(128);uniqueIndex" json:"email"`
+    Password string `gorm:"type:varchar(256)" json:"-"`
+}
+
+// [!code highlight:4]
+// GetGene 返回用户基因，用于雪花 ID 生成
+func (u *User) GetGene() xSnowflake.Gene {
+    return xSnowflake.GeneUser
+}
+```
+
+## 路由注册
+
+```go title="internal/app/route/route.go"
+package route
+
+import (
+    xMiddle "github.com/bamboo-services/bamboo-base-go/middleware"
+    xReg "github.com/bamboo-services/bamboo-base-go/register"
+    xRoute "github.com/bamboo-services/bamboo-base-go/route"
+    "your-project/internal/app/startup"
+    "your-project/internal/handler"
+)
+
+func NewRoute(xReg *xReg.Reg, reg *startup.Reg) {
+    engine := xReg.Serve
+
+    // [!code highlight:3]
+    // 全局异常处理
+    engine.NoMethod(xRoute.NoMethod)
+    engine.NoRoute(xRoute.NoRoute)
+
+    // [!code highlight:4]
+    // 全局中间件
+    engine.Use(xMiddle.ResponseMiddleware)
+    engine.Use(xMiddle.ReleaseAllCors)
+    engine.Use(xMiddle.AllowOption)
+
+    // [!code highlight:2]
+    // API 路由组
+    api := engine.Group("/api/v1")
+    {
+        userHandler := handler.NewUserHandler(reg.DB, reg.RDB)
+
+        // [!code highlight:4]
+        // 用户路由
+        user := api.Group("/user")
+        user.POST("/register", userHandler.Register)
+        user.POST("/login", userHandler.Login)
+    }
+}
+```
+
+## Handler 编写
+
+```go title="internal/handler/user.go"
+package handler
+
+import (
+    xError "github.com/bamboo-services/bamboo-base-go/error"
+    xLog "github.com/bamboo-services/bamboo-base-go/log"
+    xResult "github.com/bamboo-services/bamboo-base-go/result"
+    xVaild "github.com/bamboo-services/bamboo-base-go/validator"
+    "github.com/gin-gonic/gin"
+    "github.com/redis/go-redis/v9"
+    "gorm.io/gorm"
+    apiUser "your-project/api/user"
+    "your-project/internal/logic"
+)
+
+type UserHandler struct {
+    db      *gorm.DB
+    rdb     *redis.Client
+    log     *xLog.LogNamedLogger
+    service *logic.UserLogic
+}
+
+func NewUserHandler(db *gorm.DB, rdb *redis.Client) *UserHandler {
+    return &UserHandler{
+        db:      db,
+        rdb:     rdb,
+        log:     xLog.WithName(xLog.NamedCONT),
+        service: logic.NewUserLogic(db, rdb),
+    }
+}
+
+// [!code highlight]
+// Register 用户注册
+func (h *UserHandler) Register(ctx *gin.Context) {
+    h.log.Info(ctx, "开始处理用户注册请求")
+
+    // [!code highlight:5]
+    // 1. 验证并绑定数据
+    var req apiUser.RegisterRequest
+    if err := ctx.ShouldBindBodyWithJSON(&req); err != nil {
+        xVaild.HandleValidationError(ctx, err)
+        return
+    }
+
+    // [!code highlight:5]
+    // 2. 调用业务逻辑
+    user, xErr := h.service.CreateUser(ctx, req.Username, req.Email, req.Password)
+    if xErr != nil {
+        _ = ctx.Error(xErr)  // 传递给错误中间件处理
+        return
+    }
+
+    // [!code highlight:2]
+    // 3. 返回成功响应
+    xResult.SuccessHasData(ctx, "注册成功", user)
+}
+
+// [!code highlight]
+// Login 用户登录
+func (h *UserHandler) Login(ctx *gin.Context) {
+    h.log.Info(ctx, "开始处理用户登录请求")
+
+    var req apiUser.LoginRequest
+    if err := ctx.ShouldBindBodyWithJSON(&req); err != nil {
+        xVaild.HandleValidationError(ctx, err)
+        return
+    }
+
+    // 查找用户
+    user, xErr := h.service.GetUserByUsername(ctx, req.Username)
+    if xErr != nil {
+        _ = ctx.Error(xErr)
+        return
+    }
+
+    // 验证密码
+    if !h.service.VerifyPassword(user.Password, req.Password) {
+        // [!code highlight:2]
+        // 创建错误并传递给中间件
+        _ = ctx.Error(xError.NewError(ctx, xError.Unauthorized, "用户名或密码错误", false))
+        return
+    }
+
+    xResult.SuccessHasData(ctx, "登录成功", user)
+}
+```
+
+## Logic 层编写
+
+```go title="internal/logic/user.go"
+package logic
+
+import (
+    xError "github.com/bamboo-services/bamboo-base-go/error"
+    xLog "github.com/bamboo-services/bamboo-base-go/log"
+    xUtil "github.com/bamboo-services/bamboo-base-go/utility"
+    xCtxUtil "github.com/bamboo-services/bamboo-base-go/utility/ctxutil"
+    "github.com/gin-gonic/gin"
+    "github.com/redis/go-redis/v9"
+    "gorm.io/gorm"
+    "your-project/internal/entity"
+)
+
+type UserLogic struct {
+    db  *gorm.DB
+    rdb *redis.Client
+    log *xLog.LogNamedLogger
+}
+
+func NewUserLogic(db *gorm.DB, rdb *redis.Client) *UserLogic {
+    return &UserLogic{
+        db:  db,
+        rdb: rdb,
+        log: xLog.WithName(xLog.NamedLOGC),
+    }
+}
+
+// [!code highlight]
+// CreateUser 创建用户
+func (l *UserLogic) CreateUser(ctx *gin.Context, username, email, password string) (*entity.User, *xError.Error) {
+    l.log.Info(ctx, "开始创建用户")
+
+    // 检查用户名是否存在
+    var count int64
+    l.db.Model(&entity.User{}).Where("username = ?", username).Count(&count)
+    if count > 0 {
+        // [!code highlight]
+        return nil, xError.NewError(ctx, xError.Existed, "用户名已存在", false)
+    }
+
+    // 加密密码
+    hashedPassword, err := xUtil.HashPassword(password)
+    if err != nil {
+        // [!code highlight]
+        return nil, xError.NewInternalServerError(ctx, "密码加密失败", err)
+    }
+
+    // [!code highlight:2]
+    // 生成雪花 ID
+    userID := xCtxUtil.GenerateGeneSnowflakeID(ctx, entity.User{}.GetGene())
+
+    user := &entity.User{
+        Username: username,
+        Email:    email,
+        Password: hashedPassword,
+    }
+    user.ID = userID
+
+    if err := l.db.Create(user).Error; err != nil {
+        // [!code highlight]
+        return nil, xError.NewInternalServerError(ctx, "创建用户失败", err)
+    }
+
+    return user, nil
+}
+
+// [!code highlight]
+// GetUserByUsername 根据用户名获取用户
+func (l *UserLogic) GetUserByUsername(ctx *gin.Context, username string) (*entity.User, *xError.Error) {
+    var user entity.User
+    if err := l.db.Where("username = ?", username).First(&user).Error; err != nil {
+        if err == gorm.ErrRecordNotFound {
+            // [!code highlight]
+            return nil, xError.NewError(ctx, xError.UserNotFound, "用户不存在", false, err)
+        }
+        // [!code highlight]
+        return nil, xError.NewInternalServerError(ctx, "查询用户失败", err)
+    }
+    return &user, nil
+}
+
+// VerifyPassword 验证密码
+func (l *UserLogic) VerifyPassword(hashedPassword, password string) bool {
+    return xUtil.VerifyPassword(password, hashedPassword) == nil
+}
+```
+
+## API 结构定义
+
+```go title="api/user/user.go"
+package user
+
+import "your-project/internal/entity"
+
+// RegisterRequest 注册请求
+type RegisterRequest struct {
+    Username string `json:"username" binding:"required,min=3,max=32"`
+    Email    string `json:"email" binding:"required,email"`
+    Password string `json:"password" binding:"required,min=6"`
+}
+
+// LoginRequest 登录请求
+type LoginRequest struct {
+    Username string `json:"username" binding:"required"`
+    Password string `json:"password" binding:"required"`
+}
+
+// UserResponse 用户响应
+type UserResponse struct {
+    *entity.User
+    Token string `json:"token,omitempty"`
+}
+```
+
+## 运行项目
+
+```bash
+# 启动服务
+go run main.go
+```
+
+启动成功后，你将看到类似输出：
+
+```
+2024-01-15 10:00:00 [INFO] [INIT] 初始化系统上下文
+2024-01-15 10:00:00 [INFO] [INIT] 数据库连接成功
+2024-01-15 10:00:00 [INFO] [INIT] Redis 连接成功
+2024-01-15 10:00:00 [INFO] [MAIN] 服务器启动成功 addr=http://localhost:8080
+```
+
+## 测试接口
+
+```bash
+# 注册用户
+curl -X POST http://localhost:8080/api/v1/user/register \
+  -H "Content-Type: application/json" \
+  -d '{"username":"test","email":"test@example.com","password":"123456"}'
+
+# 用户登录
+curl -X POST http://localhost:8080/api/v1/user/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"test","password":"123456"}'
+```
+
+## 下一步
+
+<Cards>
+  <Card title="核心架构" href="./architecture" />
+  <Card title="初始化详解" href="./core/init" />
+  <Card title="响应处理" href="./core/result" />
+</Cards>

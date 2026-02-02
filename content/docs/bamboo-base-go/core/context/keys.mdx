@@ -1,0 +1,146 @@
+---
+title: 上下文键
+description: xCtx 包定义的上下文键常量
+icon: Key
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# 上下文键
+
+`xCtx` 包定义了用于在 Gin 上下文中存储和获取数据的键常量。
+
+```go
+import xCtx "github.com/bamboo-services/bamboo-base-go/context"
+// 或
+import xConsts "github.com/bamboo-services/bamboo-base-go/context"
+```
+
+## ContextKey 类型
+
+```go title="context.go"
+// [!code highlight]
+type ContextKey string
+
+func (s ContextKey) String() string {
+    return string(s)
+}
+```
+
+## 预定义键
+
+```go title="context.go"
+const (
+    // [!code highlight:7]
+    RequestKey       ContextKey = "context_request_key"     // 请求唯一标识
+    ErrorCodeKey     ContextKey = "context_error_code"      // 错误码
+    ErrorMessageKey  ContextKey = "context_error_message"   // 错误描述
+    UserStartTimeKey ContextKey = "context_user_start_time" // 请求开始时间
+    DatabaseKey      ContextKey = "context_database"        // 数据库客户端
+    RedisClientKey   ContextKey = "context_redis_client"    // Redis 客户端
+    SnowflakeNodeKey ContextKey = "context_snowflake_node"  // 雪花算法节点
+)
+```
+
+## 键说明
+
+<TypeTable
+  type={{
+    RequestKey: {
+      description: '请求唯一标识，UUID 格式，用于链路追踪和日志关联',
+      type: 'string',
+      required: true,
+    },
+    ErrorCodeKey: {
+      description: '错误码，用于错误处理中间件',
+      type: '*xError.ErrorCode',
+      required: true,
+    },
+    ErrorMessageKey: {
+      description: '错误描述信息，用于错误处理中间件',
+      type: 'string',
+      required: true,
+    },
+    UserStartTimeKey: {
+      description: '请求开始时间，用于计算请求耗时',
+      type: 'time.Time',
+      required: true,
+    },
+    DatabaseKey: {
+      description: 'GORM 数据库连接实例',
+      type: '*gorm.DB',
+      required: true,
+    },
+    RedisClientKey: {
+      description: 'Redis 客户端实例',
+      type: '*redis.Client',
+      required: true,
+    },
+    SnowflakeNodeKey: {
+      description: '雪花算法节点，用于生成分布式唯一 ID',
+      type: '*xSnowflake.Node',
+      required: true,
+    },
+  }}
+/>
+
+## 使用方式
+
+### 设置值
+
+```go
+import xConsts "github.com/bamboo-services/bamboo-base-go/context"
+
+func MyMiddleware(c *gin.Context) {
+    // [!code highlight:2]
+    // 使用 String() 方法获取键名
+    c.Set(xConsts.DatabaseKey.String(), db)
+
+    // [!code highlight]
+    c.Set(xConsts.RedisClientKey.String(), rdb)
+
+    c.Next()
+}
+```
+
+### 获取值
+
+```go
+import xConsts "github.com/bamboo-services/bamboo-base-go/context"
+
+func MyHandler(c *gin.Context) {
+    // [!code highlight:3]
+    // 获取并类型断言
+    value, exists := c.Get(xConsts.DatabaseKey.String())
+    if exists {
+        db := value.(*gorm.DB)
+    }
+
+    // [!code highlight:2]
+    // 获取字符串值
+    requestID := c.GetString(xConsts.RequestKey.String())
+
+    // [!code highlight:2]
+    // 获取时间值
+    startTime := c.GetTime(xConsts.UserStartTimeKey.String())
+}
+```
+
+## 注入时机
+
+| 键 | 注入位置 | 说明 |
+|-----|---------|------|
+| `RequestKey` | `xHelper.RequestContext()` | 框架自动注入 |
+| `UserStartTimeKey` | `xHelper.RequestContext()` | 框架自动注入 |
+| `SnowflakeNodeKey` | `xReg.SystemContextInit()` | 框架自动注入 |
+| `DatabaseKey` | 业务中间件 | 需手动注入 |
+| `RedisClientKey` | 业务中间件 | 需手动注入 |
+| `ErrorCodeKey` | 错误处理中间件 | 错误时自动设置 |
+| `ErrorMessageKey` | 错误处理中间件 | 错误时自动设置 |
+
+## 下一步
+
+<Cards>
+  <Card title="工具函数" href="./util" />
+  <Card title="概述" href="./index" />
+</Cards>

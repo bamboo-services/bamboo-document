@@ -1,41 +1,135 @@
 ---
-title: 核心架构
+title: 核心说明
 description: Bamboo Base 整体架构设计与模块说明
 icon: Layers
 ---
 
+import { TypeTable } from '@/components/type-table';
+
 # 核心架构
 
-## 整体架构设计
+## 项目概述
 
-Bamboo Base 采用分层架构设计，核心模块围绕 `Reg` 注册中心展开：
+**模块名称**: `github.com/bamboo-services/bamboo-base-go`
 
-<Mermaid
-  chart="
-graph TB
-    subgraph Application[Application Layer]
-        Router[Router<br/>路由层]
-        Middleware[Middleware<br/>中间件层]
-        Handler[Handler<br/>处理层]
-    end
-    subgraph Web[Web Layer]
-        Reg[Reg<br/>注册中心]
-        Engine[Engine<br/>Gin 引擎]
-        Response[BaseResponse<br/>统一响应]
-    end
-    subgraph Service[Service Layer]
-        Logger[Logger<br/>日志服务]
-        Snowflake[Snowflake<br/>ID 生成]
-        Config[Config<br/>配置管理]
-    end
-    subgraph Data[Data Layer]
-        GORM[GORM<br/>ORM 框架]
-        Redis[Redis<br/>缓存服务]
-        Models[Models<br/>模型基类]
-    end
-    Application --> Web
-    Web --> Service
-    Service --> Data"
+**Go 版本**: 1.24+
+
+**项目定位**: Go 语言基础框架库，为 Bamboo 服务提供核心功能支持，包括日志、错误处理、雪花算法 ID 生成、验证器、中间件等基础设施。
+
+## 包结构说明
+
+```
+github.com/bamboo-services/bamboo-base-go/
+├── base_response.go        # 根包：统一响应结构体 (xBase)
+│
+├── context/                # 上下文常量 (xCtx/xConsts)
+├── env/                    # 环境变量管理 (xEnv)
+├── error/                  # 错误码和错误处理 (xError)
+├── helper/                 # 核心中间件 (xHelper)
+├── hook/                   # 钩子函数 (xHook)
+├── http/                   # HTTP 常量 (xHttp)
+├── log/                    # 日志系统 (xLog)
+├── middleware/             # 业务中间件 (xMiddle)
+├── models/                 # 数据模型基类 (xModels)
+├── register/               # 应用注册和初始化 (xReg)
+├── result/                 # 响应结果处理 (xResult)
+├── route/                  # 路由处理 (xRoute)
+├── snowflake/              # 雪花算法 ID 生成 (xSnowflake)
+├── utility/                # 工具函数 (xUtil)
+│   └── ctxutil/            # 上下文工具 (xCtxUtil)
+└── validator/              # 验证器 (xVaild)
+```
+
+## 包导入别名
+
+<TypeTable
+  type={{
+    'xBase': {
+      description: '根包，统一响应结构体 BaseResponse',
+      type: 'github.com/bamboo-services/bamboo-base-go',
+      required: true,
+    },
+    'xCtx': {
+      description: '上下文键常量定义',
+      type: '.../context',
+      required: true,
+    },
+    'xEnv': {
+      description: '环境变量管理，类型安全的读取函数',
+      type: '.../env',
+      required: true,
+    },
+    'xError': {
+      description: '错误码定义和错误处理',
+      type: '.../error',
+      required: true,
+    },
+    'xHelper': {
+      description: '核心中间件（请求上下文、Panic 恢复、HTTP 日志）',
+      type: '.../helper',
+      required: true,
+    },
+    'xHook': {
+      description: 'Redis 钩子，自动添加键前缀',
+      type: '.../hook',
+      required: true,
+    },
+    'xHttp': {
+      description: 'HTTP 相关常量（请求头等）',
+      type: '.../http',
+      required: true,
+    },
+    'xLog': {
+      description: '日志系统，支持彩色控制台和 JSON 文件输出',
+      type: '.../log',
+      required: true,
+    },
+    'xMiddle': {
+      description: '业务中间件（CORS、响应处理等）',
+      type: '.../middleware',
+      required: true,
+    },
+    'xModels': {
+      description: 'GORM 实体基类，自动生成雪花 ID',
+      type: '.../models',
+      required: true,
+    },
+    'xReg': {
+      description: '应用注册和初始化',
+      type: '.../register',
+      required: true,
+    },
+    'xResult': {
+      description: '响应结果处理函数',
+      type: '.../result',
+      required: true,
+    },
+    'xRoute': {
+      description: '路由处理（404、405）',
+      type: '.../route',
+      required: true,
+    },
+    'xSnowflake': {
+      description: '雪花算法 ID 生成，支持业务基因',
+      type: '.../snowflake',
+      required: true,
+    },
+    'xUtil': {
+      description: '通用工具函数',
+      type: '.../utility',
+      required: true,
+    },
+    'xCtxUtil': {
+      description: '上下文工具函数',
+      type: '.../utility/ctxutil',
+      required: true,
+    },
+    'xVaild': {
+      description: '验证器扩展，自定义规则和中文翻译',
+      type: '.../validator',
+      required: true,
+    },
+  }}
 />
 
 ## 模块依赖关系
@@ -43,101 +137,75 @@ graph TB
 <Mermaid
   chart="
 graph TD
-    App[Application]
-    App --> Router[Router]
-    App --> Middleware[Middleware]
-    App --> Handler[Handler]
-    Router --> Reg[Reg<br/>注册中心]
-    Middleware --> Reg
-    Handler --> Reg
-    Reg --> Config[Config<br/>配置管理]
-    Reg --> Logger[Logger<br/>日志服务]
-    Reg --> Snowflake[Snowflake<br/>ID 生成器]"
+    xBase[xBase<br/>BaseResponse] --> xError[xError<br/>错误处理]
+
+    xReg[xReg<br/>注册中心] --> xLog[xLog<br/>日志系统]
+    xReg --> xSnowflake[xSnowflake<br/>雪花算法]
+    xReg --> xHelper[xHelper<br/>核心中间件]
+    xReg --> xVaild[xVaild<br/>验证器]
+
+    xResult[xResult<br/>响应处理] --> xBase
+    xResult --> xError
+    xResult --> xLog
+
+    xModels[xModels<br/>数据模型] --> xSnowflake
+
+    xCtxUtil[xCtxUtil<br/>上下文工具] --> xCtx[xCtx<br/>上下文常量]
+    xCtxUtil --> xSnowflake"
 />
 
-## 包结构说明
-
-```
-github.com/bamboo-services/bamboo-base-go/
-├── web/                    # Web 核心模块
-│   ├── register.go         # Reg 注册中心
-│   ├── engine.go           # Gin 引擎封装
-│   ├── config.go           # 配置管理
-│   ├── logger.go           # 日志服务
-│   ├── snowflake.go        # 雪花算法
-│   ├── base_response.go    # 统一响应
-│   └── result/             # 响应结果包
-│       └── result.go
-│
-├── models/                 # 模型基类
-│   ├── base_entity.go      # 基础实体
-│   └── soft_delete.go      # 软删除实体
-│
-├── middleware/             # 中间件
-│   ├── response.go         # 响应中间件
-│   └── cors.go             # 跨域中间件
-│
-├── utils/                  # 工具库
-│   ├── string.go           # 字符串工具
-│   ├── time.go             # 时间工具
-│   └── ctxutil/            # 上下文工具
-│       └── ctxutil.go
-│
-└── error/                  # 错误处理
-    └── error.go            # 错误定义
-```
-
 ## 初始化流程
-
-Bamboo Base 的初始化遵循固定的顺序：
-
-```go
-// 1. 初始化注册中心
-web.InitRegister()
-
-// 2. 初始化配置（读取 .env 文件）
-web.Register.ConfigInit()
-
-// 3. 初始化日志系统
-web.Register.LoggerInit()
-
-// 4. 初始化雪花算法
-web.Register.SnowflakeInit(datacenterID, nodeID)
-
-// 5. 初始化 Gin 引擎
-web.Register.EngineInit()
-
-// 6. 初始化系统上下文
-web.Register.SystemContextInit()
-
-// 7. 启动服务
-web.Register.Run(":8080")
-```
-
-### 初始化流程图
 
 <Mermaid
   chart="
 flowchart TD
-    A[InitRegister<br/>创建 Reg 实例] --> B[ConfigInit<br/>读取 .env 配置文件]
-    B --> C[LoggerInit<br/>初始化 slog 设置输出目标]
+    A[Register] --> B[ConfigInit<br/>加载 .env 配置]
+    B --> C[LoggerInit<br/>初始化日志系统]
     C --> D[SnowflakeInit<br/>初始化雪花算法节点]
-    D --> E[EngineInit<br/>创建 Gin 引擎 配置中间件]
-    E --> F[SystemContextInit<br/>初始化系统级上下文信息]
-    F --> G[Run<br/>启动 HTTP 服务]"
+    D --> E[EngineInit<br/>创建 Gin 引擎]
+    E --> F[SystemContextInit<br/>注册系统上下文中间件]
+    F --> G[返回 *Reg]"
 />
+
+```go title="main.go"
+package main
+
+import (
+    xReg "github.com/bamboo-services/bamboo-base-go/register"
+)
+
+func main() {
+    // [!code highlight]
+    // 一键初始化所有组件
+    reg := xReg.Register()
+
+    // 注册路由...
+
+    // [!code highlight]
+    reg.Serve.Run(":8080")
+}
+```
+
+## 核心依赖
+
+| 依赖 | 版本 | 用途 |
+|------|------|------|
+| `gin-gonic/gin` | v1.10+ | Web 框架 |
+| `go-playground/validator` | v10.30+ | 验证器 |
+| `joho/godotenv` | v1.5+ | 环境变量加载 |
+| `redis/go-redis` | v9.14+ | Redis 客户端 |
+| `gorm.io/gorm` | v1.30+ | ORM 框架 |
 
 ## 设计原则
 
-1. **单一职责** - 每个模块只负责特定的功能领域
-2. **依赖注入** - 通过 Reg 注册中心管理所有依赖
-3. **接口抽象** - 核心功能通过接口定义，便于扩展和测试
-4. **约定优于配置** - 提供合理的默认值，减少配置负担
+1. **单一职责** - 每个包只负责特定的功能领域
+2. **统一命名** - 所有包使用 `x` 前缀别名，便于识别
+3. **约定优于配置** - 提供合理的默认值，减少配置负担
+4. **链路追踪** - 请求 ID 贯穿整个请求生命周期
 
 ## 下一步
 
 <Cards>
-  <Card title="注册系统" href="./register" />
-  <Card title="统一响应" href="./response" />
-  <Card title="错误处理" href="./error" />
+  <Card title="快速开始" href="./core/init" />
+  <Card title="响应处理" href="./core/result" />
 </Cards>

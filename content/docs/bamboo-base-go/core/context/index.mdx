@@ -1,0 +1,109 @@
+---
+title: 概述
+description: 上下文管理机制，实现请求生命周期内的数据共享
+icon: Layers
+---
+
+# 上下文管理
+
+Bamboo Base 提供了完整的上下文管理机制，用于在请求生命周期内共享数据。
+
+## 相关包
+
+| 包 | 别名 | 说明 |
+|-----|------|------|
+| `.../context` | `xCtx` / `xConsts` | 上下文键常量定义 |
+| `.../utility/ctxutil` | `xCtxUtil` | 上下文工具函数 |
+| `.../helper` | `xHelper` | 上下文中间件 |
+
+## 工作原理
+
+<Mermaid
+  chart="
+sequenceDiagram
+    participant Client
+    participant Middleware
+    participant Handler
+    participant Service
+
+    Client->>Middleware: HTTP 请求
+    Note over Middleware: RequestContext 中间件
+    Middleware->>Middleware: 生成 RequestID
+    Middleware->>Middleware: 记录开始时间
+    Middleware->>Middleware: 注入 DB/Redis/Snowflake
+    Middleware->>Handler: ctx.Next()
+    Handler->>Service: 传递 ctx
+    Service->>Service: xCtxUtil.GetDB(ctx)
+    Service->>Service: xCtxUtil.GetRDB(ctx)
+    Service-->>Handler: 返回结果
+    Handler-->>Client: 响应"
+/>
+
+## 上下文数据流
+
+```go title="请求生命周期"
+// [!code highlight:2]
+// 1. RequestContext 中间件注入基础数据
+xHelper.RequestContext()
+    ├── RequestKey       → UUID 请求标识
+    └── UserStartTimeKey → 请求开始时间
+
+// [!code highlight:2]
+// 2. SystemContextInit 注入系统资源
+xReg.SystemContextInit()
+    └── SnowflakeNodeKey → 雪花算法节点
+
+// [!code highlight:2]
+// 3. 业务中间件注入业务资源
+businessContextInit()
+    ├── DatabaseKey      → GORM 数据库连接
+    └── RedisClientKey   → Redis 客户端
+```
+
+## 快速使用
+
+```go
+import (
+    xCtxUtil "github.com/bamboo-services/bamboo-base-go/utility/ctxutil"
+)
+
+func MyHandler(ctx *gin.Context) {
+    // [!code highlight:2]
+    // 获取数据库连接
+    db := xCtxUtil.GetDB(ctx)
+
+    // [!code highlight:2]
+    // 获取 Redis 客户端
+    rdb := xCtxUtil.GetRDB(ctx)
+
+    // [!code highlight:2]
+    // 生成雪花 ID
+    id := xCtxUtil.GenerateSnowflakeID(ctx)
+
+    // [!code highlight:2]
+    // 获取请求 ID
+    requestID := xCtxUtil.GetRequestKey(ctx)
+}
+```
+
+## 注入上下文
+
+在业务初始化时注入数据库和 Redis：
+
+```go title="startup_context.go"
+func (r *Reg) businessContextInit() {
+    // [!code highlight:6]
+    r.Serve.Use(func(c *gin.Context) {
+        c.Set(xConsts.DatabaseKey.String(), r.DB)
+        c.Set(xConsts.RedisClientKey.String(), r.RDB)
+        c.Next()
+    })
+}
+```
+
+## 下一步
+
+<Cards>
+  <Card title="上下文键" href="./keys" />
+  <Card title="工具函数" href="./util" />
+</Cards>

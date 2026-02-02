@@ -6,6 +6,7 @@
   "defaultOpen": true,
   "pages": [
     "index",
+    "quick-start",
     "architecture",
     "---核心架构---",
     "...core",
