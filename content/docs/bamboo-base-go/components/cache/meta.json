@@ -1,0 +1,11 @@
+{
+  "title": "缓存",
+  "icon": "Database",
+  "pages": [
+    "index",
+    "key-cache",
+    "hash-cache",
+    "set-cache",
+    "list-cache"
+  ]
+}

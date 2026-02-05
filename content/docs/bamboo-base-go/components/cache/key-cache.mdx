@@ -1,0 +1,395 @@
+---
+title: KeyCache
+description: 基于字符串数据结构的键值对缓存接口
+icon: Key
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# KeyCache
+
+`KeyCache` 定义了基于字符串（String）数据结构的缓存操作接口，用于管理单一键值对数据。
+
+## 接口定义
+
+```go
+type KeyCache[K any, V any] interface {
+    Get(ctx *gin.Context, key K) (*V, bool, error)
+    Set(ctx *gin.Context, key K, value *V) error
+    Exists(ctx *gin.Context, key K) (bool, error)
+    Delete(ctx *gin.Context, key K) error
+}
+```
+
+## 泛型参数
+
+<TypeTable
+  type={{
+    K: {
+      description: '缓存键的类型，用于标识特定的缓存项',
+      type: 'any',
+      required: true,
+    },
+    V: {
+      description: '缓存值的类型',
+      type: 'any',
+      required: true,
+    },
+  }}
+/>
+
+## 方法说明
+
+### Get
+
+根据键检索值。
+
+```go
+Get(ctx *gin.Context, key K) (*V, bool, error)
+```
+
+**参数：**
+- `ctx` - Gin 上下文
+- `key` - 缓存键
+
+**返回值：**
+- `*V` - 指向值的指针（如果存在）
+- `bool` - 键是否存在
+- `error` - 错误信息
+
+### Set
+
+将键值对存入缓存。
+
+```go
+Set(ctx *gin.Context, key K, value *V) error
+```
+
+**参数：**
+- `ctx` - Gin 上下文
+- `key` - 缓存键
+- `value` - 指向值的指针（可以为 nil）
+
+**返回值：**
+- `error` - 错误信息
+
+**注意：** 需要处理 `value` 为 `nil` 的场景。
+
+### Exists
+
+检查指定键是否存在。
+
+```go
+Exists(ctx *gin.Context, key K) (bool, error)
+```
+
+**参数：**
+- `ctx` - Gin 上下文
+- `key` - 缓存键
+
+**返回值：**
+- `bool` - 键是否存在
+- `error` - 错误信息
+
+### Delete
+
+从缓存中移除指定的键。
+
+```go
+Delete(ctx *gin.Context, key K) error
+```
+
+**参数：**
+- `ctx` - Gin 上下文
+- `key` - 缓存键
+
+**返回值：**
+- `error` - 错误信息
+
+## 实现示例
+
+### 用户缓存实现
+
+```go title="cache/user.go"
+import (
+    "context"
+    "encoding/json"
+    "time"
+
+    "github.com/gin-gonic/gin"
+    "github.com/redis/go-redis/v9"
+    xCache "github.com/bamboo-services/bamboo-base-go/cache"
+)
+
+type User struct {
+    ID       string `json:"id"`
+    Username string `json:"username"`
+    Email    string `json:"email"`
+}
+
+type UserCache struct {
+    *xCache.Cache
+}
+
+// [!code highlight:15]
+// Get 获取用户缓存
+func (c *UserCache) Get(ctx *gin.Context, userID string) (*User, bool, error) {
+    key := "user:" + userID
+
+    val, err := c.RDB.Get(ctx, key).Result()
+    if err == redis.Nil {
+        return nil, false, nil
+    }
+    if err != nil {
+        return nil, false, err
+    }
+
+    var user User
+    if err := json.Unmarshal([]byte(val), &user); err != nil {
+        return nil, false, err
+    }
+
+    return &user, true, nil
+}
+
+// [!code highlight:17]
+// Set 设置用户缓存
+func (c *UserCache) Set(ctx *gin.Context, userID string, user *User) error {
+    if user == nil {
+        return nil
+    }
+
+    key := "user:" + userID
+
+    data, err := json.Marshal(user)
+    if err != nil {
+        return err
+    }
+
+    return c.RDB.Set(ctx, key, data, c.TTL).Err()
+}
+
+// [!code highlight:5]
+// Exists 检查用户是否存在
+func (c *UserCache) Exists(ctx *gin.Context, userID string) (bool, error) {
+    key := "user:" + userID
+    count, err := c.RDB.Exists(ctx, key).Result()
+    return count > 0, err
+}
+
+// [!code highlight:4]
+// Delete 删除用户缓存
+func (c *UserCache) Delete(ctx *gin.Context, userID string) error {
+    key := "user:" + userID
+    return c.RDB.Del(ctx, key).Err()
+}
+```
+
+### 使用缓存
+
+```go title="service/user.go"
+type UserService struct {
+    cache *UserCache
+}
+
+func NewUserService(cache *xCache.Cache) *UserService {
+    return &UserService{
+        cache: &UserCache{Cache: cache},
+    }
+}
+
+// [!code highlight:11]
+// GetUser 获取用户（带缓存）
+func (s *UserService) GetUser(ctx *gin.Context, userID string) (*User, error) {
+    // 先从缓存获取
+    user, exists, err := s.cache.Get(ctx, userID)
+    if err != nil {
+        return nil, err
+    }
+    if exists {
+        return user, nil
+    }
+
+    // 缓存未命中，从数据库查询
+    user, err = s.getUserFromDB(userID)
+    if err != nil {
+        return nil, err
+    }
+
+    // [!code highlight:2]
+    // 写入缓存
+    _ = s.cache.Set(ctx, userID, user)
+
+    return user, nil
+}
+
+// [!code highlight:2]
+// DeleteUser 删除用户并清除缓存
+func (s *UserService) DeleteUser(ctx *gin.Context, userID string) error {
+    // 删除数据库记录
+    if err := s.deleteUserFromDB(userID); err != nil {
+        return err
+    }
+
+    // [!code highlight:2]
+    // 删除缓存
+    return s.cache.Delete(ctx, userID)
+}
+```
+
+## 使用场景
+
+### 用户信息缓存
+
+```go
+type UserCache interface {
+    xCache.KeyCache[string, User]
+}
+```
+
+适用于：
+- 用户基本信息
+- 用户权限信息
+- 用户配置
+
+### Token 缓存
+
+```go
+type TokenCache interface {
+    xCache.KeyCache[string, TokenInfo]
+}
+```
+
+适用于：
+- JWT Token
+- 刷新 Token
+- 临时访问凭证
+
+### 配置缓存
+
+```go
+type ConfigCache interface {
+    xCache.KeyCache[string, Config]
+}
+```
+
+适用于：
+- 系统配置
+- 功能开关
+- 动态参数
+
+## 最佳实践
+
+### 1. 统一键命名
+
+使用前缀区分不同类型的缓存：
+
+```go
+func (c *UserCache) Get(ctx *gin.Context, userID string) (*User, bool, error) {
+    // [!code highlight:2]
+    // 使用 "user:" 前缀
+    key := "user:" + userID
+    // ...
+}
+```
+
+### 2. 处理 nil 值
+
+在 `Set` 方法中正确处理 `nil` 值：
+
+```go
+func (c *UserCache) Set(ctx *gin.Context, userID string, user *User) error {
+    // [!code highlight:3]
+    // 如果值为 nil，直接返回
+    if user == nil {
+        return nil
+    }
+    // ...
+}
+```
+
+### 3. 错误处理
+
+区分缓存未命中和真实错误：
+
+```go
+func (c *UserCache) Get(ctx *gin.Context, userID string) (*User, bool, error) {
+    val, err := c.RDB.Get(ctx, key).Result()
+    // [!code highlight:3]
+    // 缓存未命中不是错误
+    if err == redis.Nil {
+        return nil, false, nil
+    }
+    // [!code highlight:3]
+    // 其他错误需要返回
+    if err != nil {
+        return nil, false, err
+    }
+    // ...
+}
+```
+
+### 4. 序列化选择
+
+根据场景选择合适的序列化方式：
+
+```go
+// JSON - 可读性好，兼容性强
+data, _ := json.Marshal(user)
+
+// MessagePack - 性能更好，体积更小
+data, _ := msgpack.Marshal(user)
+
+// Protocol Buffers - 强类型，跨语言
+data, _ := proto.Marshal(user)
+```
+
+## 性能优化
+
+### 批量操作
+
+虽然 `KeyCache` 接口不支持批量操作，但可以使用 Pipeline：
+
+```go
+func (c *UserCache) SetBatch(ctx *gin.Context, users map[string]*User) error {
+    pipe := c.RDB.Pipeline()
+
+    for userID, user := range users {
+        key := "user:" + userID
+        data, _ := json.Marshal(user)
+        pipe.Set(ctx, key, data, c.TTL)
+    }
+
+    _, err := pipe.Exec(ctx)
+    return err
+}
+```
+
+### 缓存预热
+
+在系统启动时预加载热点数据：
+
+```go
+func (s *UserService) WarmupCache(ctx context.Context) error {
+    // 获取热点用户列表
+    hotUsers, err := s.getHotUsers()
+    if err != nil {
+        return err
+    }
+
+    // 批量写入缓存
+    ginCtx := &gin.Context{}
+    for _, user := range hotUsers {
+        _ = s.cache.Set(ginCtx, user.ID, user)
+    }
+
+    return nil
+}
+```
+
+## 注意事项
+
+1. **TTL 管理**：合理设置过期时间，避免缓存雪崩
+2. **内存占用**：大对象考虑压缩或分片存储
+3. **并发安全**：Redis 操作本身是原子的，但业务逻辑需要注意
+4. **缓存一致性**：更新数据库后及时更新或删除缓存

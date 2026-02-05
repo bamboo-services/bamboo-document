@@ -1,0 +1,612 @@
+---
+title: ListCache
+description: 基于列表数据结构的有序可重复元素缓存接口
+icon: Key
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# ListCache
+
+`ListCache` 定义了基于列表（List）数据结构的缓存操作接口，用于管理有序且允许重复元素的列表数据。
+
+## 接口定义
+
+```go
+type ListCache[K any, V any] interface {
+    Prepend(ctx *gin.Context, key K, values ...V) error
+    Append(ctx *gin.Context, key K, values ...V) error
+    Range(ctx *gin.Context, key K, start int64, end int64) ([]V, error)
+    Index(ctx *gin.Context, key K, index int64) (*V, error)
+    Len(ctx *gin.Context, key K) (int64, error)
+    Pop(ctx *gin.Context, key K) (*V, error)
+    PopLast(ctx *gin.Context, key K) (*V, error)
+    Remove(ctx *gin.Context, key K, count int64, value V) error
+    Delete(ctx *gin.Context, key K) error
+}
+```
+
+## 泛型参数
+
+<TypeTable
+  type={{
+    K: {
+      description: '列表键的类型，用于标识特定的列表',
+      type: 'any',
+      required: true,
+    },
+    V: {
+      description: '列表元素的值类型',
+      type: 'any',
+      required: true,
+    },
+  }}
+/>
+
+## 数据特点
+
+- **有序性**：元素按插入顺序排列
+- **可重复**：允许存储相同的元素
+- **双端操作**：支持头尾插入和弹出
+
+```
+message:queue → ["msg1", "msg2", "msg3", "msg2"]
+                  ↑                          ↑
+                 头部                       尾部
+```
+
+## 方法说明
+
+### Prepend
+
+将一个或多个值插入到列表头部（左侧）。
+
+```go
+Prepend(ctx *gin.Context, key K, values ...V) error
+```
+
+**参数：**
+- `ctx` - Gin 上下文
+- `key` - 列表键
+- `values` - 要插入的值（可变参数）
+
+**返回值：**
+- `error` - 错误信息
+
+**注意：** 多个值按顺序插入，最后一个值会在最前面。
+
+### Append
+
+将一个或多个值追加到列表尾部（右侧）。
+
+```go
+Append(ctx *gin.Context, key K, values ...V) error
+```
+
+**参数：**
+- `ctx` - Gin 上下文
+- `key` - 列表键
+- `values` - 要追加的值（可变参数）
+
+**返回值：**
+- `error` - 错误信息
+
+### Range
+
+按索引范围获取列表元素。
+
+```go
+Range(ctx *gin.Context, key K, start int64, end int64) ([]V, error)
+```
+
+**参数：**
+- `ctx` - Gin 上下文
+- `key` - 列表键
+- `start` - 起始索引（支持负数）
+- `end` - 结束索引（支持负数）
+
+**返回值：**
+- `[]V` - 元素切片
+- `error` - 错误信息
+
+**索引说明：**
+- `0` 表示第一个元素
+- `-1` 表示最后一个元素
+- `-2` 表示倒数第二个元素
+
+### Index
+
+获取指定索引位置的元素。
+
+```go
+Index(ctx *gin.Context, key K, index int64) (*V, error)
+```
+
+**参数：**
+- `ctx` - Gin 上下文
+- `key` - 列表键
+- `index` - 索引位置（支持负数）
+
+**返回值：**
+- `*V` - 指向元素的指针
+- `error` - 错误信息
+
+### Len
+
+获取列表的长度。
+
+```go
+Len(ctx *gin.Context, key K) (int64, error)
+```
+
+**参数：**
+- `ctx` - Gin 上下文
+- `key` - 列表键
+
+**返回值：**
+- `int64` - 列表长度
+- `error` - 错误信息
+
+### Pop
+
+从列表头部弹出一个元素并返回。
+
+```go
+Pop(ctx *gin.Context, key K) (*V, error)
+```
+
+**参数：**
+- `ctx` - Gin 上下文
+- `key` - 列表键
+
+**返回值：**
+- `*V` - 指向弹出元素的指针
+- `error` - 错误信息
+
+### PopLast
+
+从列表尾部弹出一个元素并返回。
+
+```go
+PopLast(ctx *gin.Context, key K) (*V, error)
+```
+
+**参数：**
+- `ctx` - Gin 上下文
+- `key` - 列表键
+
+**返回值：**
+- `*V` - 指向弹出元素的指针
+- `error` - 错误信息
+
+### Remove
+
+从列表中移除指定数量的匹配元素。
+
+```go
+Remove(ctx *gin.Context, key K, count int64, value V) error
+```
+
+**参数：**
+- `ctx` - Gin 上下文
+- `key` - 列表键
+- `count` - 移除数量
+  - `count > 0`：从头部开始移除
+  - `count < 0`：从尾部开始移除
+  - `count = 0`：移除所有匹配项
+- `value` - 要移除的值
+
+**返回值：**
+- `error` - 错误信息
+
+### Delete
+
+删除整个列表。
+
+```go
+Delete(ctx *gin.Context, key K) error
+```
+
+**参数：**
+- `ctx` - Gin 上下文
+- `key` - 列表键
+
+**返回值：**
+- `error` - 错误信息
+
+## 实现示例
+
+### 消息队列缓存
+
+```go title="cache/message_queue.go"
+import (
+    "encoding/json"
+
+    "github.com/gin-gonic/gin"
+    "github.com/redis/go-redis/v9"
+    xCache "github.com/bamboo-services/bamboo-base-go/cache"
+)
+
+type Message struct {
+    ID      string `json:"id"`
+    Content string `json:"content"`
+    Time    int64  `json:"time"`
+}
+
+type MessageQueueCache struct {
+    *xCache.Cache
+}
+
+// [!code highlight:10]
+// Prepend 在队列头部插入消息
+func (c *MessageQueueCache) Prepend(ctx *gin.Context, queueName string, messages ...string) error {
+    key := "queue:" + queueName
+    values := make([]interface{}, len(messages))
+    for i, msg := range messages {
+        values[i] = msg
+    }
+    return c.RDB.LPush(ctx, key, values...).Err()
+}
+
+// [!code highlight:10]
+// Append 在队列尾部追加消息
+func (c *MessageQueueCache) Append(ctx *gin.Context, queueName string, messages ...string) error {
+    key := "queue:" + queueName
+    values := make([]interface{}, len(messages))
+    for i, msg := range messages {
+        values[i] = msg
+    }
+    return c.RDB.RPush(ctx, key, values...).Err()
+}
+
+// [!code highlight:5]
+// Range 获取指定范围的消息
+func (c *MessageQueueCache) Range(ctx *gin.Context, queueName string, start, end int64) ([]string, error) {
+    key := "queue:" + queueName
+    return c.RDB.LRange(ctx, key, start, end).Result()
+}
+
+// [!code highlight:9]
+// Index 获取指定位置的消息
+func (c *MessageQueueCache) Index(ctx *gin.Context, queueName string, index int64) (*string, error) {
+    key := "queue:" + queueName
+    val, err := c.RDB.LIndex(ctx, key, index).Result()
+    if err == redis.Nil {
+        return nil, nil
+    }
+    return &val, err
+}
+
+// [!code highlight:5]
+// Len 获取队列长度
+func (c *MessageQueueCache) Len(ctx *gin.Context, queueName string) (int64, error) {
+    key := "queue:" + queueName
+    return c.RDB.LLen(ctx, key).Result()
+}
+
+// [!code highlight:9]
+// Pop 从队列头部弹出消息
+func (c *MessageQueueCache) Pop(ctx *gin.Context, queueName string) (*string, error) {
+    key := "queue:" + queueName
+    val, err := c.RDB.LPop(ctx, key).Result()
+    if err == redis.Nil {
+        return nil, nil
+    }
+    return &val, err
+}
+
+// [!code highlight:9]
+// PopLast 从队列尾部弹出消息
+func (c *MessageQueueCache) PopLast(ctx *gin.Context, queueName string) (*string, error) {
+    key := "queue:" + queueName
+    val, err := c.RDB.RPop(ctx, key).Result()
+    if err == redis.Nil {
+        return nil, nil
+    }
+    return &val, err
+}
+
+// [!code highlight:5]
+// Remove 移除指定消息
+func (c *MessageQueueCache) Remove(ctx *gin.Context, queueName string, count int64, message string) error {
+    key := "queue:" + queueName
+    return c.RDB.LRem(ctx, key, count, message).Err()
+}
+
+// [!code highlight:4]
+// Delete 删除整个队列
+func (c *MessageQueueCache) Delete(ctx *gin.Context, queueName string) error {
+    key := "queue:" + queueName
+    return c.RDB.Del(ctx, key).Err()
+}
+```
+
+### 使用消息队列
+
+```go title="service/message_queue.go"
+type MessageQueueService struct {
+    cache *MessageQueueCache
+}
+
+func NewMessageQueueService(cache *xCache.Cache) *MessageQueueService {
+    return &MessageQueueService{
+        cache: &MessageQueueCache{Cache: cache},
+    }
+}
+
+// [!code highlight:7]
+// Enqueue 入队（追加到尾部）
+func (s *MessageQueueService) Enqueue(ctx *gin.Context, queueName string, message string) error {
+    return s.cache.Append(ctx, queueName, message)
+}
+
+// [!code highlight:5]
+// Dequeue 出队（从头部弹出）
+func (s *MessageQueueService) Dequeue(ctx *gin.Context, queueName string) (*string, error) {
+    return s.cache.Pop(ctx, queueName)
+}
+
+// [!code highlight:5]
+// Peek 查看队列头部（不弹出）
+func (s *MessageQueueService) Peek(ctx *gin.Context, queueName string) (*string, error) {
+    return s.cache.Index(ctx, queueName, 0)
+}
+
+// [!code highlight:5]
+// Size 获取队列大小
+func (s *MessageQueueService) Size(ctx *gin.Context, queueName string) (int64, error) {
+    return s.cache.Len(ctx, queueName)
+}
+
+// [!code highlight:5]
+// GetRecent 获取最近的 N 条消息
+func (s *MessageQueueService) GetRecent(ctx *gin.Context, queueName string, count int64) ([]string, error) {
+    return s.cache.Range(ctx, queueName, -count, -1)
+}
+```
+
+## 使用场景
+
+### 消息队列
+
+```go
+type MessageQueueCache interface {
+    xCache.ListCache[string, string]
+}
+```
+
+适用于：
+- 任务队列
+- 消息队列
+- 事件队列
+
+### 操作历史
+
+```go
+type HistoryCache interface {
+    xCache.ListCache[string, string]
+}
+```
+
+适用于：
+- 用户操作历史
+- 浏览历史
+- 搜索历史
+
+### 排行榜
+
+```go
+type LeaderboardCache interface {
+    xCache.ListCache[string, string]
+}
+```
+
+适用于：
+- 实时排行榜
+- 热门列表
+- 推荐列表
+
+### 栈结构
+
+```go
+type StackCache interface {
+    xCache.ListCache[string, string]
+}
+```
+
+适用于：
+- 撤销/重做功能
+- 状态栈
+- 调用栈
+
+## 最佳实践
+
+### 1. 队列模式
+
+使用 `Append` + `Pop` 实现 FIFO 队列：
+
+```go
+// 入队
+cache.Append(ctx, "queue", "msg1", "msg2", "msg3")
+
+// 出队
+msg, _ := cache.Pop(ctx, "queue")  // 返回 "msg1"
+```
+
+### 2. 栈模式
+
+使用 `Prepend` + `Pop` 实现 LIFO 栈：
+
+```go
+// 入栈
+cache.Prepend(ctx, "stack", "item1", "item2", "item3")
+
+// 出栈
+item, _ := cache.Pop(ctx, "stack")  // 返回 "item3"
+```
+
+### 3. 限制列表长度
+
+使用 `LTrim` 保持固定长度：
+
+```go
+func (c *MessageQueueCache) AppendWithLimit(ctx *gin.Context, queueName string, message string, maxLen int64) error {
+    key := "queue:" + queueName
+
+    // [!code highlight:2]
+    // 追加消息
+    if err := c.RDB.RPush(ctx, key, message).Err(); err != nil {
+        return err
+    }
+
+    // [!code highlight:2]
+    // 保留最新的 maxLen 条
+    return c.RDB.LTrim(ctx, key, -maxLen, -1).Err()
+}
+```
+
+### 4. 分页获取
+
+使用 `Range` 实现分页：
+
+```go
+func (s *MessageQueueService) GetPage(ctx *gin.Context, queueName string, page, pageSize int64) ([]string, error) {
+    start := (page - 1) * pageSize
+    end := start + pageSize - 1
+    return s.cache.Range(ctx, queueName, start, end)
+}
+```
+
+### 5. 批量操作
+
+使用可变参数批量插入：
+
+```go
+// ✅ 批量追加
+cache.Append(ctx, "queue", "msg1", "msg2", "msg3")
+
+// ❌ 逐个追加
+cache.Append(ctx, "queue", "msg1")
+cache.Append(ctx, "queue", "msg2")
+cache.Append(ctx, "queue", "msg3")
+```
+
+## 高级操作
+
+### 阻塞弹出
+
+实现阻塞队列（等待元素）：
+
+```go
+// 阻塞弹出（等待 5 秒）
+func (c *MessageQueueCache) BlockingPop(ctx *gin.Context, queueName string, timeout time.Duration) (*string, error) {
+    key := "queue:" + queueName
+    result, err := c.RDB.BLPop(ctx, timeout, key).Result()
+    if err == redis.Nil {
+        return nil, nil
+    }
+    if err != nil {
+        return nil, err
+    }
+    if len(result) < 2 {
+        return nil, nil
+    }
+    return &result[1], nil
+}
+```
+
+### 列表间移动
+
+将元素从一个列表移动到另一个：
+
+```go
+// 从源队列弹出并推入目标队列
+func (c *MessageQueueCache) Move(ctx *gin.Context, srcQueue, dstQueue string) error {
+    srcKey := "queue:" + srcQueue
+    dstKey := "queue:" + dstQueue
+    _, err := c.RDB.RPopLPush(ctx, srcKey, dstKey).Result()
+    return err
+}
+```
+
+### 插入到指定位置
+
+在某个元素前后插入：
+
+```go
+// 在 pivot 元素之前插入
+func (c *MessageQueueCache) InsertBefore(ctx *gin.Context, queueName, pivot, value string) error {
+    key := "queue:" + queueName
+    return c.RDB.LInsertBefore(ctx, key, pivot, value).Err()
+}
+
+// 在 pivot 元素之后插入
+func (c *MessageQueueCache) InsertAfter(ctx *gin.Context, queueName, pivot, value string) error {
+    key := "queue:" + queueName
+    return c.RDB.LInsertAfter(ctx, key, pivot, value).Err()
+}
+```
+
+## 性能优化
+
+### 使用 Pipeline
+
+批量操作多个列表：
+
+```go
+func (c *MessageQueueCache) EnqueueMultiple(ctx *gin.Context, messages map[string][]string) error {
+    pipe := c.RDB.Pipeline()
+
+    for queueName, msgs := range messages {
+        key := "queue:" + queueName
+        values := make([]interface{}, len(msgs))
+        for i, msg := range msgs {
+            values[i] = msg
+        }
+        pipe.RPush(ctx, key, values...)
+    }
+
+    _, err := pipe.Exec(ctx)
+    return err
+}
+```
+
+### 避免大列表
+
+限制列表长度，避免性能问题：
+
+```go
+const MaxQueueSize = 10000
+
+func (c *MessageQueueCache) Append(ctx *gin.Context, queueName string, messages ...string) error {
+    key := "queue:" + queueName
+
+    // [!code highlight:5]
+    // 检查长度
+    length, err := c.RDB.LLen(ctx, key).Result()
+    if err != nil {
+        return err
+    }
+
+    // [!code highlight:3]
+    // 超过限制则拒绝
+    if length+int64(len(messages)) > MaxQueueSize {
+        return errors.New("队列已满")
+    }
+
+    values := make([]interface{}, len(messages))
+    for i, msg := range messages {
+        values[i] = msg
+    }
+    return c.RDB.RPush(ctx, key, values...).Err()
+}
+```
+
+## 注意事项
+
+1. **索引范围**：`Range` 的 `end` 是包含的，不同于 Go 切片
+2. **负数索引**：`-1` 表示最后一个元素，`-2` 表示倒数第二个
+3. **空列表**：弹出空列表返回 `nil`，不是错误
+4. **内存占用**：大列表会占用较多内存，考虑分片
+5. **性能**：头部插入/删除比尾部慢，优先使用尾部操作
+6. **过期时间**：整个列表过期，无法为单个元素设置 TTL

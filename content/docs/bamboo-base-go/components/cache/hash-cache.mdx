@@ -1,0 +1,513 @@
+---
+title: HashCache
+description: 基于哈希数据结构的二维键值对缓存接口
+icon: Key
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# HashCache
+
+`HashCache` 定义了基于哈希（Hash）数据结构的缓存操作接口,用于管理二维键值对数据。
+
+## 接口定义
+
+```go
+type HashCache[K any, F comparable, V any] interface {
+    Get(ctx *gin.Context, key K, field F) (*V, bool, error)
+    Set(ctx *gin.Context, key K, field F, value *V) error
+    GetAll(ctx *gin.Context, key K) (map[F]V, error)
+    SetAll(ctx *gin.Context, key K, fields map[F]*V) error
+    Exists(ctx *gin.Context, key K, field F) (bool, error)
+    Remove(ctx *gin.Context, key K, fields ...F) error
+    Delete(ctx *gin.Context, key K) error
+}
+```
+
+## 泛型参数
+
+<TypeTable
+  type={{
+    K: {
+      description: '哈希键的类型，用于标识特定的哈希表',
+      type: 'any',
+      required: true,
+    },
+    F: {
+      description: '字段键的类型，用于标识哈希表中的特定字段',
+      type: 'comparable',
+      required: true,
+    },
+    V: {
+      description: '字段值的类型',
+      type: 'any',
+      required: true,
+    },
+  }}
+/>
+
+**注意：** 字段键类型 `F` 必须是可比较的（`comparable`），因为需要作为 map 的键。
+
+## 数据结构
+
+哈希结构为：`key → field → value`
+
+```
+user:123 → {
+    "name": "张三",
+    "email": "zhangsan@example.com",
+    "age": "25"
+}
+```
+
+## 方法说明
+
+### Get
+
+获取指定字段的值。
+
+```go
+Get(ctx *gin.Context, key K, field F) (*V, bool, error)
+```
+
+**参数：**
+- `ctx` - Gin 上下文
+- `key` - 哈希键
+- `field` - 字段键
+
+**返回值：**
+- `*V` - 指向值的指针（如果存在）
+- `bool` - 字段是否存在
+- `error` - 错误信息
+
+### Set
+
+设置单个字段的值。
+
+```go
+Set(ctx *gin.Context, key K, field F, value *V) error
+```
+
+**参数：**
+- `ctx` - Gin 上下文
+- `key` - 哈希键
+- `field` - 字段键
+- `value` - 指向值的指针
+
+**返回值：**
+- `error` - 错误信息
+
+### GetAll
+
+获取哈希表中的所有字段和值。
+
+```go
+GetAll(ctx *gin.Context, key K) (map[F]V, error)
+```
+
+**参数：**
+- `ctx` - Gin 上下文
+- `key` - 哈希键
+
+**返回值：**
+- `map[F]V` - 所有字段和值的映射
+- `error` - 错误信息
+
+### SetAll
+
+批量设置多个字段的值。
+
+```go
+SetAll(ctx *gin.Context, key K, fields map[F]*V) error
+```
+
+**参数：**
+- `ctx` - Gin 上下文
+- `key` - 哈希键
+- `fields` - 字段和值的映射
+
+**返回值：**
+- `error` - 错误信息
+
+### Exists
+
+检查指定字段是否存在。
+
+```go
+Exists(ctx *gin.Context, key K, field F) (bool, error)
+```
+
+**参数：**
+- `ctx` - Gin 上下文
+- `key` - 哈希键
+- `field` - 字段键
+
+**返回值：**
+- `bool` - 字段是否存在
+- `error` - 错误信息
+
+### Remove
+
+从哈希表中移除指定的字段。
+
+```go
+Remove(ctx *gin.Context, key K, fields ...F) error
+```
+
+**参数：**
+- `ctx` - Gin 上下文
+- `key` - 哈希键
+- `fields` - 要移除的字段列表（可变参数）
+
+**返回值：**
+- `error` - 错误信息
+
+### Delete
+
+删除整个哈希表。
+
+```go
+Delete(ctx *gin.Context, key K) error
+```
+
+**参数：**
+- `ctx` - Gin 上下文
+- `key` - 哈希键
+
+**返回值：**
+- `error` - 错误信息
+
+## 实现示例
+
+### 用户配置缓存
+
+```go title="cache/user_config.go"
+import (
+    "encoding/json"
+
+    "github.com/gin-gonic/gin"
+    "github.com/redis/go-redis/v9"
+    xCache "github.com/bamboo-services/bamboo-base-go/cache"
+)
+
+type UserConfig struct {
+    Theme    string `json:"theme"`
+    Language string `json:"language"`
+    Timezone string `json:"timezone"`
+}
+
+type UserConfigCache struct {
+    *xCache.Cache
+}
+
+// [!code highlight:17]
+// Get 获取单个配置项
+func (c *UserConfigCache) Get(ctx *gin.Context, userID string, field string) (*string, bool, error) {
+    key := "user:config:" + userID
+
+    val, err := c.RDB.HGet(ctx, key, field).Result()
+    if err == redis.Nil {
+        return nil, false, nil
+    }
+    if err != nil {
+        return nil, false, err
+    }
+
+    return &val, true, nil
+}
+
+// [!code highlight:5]
+// Set 设置单个配置项
+func (c *UserConfigCache) Set(ctx *gin.Context, userID string, field string, value *string) error {
+    key := "user:config:" + userID
+    return c.RDB.HSet(ctx, key, field, *value).Err()
+}
+
+// [!code highlight:13]
+// GetAll 获取所有配置
+func (c *UserConfigCache) GetAll(ctx *gin.Context, userID string) (map[string]string, error) {
+    key := "user:config:" + userID
+
+    result, err := c.RDB.HGetAll(ctx, key).Result()
+    if err != nil {
+        return nil, err
+    }
+
+    return result, nil
+}
+
+// [!code highlight:13]
+// SetAll 批量设置配置
+func (c *UserConfigCache) SetAll(ctx *gin.Context, userID string, fields map[string]*string) error {
+    key := "user:config:" + userID
+
+    data := make(map[string]interface{})
+    for field, value := range fields {
+        if value != nil {
+            data[field] = *value
+        }
+    }
+
+    return c.RDB.HSet(ctx, key, data).Err()
+}
+
+// [!code highlight:5]
+// Exists 检查配置项是否存在
+func (c *UserConfigCache) Exists(ctx *gin.Context, userID string, field string) (bool, error) {
+    key := "user:config:" + userID
+    return c.RDB.HExists(ctx, key, field).Result()
+}
+
+// [!code highlight:5]
+// Remove 删除配置项
+func (c *UserConfigCache) Remove(ctx *gin.Context, userID string, fields ...string) error {
+    key := "user:config:" + userID
+    return c.RDB.HDel(ctx, key, fields...).Err()
+}
+
+// [!code highlight:4]
+// Delete 删除所有配置
+func (c *UserConfigCache) Delete(ctx *gin.Context, userID string) error {
+    key := "user:config:" + userID
+    return c.RDB.Del(ctx, key).Err()
+}
+```
+
+### 使用配置缓存
+
+```go title="service/user_config.go"
+type UserConfigService struct {
+    cache *UserConfigCache
+}
+
+func NewUserConfigService(cache *xCache.Cache) *UserConfigService {
+    return &UserConfigService{
+        cache: &UserConfigCache{Cache: cache},
+    }
+}
+
+// [!code highlight:11]
+// GetTheme 获取用户主题
+func (s *UserConfigService) GetTheme(ctx *gin.Context, userID string) (string, error) {
+    theme, exists, err := s.cache.Get(ctx, userID, "theme")
+    if err != nil {
+        return "", err
+    }
+    if !exists {
+        return "default", nil
+    }
+    return *theme, nil
+}
+
+// [!code highlight:6]
+// UpdateTheme 更新用户主题
+func (s *UserConfigService) UpdateTheme(ctx *gin.Context, userID string, theme string) error {
+    // 更新数据库
+    if err := s.updateThemeInDB(userID, theme); err != nil {
+        return err
+    }
+
+    // [!code highlight:2]
+    // 更新缓存
+    return s.cache.Set(ctx, userID, "theme", &theme)
+}
+
+// [!code highlight:5]
+// GetAllConfig 获取所有配置
+func (s *UserConfigService) GetAllConfig(ctx *gin.Context, userID string) (map[string]string, error) {
+    config, err := s.cache.GetAll(ctx, userID)
+    if err != nil {
+        return nil, err
+    }
+
+    // 如果缓存为空，从数据库加载
+    if len(config) == 0 {
+        config, err = s.loadConfigFromDB(userID)
+        if err != nil {
+            return nil, err
+        }
+
+        // [!code highlight:7]
+        // 写入缓存
+        fields := make(map[string]*string)
+        for k, v := range config {
+            val := v
+            fields[k] = &val
+        }
+        _ = s.cache.SetAll(ctx, userID, fields)
+    }
+
+    return config, nil
+}
+
+// [!code highlight:2]
+// ResetConfig 重置配置
+func (s *UserConfigService) ResetConfig(ctx *gin.Context, userID string) error {
+    // 删除数据库配置
+    if err := s.deleteConfigFromDB(userID); err != nil {
+        return err
+    }
+
+    // [!code highlight:2]
+    // 删除缓存
+    return s.cache.Delete(ctx, userID)
+}
+```
+
+## 使用场景
+
+### 用户配置
+
+```go
+type UserConfigCache interface {
+    xCache.HashCache[string, string, string]
+}
+```
+
+适用于：
+- 用户偏好设置
+- 界面配置
+- 通知设置
+
+### 商品详情
+
+```go
+type ProductCache interface {
+    xCache.HashCache[string, string, interface{}]
+}
+```
+
+适用于：
+- 商品价格
+- 库存数量
+- 商品属性
+
+### 会话数据
+
+```go
+type SessionCache interface {
+    xCache.HashCache[string, string, string]
+}
+```
+
+适用于：
+- 用户会话
+- 临时数据
+- 表单状态
+
+## 最佳实践
+
+### 1. 字段命名规范
+
+使用清晰的字段名：
+
+```go
+// ✅ 好的命名
+fields := map[string]*string{
+    "theme":    &theme,
+    "language": &language,
+    "timezone": &timezone,
+}
+
+// ❌ 避免的命名
+fields := map[string]*string{
+    "t": &theme,
+    "l": &language,
+    "z": &timezone,
+}
+```
+
+### 2. 批量操作优化
+
+优先使用 `GetAll` 和 `SetAll`：
+
+```go
+// ✅ 批量获取
+config, _ := cache.GetAll(ctx, userID)
+
+// ❌ 逐个获取
+theme, _ := cache.Get(ctx, userID, "theme")
+language, _ := cache.Get(ctx, userID, "language")
+timezone, _ := cache.Get(ctx, userID, "timezone")
+```
+
+### 3. 部分更新
+
+只更新变化的字段：
+
+```go
+func (s *UserConfigService) UpdatePartial(ctx *gin.Context, userID string, updates map[string]string) error {
+    fields := make(map[string]*string)
+    for k, v := range updates {
+        val := v
+        fields[k] = &val
+    }
+    return s.cache.SetAll(ctx, userID, fields)
+}
+```
+
+### 4. 字段删除
+
+使用 `Remove` 而不是 `Delete`：
+
+```go
+// ✅ 删除特定字段
+cache.Remove(ctx, userID, "theme", "language")
+
+// ❌ 删除整个哈希表（除非确实需要）
+cache.Delete(ctx, userID)
+```
+
+## 性能优化
+
+### 使用 Pipeline
+
+批量操作多个哈希表：
+
+```go
+func (c *UserConfigCache) SetMultipleUsers(ctx *gin.Context, configs map[string]map[string]*string) error {
+    pipe := c.RDB.Pipeline()
+
+    for userID, fields := range configs {
+        key := "user:config:" + userID
+        data := make(map[string]interface{})
+        for field, value := range fields {
+            if value != nil {
+                data[field] = *value
+            }
+        }
+        pipe.HSet(ctx, key, data)
+    }
+
+    _, err := pipe.Exec(ctx)
+    return err
+}
+```
+
+### 字段数量控制
+
+避免单个哈希表字段过多：
+
+```go
+// ✅ 合理的字段数量（< 100）
+user:config:123 → {
+    "theme": "dark",
+    "language": "zh-CN",
+    "timezone": "Asia/Shanghai"
+}
+
+// ❌ 字段过多（> 1000）
+user:data:123 → {
+    "field1": "value1",
+    "field2": "value2",
+    // ... 1000+ fields
+}
+```
+
+## 注意事项
+
+1. **字段类型限制**：字段键必须是 `comparable` 类型
+2. **内存占用**：大量字段会占用较多内存，考虑分片
+3. **原子性**：单个字段操作是原子的，但多字段操作不保证原子性
+4. **过期时间**：哈希表整体过期，无法为单个字段设置 TTL
+5. **序列化**：复杂值类型需要序列化为字符串存储

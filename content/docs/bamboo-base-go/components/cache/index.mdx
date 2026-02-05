@@ -1,0 +1,179 @@
+---
+title: 概述
+description: xCache 提供基于 Redis 的多种数据结构缓存接口
+icon: Database
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# 缓存
+
+`xCache` 基于 Redis 提供了四种常用数据结构的缓存接口，支持泛型操作，适用于各种缓存场景。
+
+```go
+import xCache "github.com/bamboo-services/bamboo-base-go/cache"
+```
+
+## 核心结构
+
+<TypeTable
+  type={{
+    Cache: {
+      description: 'Redis 客户端封装，管理连接和 TTL',
+      type: 'struct',
+      required: true,
+    },
+  }}
+/>
+
+### Cache 结构体
+
+```go
+type Cache struct {
+    RDB *redis.Client  // Redis 客户端
+    TTL time.Duration  // 默认过期时间
+}
+```
+
+## 缓存接口
+
+<TypeTable
+  type={{
+    KeyCache: {
+      description: '键值对缓存，适用于单一对象存储',
+      type: 'interface[K, V]',
+      required: false,
+    },
+    HashCache: {
+      description: '哈希缓存，适用于对象属性存储',
+      type: 'interface[K, F, V]',
+      required: false,
+    },
+    SetCache: {
+      description: '集合缓存，适用于标签、权限等去重数据',
+      type: 'interface[K, V]',
+      required: false,
+    },
+    ListCache: {
+      description: '列表缓存，适用于队列、栈等有序数据',
+      type: 'interface[K, V]',
+      required: false,
+    },
+  }}
+/>
+
+## 快速使用
+
+### 初始化缓存
+
+```go title="main.go"
+import (
+    "time"
+    "github.com/redis/go-redis/v9"
+    xCache "github.com/bamboo-services/bamboo-base-go/cache"
+)
+
+func main() {
+    // [!code highlight:5]
+    // 创建 Redis 客户端
+    rdb := redis.NewClient(&redis.Options{
+        Addr: "localhost:6379",
+        DB:   0,
+    })
+
+    // [!code highlight:4]
+    // 初始化缓存实例
+    cache := &xCache.Cache{
+        RDB: rdb,
+        TTL: 24 * time.Hour, // 默认 24 小时过期
+    }
+}
+```
+
+### 使用键值对缓存
+
+```go title="service/user.go"
+type UserCache struct {
+    *xCache.Cache
+}
+
+// 实现 KeyCache 接口
+func (c *UserCache) Get(ctx *gin.Context, userID string) (*User, bool, error) {
+    // 实现获取逻辑
+}
+
+func (c *UserCache) Set(ctx *gin.Context, userID string, user *User) error {
+    // 实现设置逻辑
+}
+```
+
+## 使用场景
+
+### KeyCache - 键值对缓存
+
+适用于存储单一对象：
+- 用户信息缓存
+- 配置项缓存
+- Token 缓存
+
+### HashCache - 哈希缓存
+
+适用于存储对象属性：
+- 用户配置（多个字段）
+- 商品详情（价格、库存等）
+- 会话数据
+
+### SetCache - 集合缓存
+
+适用于存储唯一元素：
+- 用户标签
+- 权限列表
+- 在线用户集合
+
+### ListCache - 列表缓存
+
+适用于存储有序数据：
+- 消息队列
+- 操作历史
+- 排行榜
+
+## 设计特点
+
+### 泛型支持
+
+所有接口都支持泛型，提供类型安全：
+
+```go
+// 字符串键，User 值
+type UserCache interface {
+    xCache.KeyCache[string, User]
+}
+
+// 字符串键，字符串字段，配置值
+type ConfigCache interface {
+    xCache.HashCache[string, string, ConfigValue]
+}
+```
+
+### 统一上下文
+
+所有方法都接受 `*gin.Context`，便于：
+- 请求追踪
+- 日志记录
+- 超时控制
+
+### 灵活的键类型
+
+键类型支持任意类型（`any`），可以使用：
+- 字符串：`"user:123"`
+- 结构体：`UserKey{ID: 123}`
+- 自定义类型：`type CacheKey string`
+
+## 下一步
+
+<Cards>
+  <Card title="KeyCache" href="./key-cache" />
+  <Card title="HashCache" href="./hash-cache" />
+  <Card title="SetCache" href="./set-cache" />
+  <Card title="ListCache" href="./list-cache" />
+</Cards>
