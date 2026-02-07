@@ -1,65 +1,109 @@
 ---
-title: 上下文初始化
-description: SystemContextInit 初始化系统上下文中间件，注入全局资源
+title: 上下文注入
+description: 通过节点化系统和中间件实现上下文资源注入
 icon: Layers
 ---
 
-# 上下文初始化
+# 上下文注入
 
-`SystemContextInit` 方法初始化系统上下文中间件，将全局资源注入到每个请求的上下文中。
+新版本采用**节点化系统**实现上下文资源注入，取代了原有的 `SystemContextInit` 方法。
 
-## SystemContextInit
+## 注入机制
 
-```go title="register_context.go"
-// [!code highlight]
-func (r *Reg) SystemContextInit()
+### 节点化注入（初始化时）
+
+在 `Register` 时通过自定义节点注入全局资源：
+
+```go title="main.go"
+import (
+    "context"
+    xConsts "github.com/bamboo-services/bamboo-base-go/context"
+    xReg "github.com/bamboo-services/bamboo-base-go/register"
+    xRegNode "github.com/bamboo-services/bamboo-base-go/register/node"
+)
+
+func main() {
+    // [!code highlight:6]
+    reg := xReg.Register(context.Background(), []xRegNode.RegNodeList{
+        {Key: xConsts.DatabaseKey, Node: initDatabase},
+        {Key: xConsts.RedisClientKey, Node: initRedis},
+    })
+
+    reg.Serve.Run(":8080")
+}
 ```
 
-## 实现细节
+### 中间件注入（请求时）
 
-```go title="register_context.go"
-type handler struct {
-    Data *Reg
-}
+`xHelper.RequestContext()` 中间件为每个请求注入请求级数据：
 
-func (r *Reg) SystemContextInit() {
-    xLog.WithName(xLog.NamedINIT).Info(r.Context, "初始化系统上下文")
+```go title="helper/request_context.go"
+func RequestContext() gin.HandlerFunc {
+    return func(c *gin.Context) {
+        // [!code highlight:2]
+        // 生成请求唯一标识
+        requestID := uuid.New().String()
 
-    // [!code highlight:4]
-    // 创建处理器实例
-    handler := &handler{
-        Data: r,
+        // [!code highlight:2]
+        // 记录请求开始时间
+        startTime := time.Now()
+
+        // 注入到上下文
+        ctx := c.Request.Context()
+        ctx = context.WithValue(ctx, xConsts.RequestKey, requestID)
+        ctx = context.WithValue(ctx, xConsts.UserStartTimeKey, startTime)
+        c.Request = c.Request.WithContext(ctx)
+
+        c.Next()
     }
-
-    // [!code highlight:2]
-    // 注册系统上下文处理函数
-    r.Serve.Use(handler.systemContextHandlerFunc)
 }
+```
 
-func (h *handler) systemContextHandlerFunc(c *gin.Context) {
-    // [!code highlight:2]
-    // 注入雪花算法节点
-    c.Set(xConsts.SnowflakeNodeKey.String(), xSnowflake.GetDefaultNode())
+### 上下文合并
 
-    // 放行内容
-    c.Next()
+`injectContext` 中间件将初始化上下文合并到每个请求：
+
+```go title="register_gin.go"
+func injectContext(ctx context.Context) func(c *gin.Context) {
+    return func(c *gin.Context) {
+        // [!code highlight:2]
+        // 将初始化上下文（包含 DB、Redis、Snowflake 等）注入到请求
+        c.Request = c.Request.WithContext(ctx)
+        c.Next()
+    }
 }
 ```
 
 ## 注入的资源
 
-| 资源 | Key | 类型 | 说明 |
-|------|-----|------|------|
-| 雪花算法节点 | `SnowflakeNodeKey` | `*xSnowflake.Node` | 用于生成分布式唯一 ID |
+| 资源 | Key | 类型 | 注入时机 |
+|------|-----|------|----------|
+| 雪花算法节点 | `SnowflakeNodeKey` | `*xSnowflake.Node` | 内置节点（自动） |
+| 数据库连接 | `DatabaseKey` | `*gorm.DB` | 自定义节点 |
+| Redis 客户端 | `RedisClientKey` | `*redis.Client` | 自定义节点 |
+| 请求 ID | `RequestKey` | `string` | 请求中间件 |
+| 开始时间 | `UserStartTimeKey` | `time.Time` | 请求中间件 |
 
 ## 获取上下文资源
 
 使用 `xCtxUtil` 包从上下文获取注入的资源：
 
 ```go
-import xCtxUtil "github.com/bamboo-services/bamboo-base-go/context"
+import xCtxUtil "github.com/bamboo-services/bamboo-base-go/utility/ctxutil"
 
-func CreateOrder(ctx *gin.Context) {
+func CreateOrder(c *gin.Context) {
+    // [!code highlight:2]
+    // 获取标准上下文
+    ctx := c.Request.Context()
+
+    // [!code highlight:2]
+    // 获取数据库连接
+    db := xCtxUtil.MustGetDB(ctx)
+
+    // [!code highlight:2]
+    // 获取 Redis 客户端
+    rdb := xCtxUtil.MustGetRDB(ctx)
+
     // [!code highlight:2]
     // 获取雪花算法节点
     node := xCtxUtil.GetSnowflakeNode(ctx)
@@ -69,38 +113,48 @@ func CreateOrder(ctx *gin.Context) {
 }
 ```
 
-## 扩展上下文
+## 自定义初始化节点
 
-在业务代码中，可以继续向上下文注入自定义资源：
+创建自定义初始化节点的标准模式：
 
-```go
+```go title="init_database.go"
+import (
+    "context"
+    xLog "github.com/bamboo-services/bamboo-base-go/log"
+)
+
 // [!code highlight:2]
-// 在中间件中注入数据库连接
-func DatabaseMiddleware(db *gorm.DB) gin.HandlerFunc {
-    return func(c *gin.Context) {
-        // [!code highlight]
-        c.Set("db", db)
-        c.Next()
+// 初始化节点函数签名：func(ctx context.Context) (any, error)
+func initDatabase(ctx context.Context) (any, error) {
+    log := xLog.WithName(xLog.NamedINIT)
+    log.Info(ctx, "初始化数据库连接")
+
+    // 构建 DSN
+    dsn := buildDSN()
+
+    // [!code highlight:2]
+    // 创建数据库连接
+    db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+    if err != nil {
+        return nil, err
     }
-}
 
-// [!code highlight:2]
-// 在 Handler 中获取
-func GetUser(ctx *gin.Context) {
-    // [!code highlight]
-    db := ctx.MustGet("db").(*gorm.DB)
-    // ...
+    log.Info(ctx, "数据库连接成功")
+
+    // [!code highlight:2]
+    // 返回值将被存入上下文
+    return db, nil
 }
 ```
 
 ## 请求 ID
 
-`RequestContext` 中间件会为每个请求生成唯一的请求 ID：
+每个请求都会自动生成唯一的请求 ID：
 
 ```go
-func GetRequestID(ctx *gin.Context) string {
+func GetRequestID(c *gin.Context) string {
     // [!code highlight]
-    return ctx.GetString(xConsts.RequestKey.String())
+    return xCtxUtil.GetRequestKey(c.Request.Context())
 }
 ```
 
@@ -109,9 +163,20 @@ func GetRequestID(ctx *gin.Context) string {
 - 添加到响应头 `X-Request-ID`
 - 用于日志追踪和问题排查
 
+## 迁移指南
+
+从旧版本迁移：
+
+| 旧版本 | 新版本 |
+|--------|--------|
+| `xReg.SystemContextInit()` | 节点化系统自动处理 |
+| `c.Set(key, value)` | `context.WithValue()` |
+| `c.Get(key)` | `ctx.Value(key)` |
+| `xCtxUtil.GetDB(c)` | `xCtxUtil.MustGetDB(c.Request.Context())` |
+
 ## 下一步
 
 <Cards>
   <Card title="快速开始" href="./index" />
-  <Card title="响应处理" href="../result" />
+  <Card title="上下文管理" href="../context" />
 </Cards>

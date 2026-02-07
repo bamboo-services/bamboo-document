@@ -1,6 +1,6 @@
 ---
 title: 上下文键
-description: xCtx 包定义的上下文键常量
+description: xConsts 包定义的上下文键常量
 icon: Key
 ---
 
@@ -8,11 +8,9 @@ import { TypeTable } from '@/components/type-table';
 
 # 上下文键
 
-`xCtx` 包定义了用于在 Gin 上下文中存储和获取数据的键常量。
+`xConsts` 包定义了用于在上下文中存储和获取数据的键常量。
 
 ```go
-import xCtx "github.com/bamboo-services/bamboo-base-go/context"
-// 或
 import xConsts "github.com/bamboo-services/bamboo-base-go/context"
 ```
 
@@ -31,7 +29,9 @@ func (s ContextKey) String() string {
 
 ```go title="context.go"
 const (
-    // [!code highlight:7]
+    // [!code highlight:9]
+    Nil              ContextKey = ""                        // 空值
+    Exec             ContextKey = "special_execution"       // 特殊执行
     RequestKey       ContextKey = "context_request_key"     // 请求唯一标识
     ErrorCodeKey     ContextKey = "context_error_code"      // 错误码
     ErrorMessageKey  ContextKey = "context_error_message"   // 错误描述
@@ -46,6 +46,16 @@ const (
 
 <TypeTable
   type={{
+    Nil: {
+      description: '空值键，用于表示无效或未设置的键',
+      type: '""',
+      required: false,
+    },
+    Exec: {
+      description: '特殊执行标记，用于标识特殊执行流程',
+      type: 'string',
+      required: false,
+    },
     RequestKey: {
       description: '请求唯一标识，UUID 格式，用于链路追踪和日志关联',
       type: 'string',
@@ -86,43 +96,74 @@ const (
 
 ## 使用方式
 
-### 设置值
+### 节点化注入（推荐）
+
+在 `Register` 时通过节点注入资源：
 
 ```go
-import xConsts "github.com/bamboo-services/bamboo-base-go/context"
+import (
+    "context"
+    xConsts "github.com/bamboo-services/bamboo-base-go/context"
+    xReg "github.com/bamboo-services/bamboo-base-go/register"
+    xRegNode "github.com/bamboo-services/bamboo-base-go/register/node"
+)
 
-func MyMiddleware(c *gin.Context) {
-    // [!code highlight:2]
-    // 使用 String() 方法获取键名
-    c.Set(xConsts.DatabaseKey.String(), db)
+// [!code highlight:8]
+// 注册时注入数据库和 Redis
+reg := xReg.Register(context.Background(), []xRegNode.RegNodeList{
+    {Key: xConsts.DatabaseKey, Node: initDatabase},
+    {Key: xConsts.RedisClientKey, Node: initRedis},
+})
 
-    // [!code highlight]
-    c.Set(xConsts.RedisClientKey.String(), rdb)
-
-    c.Next()
+// [!code highlight:2]
+// 初始化节点函数
+func initDatabase(ctx context.Context) (any, error) {
+    db, err := gorm.Open(...)
+    return db, err
 }
 ```
 
-### 获取值
+### 从上下文获取值
+
+使用 `xCtxUtil` 工具函数获取注入的资源：
+
+```go
+import xCtxUtil "github.com/bamboo-services/bamboo-base-go/utility/ctxutil"
+
+func MyHandler(c *gin.Context) {
+    // [!code highlight:2]
+    // 获取标准上下文
+    ctx := c.Request.Context()
+
+    // [!code highlight:2]
+    // 获取数据库连接
+    db := xCtxUtil.MustGetDB(ctx)
+
+    // [!code highlight:2]
+    // 获取 Redis 客户端
+    rdb := xCtxUtil.MustGetRDB(ctx)
+
+    // [!code highlight:2]
+    // 获取雪花算法节点
+    node := xCtxUtil.GetSnowflakeNode(ctx)
+}
+```
+
+### 直接从上下文获取
+
+也可以直接使用 `context.Value` 获取：
 
 ```go
 import xConsts "github.com/bamboo-services/bamboo-base-go/context"
 
 func MyHandler(c *gin.Context) {
+    ctx := c.Request.Context()
+
     // [!code highlight:3]
-    // 获取并类型断言
-    value, exists := c.Get(xConsts.DatabaseKey.String())
-    if exists {
+    // 直接获取并类型断言
+    if value := ctx.Value(xConsts.DatabaseKey); value != nil {
         db := value.(*gorm.DB)
     }
-
-    // [!code highlight:2]
-    // 获取字符串值
-    requestID := c.GetString(xConsts.RequestKey.String())
-
-    // [!code highlight:2]
-    // 获取时间值
-    startTime := c.GetTime(xConsts.UserStartTimeKey.String())
 }
 ```
 
@@ -132,11 +173,29 @@ func MyHandler(c *gin.Context) {
 |-----|---------|------|
 | `RequestKey` | `xHelper.RequestContext()` | 框架自动注入 |
 | `UserStartTimeKey` | `xHelper.RequestContext()` | 框架自动注入 |
-| `SnowflakeNodeKey` | `xReg.SystemContextInit()` | 框架自动注入 |
-| `DatabaseKey` | 业务中间件 | 需手动注入 |
-| `RedisClientKey` | 业务中间件 | 需手动注入 |
+| `SnowflakeNodeKey` | `xReg.Register()` 内置节点 | 框架自动注入 |
+| `DatabaseKey` | 自定义初始化节点 | 需手动注入 |
+| `RedisClientKey` | 自定义初始化节点 | 需手动注入 |
 | `ErrorCodeKey` | 错误处理中间件 | 错误时自动设置 |
 | `ErrorMessageKey` | 错误处理中间件 | 错误时自动设置 |
+
+## 上下文流转
+
+```
+Register(ctx, nodeList)
+    │
+    ├── 内置节点注入 SnowflakeNodeKey
+    │
+    ├── 自定义节点注入 DatabaseKey, RedisClientKey, ...
+    │
+    └── engineInit()
+            │
+            └── injectContext(ctx) 中间件
+                    │
+                    └── 每个 HTTP 请求
+                            │
+                            └── c.Request.Context() 包含所有注入的资源
+```
 
 ## 下一步
 

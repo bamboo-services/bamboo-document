@@ -1,63 +1,72 @@
 ---
 title: 概述
-description: 上下文管理机制，实现请求生命周期内的数据共享
+description: 上下文管理机制，基于标准 context.Context 实现框架解耦
 icon: Layers
 ---
 
 # 上下文管理
 
-Bamboo Base 提供了完整的上下文管理机制，用于在请求生命周期内共享数据。
+Bamboo Base 提供了完整的上下文管理机制，基于标准 `context.Context` 实现**框架解耦**。
 
 ## 相关包
 
 | 包 | 别名 | 说明 |
 |-----|------|------|
-| `.../context` | `xCtx` / `xConsts` | 上下文键常量定义 |
+| `.../context` | `xConsts` | 上下文键常量定义 |
 | `.../utility/ctxutil` | `xCtxUtil` | 上下文工具函数 |
 | `.../helper` | `xHelper` | 上下文中间件 |
+| `.../register/node` | `xRegNode` | 节点化注册系统 |
 
 ## 工作原理
 
 <Mermaid
   chart="
 sequenceDiagram
-    participant Client
+    participant Register
+    participant Node
+    participant Engine
     participant Middleware
     participant Handler
-    participant Service
 
-    Client->>Middleware: HTTP 请求
-    Note over Middleware: RequestContext 中间件
-    Middleware->>Middleware: 生成 RequestID
-    Middleware->>Middleware: 记录开始时间
-    Middleware->>Middleware: 注入 DB/Redis/Snowflake
-    Middleware->>Handler: ctx.Next()
-    Handler->>Service: 传递 ctx
-    Service->>Service: xCtxUtil.GetDB(ctx)
-    Service->>Service: xCtxUtil.GetRDB(ctx)
-    Service-->>Handler: 返回结果
-    Handler-->>Client: 响应"
+    Register->>Node: 注册初始化节点
+    Node->>Node: 执行节点，结果存入 ctx
+    Node->>Engine: 传递包含资源的 ctx
+    Engine->>Middleware: injectContext(ctx)
+    Middleware->>Handler: c.Request.Context()
+    Handler->>Handler: xCtxUtil.MustGetDB(ctx)"
 />
 
 ## 上下文数据流
 
-```go title="请求生命周期"
+```go title="初始化流程"
 // [!code highlight:2]
-// 1. RequestContext 中间件注入基础数据
+// 1. Register 创建节点管理器
+xReg.Register(ctx, nodeList)
+    │
+    ├── configInit()           // 私有：加载配置
+    ├── loggerInit()           // 私有：初始化日志
+    │
+    // [!code highlight:2]
+    // 2. 内置节点注入雪花算法
+    ├── SnowflakeNodeKey → *xSnowflake.Node
+    │
+    // [!code highlight:2]
+    // 3. 自定义节点注入业务资源
+    ├── DatabaseKey      → *gorm.DB
+    ├── RedisClientKey   → *redis.Client
+    │
+    // [!code highlight:2]
+    // 4. 引擎初始化，注入上下文到请求
+    └── engineInit()
+            └── injectContext(ctx)
+```
+
+```go title="请求流程"
+// [!code highlight:2]
+// 5. RequestContext 中间件注入请求级数据
 xHelper.RequestContext()
     ├── RequestKey       → UUID 请求标识
     └── UserStartTimeKey → 请求开始时间
-
-// [!code highlight:2]
-// 2. SystemContextInit 注入系统资源
-xReg.SystemContextInit()
-    └── SnowflakeNodeKey → 雪花算法节点
-
-// [!code highlight:2]
-// 3. 业务中间件注入业务资源
-businessContextInit()
-    ├── DatabaseKey      → GORM 数据库连接
-    └── RedisClientKey   → Redis 客户端
 ```
 
 ## 快速使用
@@ -67,18 +76,26 @@ import (
     xCtxUtil "github.com/bamboo-services/bamboo-base-go/utility/ctxutil"
 )
 
-func MyHandler(ctx *gin.Context) {
+func MyHandler(c *gin.Context) {
     // [!code highlight:2]
-    // 获取数据库连接
-    db := xCtxUtil.GetDB(ctx)
+    // 获取标准上下文
+    ctx := c.Request.Context()
+
+    // [!code highlight:2]
+    // 获取数据库连接（Panic 版本）
+    db := xCtxUtil.MustGetDB(ctx)
+
+    // [!code highlight:2]
+    // 获取数据库连接（错误返回版本）
+    db, err := xCtxUtil.GetDB(ctx)
 
     // [!code highlight:2]
     // 获取 Redis 客户端
-    rdb := xCtxUtil.GetRDB(ctx)
+    rdb := xCtxUtil.MustGetRDB(ctx)
 
     // [!code highlight:2]
     // 生成雪花 ID
-    id := xCtxUtil.GenerateSnowflakeID(ctx)
+    id := xCtxUtil.MustGenerateSnowflakeID(ctx)
 
     // [!code highlight:2]
     // 获取请求 ID
@@ -88,18 +105,77 @@ func MyHandler(ctx *gin.Context) {
 
 ## 注入上下文
 
-在业务初始化时注入数据库和 Redis：
+### 方式一：节点化注入（推荐）
 
-```go title="startup_context.go"
-func (r *Reg) businessContextInit() {
+在 `Register` 时通过自定义节点注入：
+
+```go title="main.go"
+import (
+    "context"
+    xConsts "github.com/bamboo-services/bamboo-base-go/context"
+    xReg "github.com/bamboo-services/bamboo-base-go/register"
+    xRegNode "github.com/bamboo-services/bamboo-base-go/register/node"
+)
+
+func main() {
     // [!code highlight:6]
-    r.Serve.Use(func(c *gin.Context) {
-        c.Set(xConsts.DatabaseKey.String(), r.DB)
-        c.Set(xConsts.RedisClientKey.String(), r.RDB)
-        c.Next()
+    reg := xReg.Register(context.Background(), []xRegNode.RegNodeList{
+        {Key: xConsts.DatabaseKey, Node: initDatabase},
+        {Key: xConsts.RedisClientKey, Node: initRedis},
     })
+
+    reg.Serve.Run(":8080")
+}
+
+// [!code highlight:2]
+// 数据库初始化节点
+func initDatabase(ctx context.Context) (any, error) {
+    db, err := gorm.Open(...)
+    return db, err
+}
+
+// [!code highlight:2]
+// Redis 初始化节点
+func initRedis(ctx context.Context) (any, error) {
+    rdb := redis.NewClient(...)
+    return rdb, nil
 }
 ```
+
+### 方式二：中间件注入
+
+在业务中间件中注入（适用于请求级资源）：
+
+```go title="middleware.go"
+func InjectUserMiddleware() gin.HandlerFunc {
+    return func(c *gin.Context) {
+        // 获取用户信息...
+        user := getUserFromToken(c)
+
+        // [!code highlight:2]
+        // 注入到 Gin 上下文
+        c.Set("user", user)
+
+        c.Next()
+    }
+}
+```
+
+## 框架解耦
+
+新版本的核心改进是**框架解耦**：
+
+| 方面 | 旧设计 | 新设计 |
+|------|-------|-------|
+| 工具函数参数 | `*gin.Context` | `context.Context` |
+| 资源注入 | Gin 中间件 | 节点化系统 |
+| 上下文传递 | `c.Set()` / `c.Get()` | `context.WithValue()` |
+| 业务代码 | 依赖 Gin | 可独立测试 |
+
+**优势：**
+- ✅ 业务逻辑不再依赖 Gin 框架
+- ✅ 更容易编写单元测试
+- ✅ 支持在非 HTTP 场景使用（如定时任务、消息队列）
 
 ## 下一步
 

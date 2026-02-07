@@ -1,60 +1,71 @@
 ---
 title: 引擎初始化
-description: EngineInit 创建并配置 Gin 引擎，注册内置中间件和验证器
+description: engineInit 创建并配置 Gin 引擎，注册内置中间件和验证器，并注入初始化上下文
 icon: Cog
 ---
 
 # 引擎初始化
 
-`EngineInit` 方法创建并配置 Gin 引擎，注册内置中间件和自定义验证器。
+`engineInit` 方法创建并配置 Gin 引擎，注册内置中间件、自定义验证器，并将初始化上下文注入到每个 HTTP 请求。
 
-## EngineInit
+## engineInit
 
 ```go title="register_gin.go"
-// [!code highlight]
-func (r *Reg) EngineInit()
+// [!code highlight:2]
+// 私有方法，在 Register 流程中自动调用
+func (r *Reg) engineInit()
 ```
 
 ## 实现细节
 
 ```go title="register_gin.go"
-func (r *Reg) EngineInit() {
+func (r *Reg) engineInit() {
     log := xLog.WithName(xLog.NamedINIT)
 
-    log.Debug(r.Context, "初始化 GIN 引擎")
+    log.Debug(r.Init.Ctx, "初始化 GIN 引擎")
     // [!code highlight:3]
-    if !isDebugMode() {
+    if !xCtxUtil.IsDebugMode() {
         gin.SetMode(gin.ReleaseMode)
     }
 
     // [!code highlight:6]
+    // 注册验证器和翻译器
+    if v, ok := binding.Validator.Engine().(*validator.Validate); ok {
+        xVaild.RegisterTranslator(v)
+        xVaild.RegisterCustomValidators(v)
+    }
+
+    // [!code highlight:7]
+    // 创建 Gin 引擎并注册中间件
     r.Serve = gin.New(func(engine *gin.Engine) {
         engine.Use(xHelper.RequestContext())
         engine.Use(xHelper.PanicRecovery())
         engine.Use(xHelper.HttpLogger())
+        engine.Use(injectContext(r.Init.Ctx))  // 注入初始化上下文
     })
+}
+```
 
-    // [!code highlight:2]
-    // 注册自定义验证器和翻译器
-    if v, ok := binding.Validator.Engine().(*validator.Validate); ok {
-        // [!code highlight:5]
-        // 注册翻译器（必须在自定义验证器之前）
-        if err := xVaild.RegisterTranslator(v); err != nil {
-            log.Error(r.Context, "翻译器注册失败: "+err.Error())
-        } else {
-            log.Info(r.Context, "翻译器注册成功")
-        }
+## 上下文注入
 
-        // [!code highlight:5]
-        // 注册自定义验证器
-        if err := xVaild.RegisterCustomValidators(v); err != nil {
-            log.Error(r.Context, "验证器注册失败: "+err.Error())
-        } else {
-            log.Info(r.Context, "预制内部验证器注册成功")
-        }
+关键改进：将节点管理器的上下文注入到每个 HTTP 请求：
+
+```go title="register_gin.go"
+// [!code highlight:2]
+// 注入初始化上下文到每个请求
+func injectContext(ctx context.Context) func(c *gin.Context) {
+    return func(c *gin.Context) {
+        // [!code highlight:2]
+        // 将初始化上下文合并到请求上下文
+        c.Request = c.Request.WithContext(ctx)
+        c.Next()
     }
 }
 ```
+
+**这意味着：**
+- 所有通过节点注入的资源（数据库、Redis 等）都可以通过 `c.Request.Context()` 获取
+- 业务代码使用标准 `context.Context`，实现框架解耦
 
 ## 内置中间件
 
@@ -63,6 +74,7 @@ func (r *Reg) EngineInit() {
 | `xHelper.RequestContext()` | 请求上下文处理，生成请求 ID 等 |
 | `xHelper.PanicRecovery()` | Panic 恢复，防止单个请求崩溃影响整个服务 |
 | `xHelper.HttpLogger()` | HTTP 请求日志记录 |
+| `injectContext(ctx)` | 注入初始化上下文到请求 |
 
 ## 运行模式
 
@@ -108,7 +120,7 @@ type CreateUserReq struct {
 初始化完成后，通过 `reg.Serve` 访问 Gin 引擎：
 
 ```go
-reg := xReg.Register()
+reg := xReg.Register(context.Background(), nodeList)
 
 // [!code highlight:4]
 // 注册路由
@@ -129,9 +141,25 @@ api := reg.Serve.Group("/api/v1")
 reg.Serve.Run(":8080")
 ```
 
+## 在 Handler 中获取资源
+
+```go
+func MyHandler(c *gin.Context) {
+    // [!code highlight:2]
+    // 获取标准上下文（包含所有注入的资源）
+    ctx := c.Request.Context()
+
+    // [!code highlight:2]
+    // 使用 xCtxUtil 获取资源
+    db := xCtxUtil.MustGetDB(ctx)
+    rdb := xCtxUtil.MustGetRDB(ctx)
+    node := xCtxUtil.GetSnowflakeNode(ctx)
+}
+```
+
 ## 下一步
 
 <Cards>
-  <Card title="上下文初始化" href="./context" />
   <Card title="快速开始" href="./index" />
+  <Card title="上下文管理" href="../context" />
 </Cards>

@@ -85,37 +85,38 @@ import (
     "os/signal"
     "syscall"
 
+    xConsts "github.com/bamboo-services/bamboo-base-go/context"
     xEnv "github.com/bamboo-services/bamboo-base-go/env"
     xLog "github.com/bamboo-services/bamboo-base-go/log"
     xReg "github.com/bamboo-services/bamboo-base-go/register"
+    xRegNode "github.com/bamboo-services/bamboo-base-go/register/node"
     "your-project/internal/app/route"
     "your-project/internal/app/startup"
 )
 
 func main() {
-    // [!code highlight:2]
-    // 1. 初始化 bamboo-base-go 核心组件
-    reg := xReg.Register()
-
-    // [!code highlight:2]
-    // 2. 初始化业务层（数据库、Redis 等）
-    start := startup.Register(reg)
+    // [!code highlight:7]
+    // 1. 初始化 bamboo-base-go 核心组件（传入自定义节点）
+    reg := xReg.Register(context.Background(), []xRegNode.RegNodeList{
+        {Key: xConsts.DatabaseKey, Node: startup.InitDatabase},
+        {Key: xConsts.RedisClientKey, Node: startup.InitRedis},
+    })
 
     log := xLog.WithName(xLog.NamedMAIN)
 
-    // 3. 创建上下文
-    ctx, cancel := context.WithCancel(reg.Context)
+    // 2. 创建上下文
+    ctx, cancel := context.WithCancel(reg.Init.Ctx)
     defer cancel()
 
-    // 4. 监听中断信号
+    // 3. 监听中断信号
     sigChan := make(chan os.Signal, 1)
     signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
     // [!code highlight:2]
-    // 5. 注册路由
-    route.NewRoute(reg, start)
+    // 4. 注册路由
+    route.NewRoute(reg)
 
-    // 6. 创建 HTTP 服务器
+    // 5. 创建 HTTP 服务器
     getHost := xEnv.GetEnvString(xEnv.Host, "localhost")
     getPort := xEnv.GetEnvString(xEnv.Port, "8080")
     server := &http.Server{
@@ -123,69 +124,33 @@ func main() {
         Handler: reg.Serve,
     }
 
-    // 7. 启动服务
+    // 6. 启动服务
     go func() {
-        log.Info(reg.Context, "服务器启动成功", slog.String("addr", "http://"+server.Addr))
+        log.Info(reg.Init.Ctx, "服务器启动成功", slog.String("addr", "http://"+server.Addr))
         if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-            log.Error(reg.Context, err.Error())
+            log.Error(reg.Init.Ctx, err.Error())
         }
     }()
 
-    // 8. 优雅关闭
+    // 7. 优雅关闭
     <-sigChan
-    log.Warn(reg.Context, "正在关闭服务器...")
+    log.Warn(reg.Init.Ctx, "正在关闭服务器...")
     if err := server.Shutdown(ctx); err != nil {
-        log.Error(reg.Context, err.Error())
+        log.Error(reg.Init.Ctx, err.Error())
     }
-    log.Info(reg.Context, "服务器已安全退出")
+    log.Info(reg.Init.Ctx, "服务器已安全退出")
 }
 ```
 
 ## 业务初始化
 
-```go title="internal/app/startup/startup.go"
+数据库和 Redis 现在通过**节点化系统**注入，不再需要单独的 `startup` 包：
+
+```go title="internal/app/startup/init_database.go"
 package startup
 
 import (
     "context"
-
-    xReg "github.com/bamboo-services/bamboo-base-go/register"
-    "github.com/gin-gonic/gin"
-    "github.com/redis/go-redis/v9"
-    "gorm.io/gorm"
-)
-
-// [!code highlight:6]
-// Reg 业务注册结构
-type Reg struct {
-    Context context.Context
-    Serve   *gin.Engine
-    DB      *gorm.DB
-    RDB     *redis.Client
-}
-
-func Register(reg *xReg.Reg) *Reg {
-    r := &Reg{
-        Context: reg.Context,
-        Serve:   reg.Serve,
-    }
-
-    // [!code highlight:3]
-    // 初始化业务组件
-    r.databaseInit()  // 数据库
-    r.redisInit()     // Redis
-
-    return r
-}
-```
-
-## 数据库初始化
-
-```go title="internal/app/startup/startup_database.go"
-package startup
-
-import (
-    "log/slog"
     "strings"
 
     xEnv "github.com/bamboo-services/bamboo-base-go/env"
@@ -202,9 +167,11 @@ var migrateTables = []interface{}{
     &entity.User{},
 }
 
-func (r *Reg) databaseInit() {
+// [!code highlight:2]
+// InitDatabase 数据库初始化节点
+func InitDatabase(ctx context.Context) (any, error) {
     log := xLog.WithName(xLog.NamedINIT)
-    log.Debug(r.Context, "正在连接数据库...")
+    log.Debug(ctx, "正在连接数据库...")
 
     // [!code highlight:12]
     // 构建 DSN
@@ -234,32 +201,39 @@ func (r *Reg) databaseInit() {
         }),
     })
     if err != nil {
-        log.SugarPanic(r.Context, "连接数据库失败", "error", err.Error())
+        return nil, err
     }
 
     // [!code highlight:2]
     // 自动迁移
     _ = db.AutoMigrate(migrateTables...)
 
-    log.Info(r.Context, "数据库连接成功")
-    r.DB = db
+    log.Info(ctx, "数据库连接成功")
+
+    // [!code highlight:2]
+    // 返回值将被存入上下文
+    return db, nil
 }
 ```
 
 ## Redis 初始化
 
-```go title="internal/app/startup/startup_redis.go"
+```go title="internal/app/startup/init_redis.go"
 package startup
 
 import (
+    "context"
+
     xEnv "github.com/bamboo-services/bamboo-base-go/env"
     xLog "github.com/bamboo-services/bamboo-base-go/log"
     "github.com/redis/go-redis/v9"
 )
 
-func (r *Reg) redisInit() {
+// [!code highlight:2]
+// InitRedis Redis 初始化节点
+func InitRedis(ctx context.Context) (any, error) {
     log := xLog.WithName(xLog.NamedINIT)
-    log.Debug(r.Context, "正在连接 Redis...")
+    log.Debug(ctx, "正在连接 Redis...")
 
     // [!code highlight:7]
     rdb := redis.NewClient(&redis.Options{
@@ -269,8 +243,11 @@ func (r *Reg) redisInit() {
         PoolSize: xEnv.GetEnvInt(xEnv.NoSqlPoolSize, 10),
     })
 
-    log.Info(r.Context, "Redis 连接成功")
-    r.RDB = rdb
+    log.Info(ctx, "Redis 连接成功")
+
+    // [!code highlight:2]
+    // 返回值将被存入上下文
+    return rdb, nil
 }
 ```
 
@@ -309,11 +286,10 @@ import (
     xMiddle "github.com/bamboo-services/bamboo-base-go/middleware"
     xReg "github.com/bamboo-services/bamboo-base-go/register"
     xRoute "github.com/bamboo-services/bamboo-base-go/route"
-    "your-project/internal/app/startup"
     "your-project/internal/handler"
 )
 
-func NewRoute(xReg *xReg.Reg, reg *startup.Reg) {
+func NewRoute(xReg *xReg.Reg) {
     engine := xReg.Serve
 
     // [!code highlight:3]
@@ -331,7 +307,7 @@ func NewRoute(xReg *xReg.Reg, reg *startup.Reg) {
     // API 路由组
     api := engine.Group("/api/v1")
     {
-        userHandler := handler.NewUserHandler(reg.DB, reg.RDB)
+        userHandler := handler.NewUserHandler()
 
         // [!code highlight:4]
         // 用户路由
@@ -353,81 +329,73 @@ import (
     xResult "github.com/bamboo-services/bamboo-base-go/result"
     xVaild "github.com/bamboo-services/bamboo-base-go/validator"
     "github.com/gin-gonic/gin"
-    "github.com/redis/go-redis/v9"
-    "gorm.io/gorm"
     apiUser "your-project/api/user"
     "your-project/internal/logic"
 )
 
 type UserHandler struct {
-    db      *gorm.DB
-    rdb     *redis.Client
     log     *xLog.LogNamedLogger
-    service *logic.UserLogic
 }
 
-func NewUserHandler(db *gorm.DB, rdb *redis.Client) *UserHandler {
+func NewUserHandler() *UserHandler {
     return &UserHandler{
-        db:      db,
-        rdb:     rdb,
         log:     xLog.WithName(xLog.NamedCONT),
-        service: logic.NewUserLogic(db, rdb),
     }
 }
 
 // [!code highlight]
 // Register 用户注册
-func (h *UserHandler) Register(ctx *gin.Context) {
-    h.log.Info(ctx, "开始处理用户注册请求")
+func (h *UserHandler) Register(c *gin.Context) {
+    h.log.Info(c, "开始处理用户注册请求")
 
     // [!code highlight:5]
     // 1. 验证并绑定数据
     var req apiUser.RegisterRequest
-    if err := ctx.ShouldBindBodyWithJSON(&req); err != nil {
-        xVaild.HandleValidationError(ctx, err)
+    if err := c.ShouldBindBodyWithJSON(&req); err != nil {
+        xVaild.HandleValidationError(c, err)
         return
     }
 
     // [!code highlight:5]
-    // 2. 调用业务逻辑
-    user, xErr := h.service.CreateUser(ctx, req.Username, req.Email, req.Password)
+    // 2. 调用业务逻辑（通过上下文获取资源）
+    user, xErr := logic.NewUserLogic().CreateUser(c, req.Username, req.Email, req.Password)
     if xErr != nil {
-        _ = ctx.Error(xErr)  // 传递给错误中间件处理
+        _ = c.Error(xErr)  // 传递给错误中间件处理
         return
     }
 
     // [!code highlight:2]
     // 3. 返回成功响应
-    xResult.SuccessHasData(ctx, "注册成功", user)
+    xResult.SuccessHasData(c, "注册成功", user)
 }
 
 // [!code highlight]
 // Login 用户登录
-func (h *UserHandler) Login(ctx *gin.Context) {
-    h.log.Info(ctx, "开始处理用户登录请求")
+func (h *UserHandler) Login(c *gin.Context) {
+    h.log.Info(c, "开始处理用户登录请求")
 
     var req apiUser.LoginRequest
-    if err := ctx.ShouldBindBodyWithJSON(&req); err != nil {
-        xVaild.HandleValidationError(ctx, err)
+    if err := c.ShouldBindBodyWithJSON(&req); err != nil {
+        xVaild.HandleValidationError(c, err)
         return
     }
 
     // 查找用户
-    user, xErr := h.service.GetUserByUsername(ctx, req.Username)
+    user, xErr := logic.NewUserLogic().GetUserByUsername(c, req.Username)
     if xErr != nil {
-        _ = ctx.Error(xErr)
+        _ = c.Error(xErr)
         return
     }
 
     // 验证密码
-    if !h.service.VerifyPassword(user.Password, req.Password) {
+    if !logic.NewUserLogic().VerifyPassword(user.Password, req.Password) {
         // [!code highlight:2]
         // 创建错误并传递给中间件
-        _ = ctx.Error(xError.NewError(ctx, xError.Unauthorized, "用户名或密码错误", false))
+        _ = c.Error(xError.NewError(c, xError.Unauthorized, "用户名或密码错误", false))
         return
     }
 
-    xResult.SuccessHasData(ctx, "登录成功", user)
+    xResult.SuccessHasData(c, "登录成功", user)
 }
 ```
 
@@ -442,48 +410,48 @@ import (
     xUtil "github.com/bamboo-services/bamboo-base-go/utility"
     xCtxUtil "github.com/bamboo-services/bamboo-base-go/utility/ctxutil"
     "github.com/gin-gonic/gin"
-    "github.com/redis/go-redis/v9"
     "gorm.io/gorm"
     "your-project/internal/entity"
 )
 
 type UserLogic struct {
-    db  *gorm.DB
-    rdb *redis.Client
     log *xLog.LogNamedLogger
 }
 
-func NewUserLogic(db *gorm.DB, rdb *redis.Client) *UserLogic {
+func NewUserLogic() *UserLogic {
     return &UserLogic{
-        db:  db,
-        rdb: rdb,
         log: xLog.WithName(xLog.NamedLOGC),
     }
 }
 
 // [!code highlight]
 // CreateUser 创建用户
-func (l *UserLogic) CreateUser(ctx *gin.Context, username, email, password string) (*entity.User, *xError.Error) {
-    l.log.Info(ctx, "开始创建用户")
+func (l *UserLogic) CreateUser(c *gin.Context, username, email, password string) (*entity.User, *xError.Error) {
+    l.log.Info(c, "开始创建用户")
+
+    // [!code highlight:2]
+    // 从上下文获取数据库连接
+    ctx := c.Request.Context()
+    db := xCtxUtil.MustGetDB(ctx)
 
     // 检查用户名是否存在
     var count int64
-    l.db.Model(&entity.User{}).Where("username = ?", username).Count(&count)
+    db.Model(&entity.User{}).Where("username = ?", username).Count(&count)
     if count > 0 {
         // [!code highlight]
-        return nil, xError.NewError(ctx, xError.Existed, "用户名已存在", false)
+        return nil, xError.NewError(c, xError.Existed, "用户名已存在", false)
     }
 
     // 加密密码
     hashedPassword, err := xUtil.HashPassword(password)
     if err != nil {
         // [!code highlight]
-        return nil, xError.NewInternalServerError(ctx, "密码加密失败", err)
+        return nil, xError.NewInternalServerError(c, "密码加密失败", err)
     }
 
     // [!code highlight:2]
-    // 生成雪花 ID
-    userID := xCtxUtil.GenerateGeneSnowflakeID(ctx, entity.User{}.GetGene())
+    // 生成雪花 ID（从上下文获取节点）
+    userID := xCtxUtil.MustGenerateGeneSnowflakeID(ctx, entity.User{}.GetGene())
 
     user := &entity.User{
         Username: username,
@@ -492,9 +460,9 @@ func (l *UserLogic) CreateUser(ctx *gin.Context, username, email, password strin
     }
     user.ID = userID
 
-    if err := l.db.Create(user).Error; err != nil {
+    if err := db.Create(user).Error; err != nil {
         // [!code highlight]
-        return nil, xError.NewInternalServerError(ctx, "创建用户失败", err)
+        return nil, xError.NewInternalServerError(c, "创建用户失败", err)
     }
 
     return user, nil
@@ -502,15 +470,19 @@ func (l *UserLogic) CreateUser(ctx *gin.Context, username, email, password strin
 
 // [!code highlight]
 // GetUserByUsername 根据用户名获取用户
-func (l *UserLogic) GetUserByUsername(ctx *gin.Context, username string) (*entity.User, *xError.Error) {
+func (l *UserLogic) GetUserByUsername(c *gin.Context, username string) (*entity.User, *xError.Error) {
+    // [!code highlight:2]
+    // 从上下文获取数据库连接
+    db := xCtxUtil.MustGetDB(c.Request.Context())
+
     var user entity.User
-    if err := l.db.Where("username = ?", username).First(&user).Error; err != nil {
+    if err := db.Where("username = ?", username).First(&user).Error; err != nil {
         if err == gorm.ErrRecordNotFound {
             // [!code highlight]
-            return nil, xError.NewError(ctx, xError.UserNotFound, "用户不存在", false, err)
+            return nil, xError.NewError(c, xError.UserNotFound, "用户不存在", false, err)
         }
         // [!code highlight]
-        return nil, xError.NewInternalServerError(ctx, "查询用户失败", err)
+        return nil, xError.NewInternalServerError(c, "查询用户失败", err)
     }
     return &user, nil
 }

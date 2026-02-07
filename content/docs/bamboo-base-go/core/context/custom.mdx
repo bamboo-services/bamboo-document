@@ -1,12 +1,12 @@
 ---
 title: 自定义注入
-description: 扩展上下文，注入业务自定义数据
+description: 扩展上下文，通过节点化系统注入业务自定义数据
 icon: Plus
 ---
 
 # 自定义注入
 
-除了框架预定义的上下文键，你可以扩展自定义的业务上下文键。
+除了框架预定义的上下文键，你可以通过**节点化系统**扩展自定义的业务上下文键。
 
 ## 定义自定义键
 
@@ -15,14 +15,14 @@ icon: Plus
 ```go title="internal/constant/context/business.go"
 package bContext
 
-import xCtx "github.com/bamboo-services/bamboo-base-go/context"
+import xConsts "github.com/bamboo-services/bamboo-base-go/context"
 
 const (
     // [!code highlight:4]
-    // 使用 xCtx.ContextKey 类型定义自定义键
-    TencentCloudForSmsKey xCtx.ContextKey = "business_tencent_cloud_sms" // 腾讯云短信
-    UserEntityKey         xCtx.ContextKey = "business_user_entity"       // 用户实体
-    MerchantEntityKey     xCtx.ContextKey = "business_merchant_entity"   // 商户实体
+    // 使用 xConsts.ContextKey 类型定义自定义键
+    TencentCloudForSmsKey xConsts.ContextKey = "business_tencent_cloud_sms" // 腾讯云短信
+    UserEntityKey         xConsts.ContextKey = "business_user_entity"       // 用户实体
+    MerchantEntityKey     xConsts.ContextKey = "business_merchant_entity"   // 商户实体
 )
 ```
 
@@ -35,59 +35,54 @@ const (
 
 ## 注入自定义数据
 
-### 启动时注入
+### 方式一：节点化注入（推荐）
 
-在 `startup` 包中注入全局资源：
+在 `Register` 时通过自定义节点注入全局资源：
 
-```go title="internal/app/startup/startup_context.go"
-package startup
+```go title="main.go"
+package main
 
 import (
-    xCtx "github.com/bamboo-services/bamboo-base-go/context"
-    xLog "github.com/bamboo-services/bamboo-base-go/log"
-    "github.com/gin-gonic/gin"
+    "context"
+
+    xConsts "github.com/bamboo-services/bamboo-base-go/context"
+    xReg "github.com/bamboo-services/bamboo-base-go/register"
+    xRegNode "github.com/bamboo-services/bamboo-base-go/register/node"
     bContext "your-project/internal/constant/context"
 )
 
-type handler struct {
-    Data *Reg
+func main() {
+    // [!code highlight:8]
+    reg := xReg.Register(context.Background(), []xRegNode.RegNodeList{
+        // 框架资源
+        {Key: xConsts.DatabaseKey, Node: initDatabase},
+        {Key: xConsts.RedisClientKey, Node: initRedis},
+        // 业务资源
+        {Key: bContext.TencentCloudForSmsKey, Node: initTencentSms},
+    })
+
+    reg.Serve.Run(":8080")
 }
 
-// [!code highlight]
-// businessContextInit 初始化业务上下文
-func (r *Reg) businessContextInit() {
-    xLog.WithName(xLog.NamedINIT).Info(r.Context, "上下文系统注入")
-
-    handler := &handler{
-        Data: r,
-    }
-
-    // [!code highlight]
-    r.Serve.Use(handler.systemContextHandlerFunc)
-}
-
-func (h *handler) systemContextHandlerFunc(c *gin.Context) {
-    // [!code highlight:3]
-    // 注入框架预定义资源
-    c.Set(xCtx.DatabaseKey.String(), h.Data.DB)
-    c.Set(xCtx.RedisClientKey.String(), h.Data.RDB)
-
-    // [!code highlight:2]
-    // 注入业务自定义资源
-    c.Set(bContext.TencentCloudForSmsKey.String(), h.Data.Tencent.SmsClient)
-
-    c.Next()
+// [!code highlight:2]
+// 腾讯云短信初始化节点
+func initTencentSms(ctx context.Context) (any, error) {
+    credential := common.NewCredential(secretId, secretKey)
+    client, err := sms.NewClient(credential, "ap-guangzhou", profile.NewClientProfile())
+    return client, err
 }
 ```
 
-### 中间件中注入
+### 方式二：中间件注入
 
-在认证中间件中注入用户实体：
+在认证中间件中注入用户实体（请求级资源）：
 
 ```go title="internal/app/middleware/auth_required.go"
 package middleware
 
 import (
+    "context"
+
     xError "github.com/bamboo-services/bamboo-base-go/error"
     xResult "github.com/bamboo-services/bamboo-base-go/result"
     xCtxUtil "github.com/bamboo-services/bamboo-base-go/utility/ctxutil"
@@ -96,23 +91,24 @@ import (
     "your-project/internal/logic"
 )
 
-func AuthRequired(ctx *gin.Context) {
+func AuthRequired(c *gin.Context) {
     // ... 验证 token 逻辑 ...
 
     // 获取用户信息
-    db := xCtxUtil.GetDB(ctx)
-    rdb := xCtxUtil.GetRDB(ctx)
-    user, xErr := logic.NewUser(db, rdb).GetUser(ctx, userID)
+    ctx := c.Request.Context()
+    db := xCtxUtil.MustGetDB(ctx)
+    user, xErr := logic.NewUser(db).GetUser(ctx, userID)
     if xErr != nil {
-        xResult.AbortError(ctx, xErr.ErrorCode, xErr.ErrorMessage, nil)
+        xResult.AbortError(c, xErr.ErrorCode, xErr.ErrorMessage, nil)
         return
     }
 
-    // [!code highlight:2]
+    // [!code highlight:3]
     // 注入用户实体到上下文
-    ctx.Set(bContext.UserEntityKey.String(), user)
+    ctx = context.WithValue(ctx, bContext.UserEntityKey, user)
+    c.Request = c.Request.WithContext(ctx)
 
-    ctx.Next()
+    c.Next()
 }
 ```
 
@@ -126,25 +122,25 @@ func AuthRequired(ctx *gin.Context) {
 package bCtxUtil
 
 import (
-    "github.com/gin-gonic/gin"
+    "context"
+
     bContext "your-project/internal/constant/context"
     "your-project/internal/entity"
 )
 
-// [!code highlight]
+// [!code highlight:2]
 // GetUserEntity 从上下文获取当前登录用户
-func GetUserEntity(ctx *gin.Context) *entity.User {
-    value, exists := ctx.Get(bContext.UserEntityKey.String())
-    if !exists {
-        return nil
+func GetUserEntity(ctx context.Context) *entity.User {
+    if value := ctx.Value(bContext.UserEntityKey); value != nil {
+        // [!code highlight]
+        return value.(*entity.User)
     }
-    // [!code highlight]
-    return value.(*entity.User)
+    return nil
 }
 
-// [!code highlight]
+// [!code highlight:2]
 // MustGetUserEntity 从上下文获取当前登录用户（不存在则 panic）
-func MustGetUserEntity(ctx *gin.Context) *entity.User {
+func MustGetUserEntity(ctx context.Context) *entity.User {
     user := GetUserEntity(ctx)
     if user == nil {
         panic("用户实体不存在于上下文中")
@@ -164,23 +160,23 @@ import (
     bCtxUtil "your-project/pkg/ctx"
 )
 
-func (h *UserHandler) GetProfile(ctx *gin.Context) {
+func (h *UserHandler) GetProfile(c *gin.Context) {
     // [!code highlight:2]
     // 获取当前登录用户
-    user := bCtxUtil.GetUserEntity(ctx)
+    user := bCtxUtil.GetUserEntity(c.Request.Context())
 
-    xResult.SuccessHasData(ctx, "获取成功", user)
+    xResult.SuccessHasData(c, "获取成功", user)
 }
 
-func (h *UserHandler) UpdateProfile(ctx *gin.Context) {
+func (h *UserHandler) UpdateProfile(c *gin.Context) {
     // [!code highlight:2]
     // 获取当前登录用户 ID
-    currentUser := bCtxUtil.MustGetUserEntity(ctx)
+    currentUser := bCtxUtil.MustGetUserEntity(c.Request.Context())
 
     // 更新逻辑...
-    h.service.UpdateUser(ctx, currentUser.ID, req)
+    h.service.UpdateUser(c.Request.Context(), currentUser.ID, req)
 
-    xResult.Success(ctx, "更新成功")
+    xResult.Success(c, "更新成功")
 }
 ```
 
@@ -190,12 +186,11 @@ func (h *UserHandler) UpdateProfile(ctx *gin.Context) {
 
 ```
 your-project/
+├── main.go                     # 入口，注册节点
 ├── internal/
 │   ├── app/
-│   │   ├── middleware/
-│   │   │   └── auth_required.go    # 认证中间件
-│   │   └── startup/
-│   │       └── startup_context.go  # 上下文注入
+│   │   └── middleware/
+│   │       └── auth_required.go    # 认证中间件
 │   ├── constant/
 │   │   └── context/
 │   │       └── business.go         # 自定义键定义
@@ -211,47 +206,50 @@ your-project/
 ```go title="internal/constant/context/business.go"
 package bContext
 
-import xCtx "github.com/bamboo-services/bamboo-base-go/context"
+import xConsts "github.com/bamboo-services/bamboo-base-go/context"
 
 const (
     // [!code highlight:5]
     // 用户相关
-    UserEntityKey     xCtx.ContextKey = "business_user_entity"
-    UserTokenKey      xCtx.ContextKey = "business_user_token"
-    UserPermissionKey xCtx.ContextKey = "business_user_permission"
+    UserEntityKey     xConsts.ContextKey = "business_user_entity"
+    UserTokenKey      xConsts.ContextKey = "business_user_token"
+    UserPermissionKey xConsts.ContextKey = "business_user_permission"
 
     // [!code highlight:3]
     // 第三方服务
-    TencentSmsKey     xCtx.ContextKey = "business_tencent_sms"
-    AliyunOssKey      xCtx.ContextKey = "business_aliyun_oss"
+    TencentSmsKey     xConsts.ContextKey = "business_tencent_sms"
+    AliyunOssKey      xConsts.ContextKey = "business_aliyun_oss"
 )
 ```
 
-### 启动注入
+### 节点化注入
 
-```go title="internal/app/startup/startup_context.go"
-package startup
+```go title="main.go"
+package main
 
 import (
-    xCtx "github.com/bamboo-services/bamboo-base-go/context"
-    "github.com/gin-gonic/gin"
+    "context"
+
+    xConsts "github.com/bamboo-services/bamboo-base-go/context"
+    xReg "github.com/bamboo-services/bamboo-base-go/register"
+    xRegNode "github.com/bamboo-services/bamboo-base-go/register/node"
     bContext "your-project/internal/constant/context"
 )
 
-func (r *Reg) businessContextInit() {
-    r.Serve.Use(func(c *gin.Context) {
+func main() {
+    reg := xReg.Register(context.Background(), []xRegNode.RegNodeList{
         // [!code highlight:3]
         // 框架资源
-        c.Set(xCtx.DatabaseKey.String(), r.DB)
-        c.Set(xCtx.RedisClientKey.String(), r.RDB)
+        {Key: xConsts.DatabaseKey, Node: initDatabase},
+        {Key: xConsts.RedisClientKey, Node: initRedis},
 
         // [!code highlight:3]
         // 业务资源
-        c.Set(bContext.TencentSmsKey.String(), r.Tencent.SmsClient)
-        c.Set(bContext.AliyunOssKey.String(), r.Aliyun.OssClient)
-
-        c.Next()
+        {Key: bContext.TencentSmsKey, Node: initTencentSms},
+        {Key: bContext.AliyunOssKey, Node: initAliyunOss},
     })
+
+    reg.Serve.Run(":8080")
 }
 ```
 
@@ -261,23 +259,24 @@ func (r *Reg) businessContextInit() {
 package bCtxUtil
 
 import (
-    "github.com/gin-gonic/gin"
+    "context"
+
     sms "github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/sms/v20210111"
     bContext "your-project/internal/constant/context"
     "your-project/internal/entity"
 )
 
 // [!code highlight]
-func GetUserEntity(ctx *gin.Context) *entity.User {
-    if v, ok := ctx.Get(bContext.UserEntityKey.String()); ok {
+func GetUserEntity(ctx context.Context) *entity.User {
+    if v := ctx.Value(bContext.UserEntityKey); v != nil {
         return v.(*entity.User)
     }
     return nil
 }
 
 // [!code highlight]
-func GetTencentSmsClient(ctx *gin.Context) *sms.Client {
-    if v, ok := ctx.Get(bContext.TencentSmsKey.String()); ok {
+func MustGetTencentSmsClient(ctx context.Context) *sms.Client {
+    if v := ctx.Value(bContext.TencentSmsKey); v != nil {
         return v.(*sms.Client)
     }
     panic("腾讯云短信客户端未注入")

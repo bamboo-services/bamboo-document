@@ -1,18 +1,19 @@
 ---
 title: 雪花算法初始化
-description: SnowflakeInit 初始化分布式唯一 ID 生成器
+description: SnowflakeInit 作为内置节点初始化分布式唯一 ID 生成器
 icon: Snowflake
 ---
 
 # 雪花算法初始化
 
-`SnowflakeInit` 方法初始化雪花算法节点，用于生成分布式唯一 ID。
+`SnowflakeInit` 作为**内置初始化节点**，自动注册到节点管理器中，用于初始化雪花算法节点。
 
 ## SnowflakeInit
 
-```go title="register_snowflake.go"
-// [!code highlight]
-func (r *Reg) SnowflakeInit()
+```go title="register/init/init_snowflake.go"
+// [!code highlight:2]
+// 内置初始化节点函数
+func SnowflakeInit(ctx context.Context) (any, error)
 ```
 
 **环境变量配置：**
@@ -24,19 +25,18 @@ func (r *Reg) SnowflakeInit()
 
 ## 实现细节
 
-```go title="register_snowflake.go"
-func (r *Reg) SnowflakeInit() {
+```go title="register/init/init_snowflake.go"
+func SnowflakeInit(ctx context.Context) (any, error) {
     log := xLog.WithName(xLog.NamedINIT)
-    log.Info(r.Context, "初始化雪花算法节点")
+    log.Info(ctx, "初始化雪花算法节点")
 
     // [!code highlight:4]
+    // 初始化默认节点
     if err := xSnowflake.InitDefaultNode(); err != nil {
-        log.SugarError(r.Context, "雪花算法节点初始化失败", "error", err)
-        panic("雪花算法节点初始化失败: " + err.Error())
+        return nil, err
     }
 
-    // [!code highlight:2]
-    // 获取节点信息并记录日志
+    // [!code highlight]
     node := xSnowflake.GetDefaultNode()
 
     // [!code highlight:3]
@@ -44,13 +44,43 @@ func (r *Reg) SnowflakeInit() {
     testID := node.MustGenerate()                          // 普通 ID（Gene=0）
     testGeneID := node.MustGenerate(xSnowflake.GeneSystem) // 基因 ID
 
-    log.SugarDebug(r.Context, "雪花算法节点初始化成功",
+    log.SugarDebug(ctx, "雪花算法节点初始化成功",
         "datacenter_id", node.DatacenterID(),
         "node_id", node.NodeID(),
         "test_id", testID.String(),
         "test_gene_id", testGeneID.String(),
-        "test_gene_id_gene", testGeneID.Gene().String(),
     )
+
+    // [!code highlight:2]
+    // 返回节点实例，将被存入上下文
+    return xSnowflake.GetDefaultNode(), nil
+}
+```
+
+## 节点注册
+
+在 `Register` 流程中，雪花算法作为内置节点自动注册：
+
+```go title="register.go"
+func Register(ctx context.Context, nodeList []xRegNode.RegNodeList) *Reg {
+    reg := newReg(ctx)
+
+    reg.configInit()
+    reg.loggerInit()
+
+    // [!code highlight:2]
+    // 内置节点：雪花算法
+    reg.Init.Use(xConsts.SnowflakeNodeKey, xInit.SnowflakeInit)
+
+    // 用户自定义节点
+    for _, node := range nodeList {
+        reg.Init.Use(node.Key, node.Node)
+    }
+
+    reg.Init.Exec()
+    reg.engineInit()
+
+    return reg
 }
 ```
 
@@ -65,15 +95,19 @@ func (r *Reg) SnowflakeInit() {
 
 ## 使用雪花算法
 
-初始化后，雪花算法节点会在 `SystemContextInit` 中注入到请求上下文：
+初始化后，雪花算法节点会通过上下文注入到每个 HTTP 请求：
 
 ```go
 import (
     xSnowflake "github.com/bamboo-services/bamboo-base-go/snowflake"
-    xCtxUtil "github.com/bamboo-services/bamboo-base-go/context"
+    xCtxUtil "github.com/bamboo-services/bamboo-base-go/utility/ctxutil"
 )
 
-func CreateUser(ctx *gin.Context) {
+func CreateUser(c *gin.Context) {
+    // [!code highlight:2]
+    // 获取标准上下文
+    ctx := c.Request.Context()
+
     // [!code highlight:2]
     // 从上下文获取雪花算法节点
     node := xCtxUtil.GetSnowflakeNode(ctx)
@@ -87,6 +121,42 @@ func CreateUser(ctx *gin.Context) {
     orderID := node.MustGenerate(xSnowflake.GeneOrder)
 }
 ```
+
+## 便捷函数
+
+`xCtxUtil` 提供了便捷的 ID 生成函数：
+
+```go
+// [!code highlight:2]
+// Panic 版本
+id := xCtxUtil.MustGenerateSnowflakeID(ctx)
+geneID := xCtxUtil.MustGenerateGeneSnowflakeID(ctx, xSnowflake.GeneUser)
+
+// [!code highlight:2]
+// 错误返回版本
+id, err := xCtxUtil.GenerateSnowflakeID(ctx)
+geneID, err := xCtxUtil.GenerateGeneSnowflakeID(ctx, xSnowflake.GeneUser)
+```
+
+## 回退机制
+
+`GetSnowflakeNode` 具有回退机制：
+
+```go title="utility/ctxutil/snowflake.go"
+func GetSnowflakeNode(ctx context.Context) *xSnowflake.Node {
+    value := ctx.Value(xConsts.SnowflakeNodeKey)
+    if value != nil {
+        if node, ok := value.(*xSnowflake.Node); ok {
+            return node
+        }
+    }
+    // [!code highlight:2]
+    // 回退到默认节点（即使在非 HTTP 请求上下文中也能工作）
+    return xSnowflake.GetDefaultNode()
+}
+```
+
+这确保了即使在非 HTTP 请求上下文中（如定时任务、消息队列处理）也能正常生成 ID。
 
 ## 基因 ID
 
@@ -114,13 +184,13 @@ fmt.Println(gene.String()) // "User"
 
 ## 注意事项
 
-- 该方法应在 `LoggerInit` 之后调用，以确保日志记录器可用
-- 初始化失败会触发 `panic` 并终止程序
+- 该节点在 `loggerInit` 之后执行，确保日志记录器可用
+- 初始化失败会返回错误，导致 `Exec()` panic 并终止程序
 - 在分布式环境中，确保不同节点配置不同的 `SNOWFLAKE_DATACENTER_ID` 和 `SNOWFLAKE_NODE_ID`
 
 ## 下一步
 
 <Cards>
   <Card title="引擎初始化" href="./engine" />
-  <Card title="上下文初始化" href="./context" />
+  <Card title="快速开始" href="./index" />
 </Cards>

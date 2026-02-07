@@ -1,6 +1,6 @@
 ---
 title: 快速开始
-description: xReg 包提供一键初始化所有核心组件
+description: xReg 包提供节点化初始化系统，支持灵活的组件注册
 icon: Rocket
 ---
 
@@ -8,10 +8,11 @@ import { TypeTable } from '@/components/type-table';
 
 # xReg 包
 
-`xReg` 包是 Bamboo Base 的核心注册模块，提供一键初始化所有核心组件的能力。
+`xReg` 包是 Bamboo Base 的核心注册模块，采用**节点化模式**实现灵活的组件初始化和依赖注入。
 
 ```go
 import xReg "github.com/bamboo-services/bamboo-base-go/register"
+import xRegNode "github.com/bamboo-services/bamboo-base-go/register/node"
 ```
 
 ## Reg 结构体
@@ -21,21 +22,21 @@ import xReg "github.com/bamboo-services/bamboo-base-go/register"
 ```go title="register.go"
 type Reg struct {
     // [!code highlight:2]
-    Context context.Context // 上下文，用于控制取消和超时
-    Serve   *gin.Engine     // Gin 引擎实例
+    Serve *gin.Engine       // Gin 引擎实例
+    Init  *xRegNode.RegNode // 初始化节点管理器
 }
 ```
 
 <TypeTable
   type={{
-    Context: {
-      description: '系统上下文，用于控制取消和超时',
-      type: 'context.Context',
-      required: true,
-    },
     Serve: {
       description: 'Gin 引擎实例，用于处理 HTTP 请求',
       type: '*gin.Engine',
+      required: true,
+    },
+    Init: {
+      description: '节点管理器，包含初始化上下文和节点列表',
+      type: '*xRegNode.RegNode',
       required: true,
     },
   }}
@@ -43,22 +44,39 @@ type Reg struct {
 
 ## Register
 
-一键注册并初始化应用的所有核心组件。
+注册并初始化应用的所有核心组件，支持自定义初始化节点。
 
 ```go title="register.go"
 // [!code highlight]
-func Register() *Reg
+func Register(ctx context.Context, nodeList []xRegNode.RegNodeList) *Reg
 ```
+
+**参数说明：**
+
+<TypeTable
+  type={{
+    ctx: {
+      description: '上下文，用于控制取消和超时',
+      type: 'context.Context',
+      required: true,
+    },
+    nodeList: {
+      description: '自定义初始化节点列表',
+      type: '[]xRegNode.RegNodeList',
+      required: true,
+    },
+  }}
+/>
 
 **初始化顺序：**
 
 ```
-Register()
-    ├── ConfigInit()        // 1. 加载配置
-    ├── LoggerInit()        // 2. 初始化日志
-    ├── SnowflakeInit()     // 3. 初始化雪花算法
-    ├── EngineInit()        // 4. 启动 Gin 引擎
-    └── SystemContextInit() // 5. 初始化系统上下文
+Register(ctx, nodeList)
+    ├── configInit()           // 1. 加载配置（私有）
+    ├── loggerInit()           // 2. 初始化日志（私有）
+    ├── SnowflakeInit          // 3. 内置雪花算法节点
+    ├── [自定义节点...]         // 4. 用户自定义节点
+    └── engineInit()           // 5. 启动 Gin 引擎（私有）
 ```
 
 **示例：**
@@ -67,13 +85,22 @@ Register()
 package main
 
 import (
+    "context"
+
+    xConsts "github.com/bamboo-services/bamboo-base-go/context"
     xReg "github.com/bamboo-services/bamboo-base-go/register"
+    xRegNode "github.com/bamboo-services/bamboo-base-go/register/node"
 )
 
 func main() {
-    // [!code highlight]
-    // 一键初始化所有组件
-    reg := xReg.Register()
+    // [!code highlight:8]
+    // 初始化，传入自定义节点
+    reg := xReg.Register(context.Background(), []xRegNode.RegNodeList{
+        {
+            Key:  xConsts.DatabaseKey,
+            Node: initDatabase,  // 自定义数据库初始化
+        },
+    })
 
     // 注册路由
     reg.Serve.GET("/ping", func(c *gin.Context) {
@@ -83,70 +110,128 @@ func main() {
     // 启动服务
     reg.Serve.Run(":8080")
 }
+
+// [!code highlight:2]
+// 自定义初始化节点
+func initDatabase(ctx context.Context) (any, error) {
+    // 从上下文获取配置（前面节点的结果）
+    // 初始化数据库连接
+    db, err := gorm.Open(...)
+    return db, err
+}
 ```
 
-## 初始化流程
+## 节点化系统
 
-### 1. ConfigInit
+### RegNode 结构
+
+```go title="register/node/node.go"
+// [!code highlight:2]
+// Node 定义初始化函数签名
+type Node func(ctx context.Context) (any, error)
+
+// [!code highlight:2]
+// RegNodeList 存储节点信息
+type RegNodeList struct {
+    Key  xConsts.ContextKey  // 上下文键
+    Node Node                // 初始化函数
+}
+
+// [!code highlight:2]
+// RegNode 节点管理器
+type RegNode struct {
+    list []RegNodeList
+    Ctx  context.Context
+}
+```
+
+### 核心方法
+
+```go title="register/node/node.go"
+// [!code highlight:2]
+// Use 注册初始化节点
+func (rn *RegNode) Use(ctxKey xConsts.ContextKey, registerFunc Node)
+
+// [!code highlight:2]
+// Exec 按顺序执行所有节点
+func (rn *RegNode) Exec()
+```
+
+### 执行流程
+
+```go title="register/node/node.go"
+func (rn *RegNode) Exec() {
+    for i, node := range rn.list {
+        // [!code highlight:2]
+        // 执行节点初始化
+        val, err := node.Node(rn.Ctx)
+        if err != nil {
+            panic(fmt.Sprintf("执行注册节点失败: index=%d Key=%v err=%v", i, node.Key, err))
+        }
+        // [!code highlight:2]
+        // 将结果存入上下文，供后续节点使用
+        rn.Ctx = context.WithValue(rn.Ctx, node.Key, val)
+    }
+    rn.list = nil // 释放内存
+}
+```
+
+**特点：**
+- 🔄 **依赖注入**：每个节点可访问前面节点的初始化结果
+- 📊 **顺序执行**：按注册顺序依次初始化
+- 🛡️ **错误处理**：任何节点失败都会 panic 并输出详细信息
+
+## 内置初始化
+
+### 配置初始化（私有）
 
 从 `.env` 文件加载环境变量配置。
 
-```go title="register_config.go"
-func (r *Reg) ConfigInit()
-```
-
 详见：[配置初始化](./config)
 
-### 2. LoggerInit
+### 日志初始化（私有）
 
 初始化日志记录器，支持控制台彩色输出和文件 JSON 记录。
 
-```go title="register_logger.go"
-func (r *Reg) LoggerInit()
-```
-
 详见：[日志初始化](./logger)
 
-### 3. SnowflakeInit
+### 雪花算法节点（内置）
 
-初始化雪花算法节点，用于生成分布式唯一 ID。
+作为内置节点自动注册，初始化雪花算法节点。
 
-```go title="register_snowflake.go"
-func (r *Reg) SnowflakeInit()
+```go title="register.go"
+// [!code highlight]
+reg.Init.Use(xConsts.SnowflakeNodeKey, xInit.SnowflakeInit)
 ```
 
 详见：[雪花算法初始化](./snowflake)
 
-### 4. EngineInit
+### 引擎初始化（私有）
 
-初始化 Gin 引擎，注册内置中间件和验证器。
-
-```go title="register_gin.go"
-func (r *Reg) EngineInit()
-```
+初始化 Gin 引擎，注册内置中间件和验证器，并注入初始化上下文。
 
 详见：[引擎初始化](./engine)
 
-### 5. SystemContextInit
+## 上下文注入
 
-初始化系统上下文中间件，注入雪花算法节点等全局资源。
+引擎初始化时会自动将节点管理器的上下文注入到每个 HTTP 请求：
 
-```go title="register_context.go"
-func (r *Reg) SystemContextInit()
+```go title="register_gin.go"
+// [!code highlight:2]
+// 注入初始化上下文到每个请求
+func injectContext(ctx context.Context) func(c *gin.Context) {
+    return func(c *gin.Context) {
+        c.Request = c.Request.WithContext(ctx)
+        c.Next()
+    }
+}
 ```
 
-详见：[上下文初始化](./context)
+这意味着在业务代码中可以通过 `c.Request.Context()` 获取初始化时注入的所有资源。
 
 ## 调试模式
 
 通过环境变量 `DEBUG` 控制调试模式：
-
-```go title="register.go"
-// [!code highlight]
-func isDebugMode() bool {
-    return xEnv.GetEnvBool(xEnv.Debug, false)
-}
-```
 
 | 环境变量 | 值 | 效果 |
 |---------|-----|------|
@@ -159,15 +244,22 @@ func isDebugMode() bool {
 package main
 
 import (
+    "context"
+
+    xConsts "github.com/bamboo-services/bamboo-base-go/context"
     xReg "github.com/bamboo-services/bamboo-base-go/register"
+    xRegNode "github.com/bamboo-services/bamboo-base-go/register/node"
     xResult "github.com/bamboo-services/bamboo-base-go/result"
     "github.com/gin-gonic/gin"
 )
 
 func main() {
-    // [!code highlight]
-    // 一键初始化
-    reg := xReg.Register()
+    // [!code highlight:9]
+    // 初始化，注册自定义节点
+    reg := xReg.Register(context.Background(), []xRegNode.RegNodeList{
+        {Key: xConsts.DatabaseKey, Node: initDatabase},
+        {Key: xConsts.RedisClientKey, Node: initRedis},
+    })
 
     // 注册路由
     // [!code highlight:4]
@@ -180,6 +272,20 @@ func main() {
     // 启动服务
     // [!code highlight]
     reg.Serve.Run(":8080")
+}
+
+// [!code highlight:2]
+// 数据库初始化节点
+func initDatabase(ctx context.Context) (any, error) {
+    // 初始化数据库...
+    return db, nil
+}
+
+// [!code highlight:2]
+// Redis 初始化节点
+func initRedis(ctx context.Context) (any, error) {
+    // 初始化 Redis...
+    return rdb, nil
 }
 ```
 
