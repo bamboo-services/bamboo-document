@@ -103,6 +103,57 @@ func MyHandler(c *gin.Context) {
 }
 ```
 
+## 上下文节点
+
+`ContextNode` 用于在初始化阶段保存上下文中的资源条目，配合 `ContextNodeList` 形成有序的键值链式列表。
+
+```go
+import xCtx "github.com/bamboo-services/bamboo-base-go/context"
+```
+
+### ContextNode 结构
+
+```go
+type ContextNode struct {
+    Key   xCtx.ContextKey
+    Value any
+}
+```
+
+- `Key`：上下文键，用于标识资源类型
+- `Value`：资源实例，支持任意类型
+
+### ContextNodeList 结构
+
+```go
+type ContextNodeList []ContextNode
+
+func NewCtxNodeList() ContextNodeList
+func (c ContextNodeList) GetList() []ContextNode
+func (c ContextNodeList) Get(key ContextKey) any
+func (c *ContextNodeList) Append(key ContextKey, value any)
+```
+
+**常用能力：**
+- `Get`：按键读取已注入资源
+- `Append`：追加新的资源节点
+- `GetList`：按顺序获取完整节点列表
+
+### 使用示例
+
+```go title="register.go"
+nodeList := xCtx.NewCtxNodeList()
+nodeList.Append(xConsts.DatabaseKey, initDatabase())
+nodeList.Append(xConsts.RedisClientKey, initRedis())
+
+reg := xReg.Register(ctx, []xRegNode.RegNodeList{
+    {Key: xConsts.RegNodeKey, Node: func(ctx context.Context) (any, error) {
+        return nodeList, nil
+    }},
+})
+```
+
+
 ## 注入上下文
 
 ### 方式一：节点化注入（推荐）

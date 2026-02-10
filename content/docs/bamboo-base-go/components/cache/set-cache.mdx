@@ -14,12 +14,12 @@ import { TypeTable } from '@/components/type-table';
 
 ```go
 type SetCache[K any, V any] interface {
-    Add(ctx *gin.Context, key K, members ...V) error
-    Members(ctx *gin.Context, key K) ([]V, error)
-    IsMember(ctx *gin.Context, key K, member V) (bool, error)
-    Count(ctx *gin.Context, key K) (int64, error)
-    Remove(ctx *gin.Context, key K, members ...V) error
-    Delete(ctx *gin.Context, key K) error
+    Add(ctx context.Context, key K, members ...V) error
+    Members(ctx context.Context, key K) ([]V, error)
+    IsMember(ctx context.Context, key K, member V) (bool, error)
+    Count(ctx context.Context, key K) (int64, error)
+    Remove(ctx context.Context, key K, members ...V) error
+    Delete(ctx context.Context, key K) error
 }
 ```
 
@@ -57,11 +57,11 @@ user:tags:123 → {"golang", "redis", "docker"}
 将一个或多个成员添加到集合中。
 
 ```go
-Add(ctx *gin.Context, key K, members ...V) error
+Add(ctx context.Context, key K, members ...V) error
 ```
 
 **参数：**
-- `ctx` - Gin 上下文
+- `ctx` - context.Context 上下文
 - `key` - 集合键
 - `members` - 要添加的成员（可变参数）
 
@@ -75,11 +75,11 @@ Add(ctx *gin.Context, key K, members ...V) error
 获取集合中的所有成员。
 
 ```go
-Members(ctx *gin.Context, key K) ([]V, error)
+Members(ctx context.Context, key K) ([]V, error)
 ```
 
 **参数：**
-- `ctx` - Gin 上下文
+- `ctx` - context.Context 上下文
 - `key` - 集合键
 
 **返回值：**
@@ -91,11 +91,11 @@ Members(ctx *gin.Context, key K) ([]V, error)
 检查指定成员是否存在于集合中。
 
 ```go
-IsMember(ctx *gin.Context, key K, member V) (bool, error)
+IsMember(ctx context.Context, key K, member V) (bool, error)
 ```
 
 **参数：**
-- `ctx` - Gin 上下文
+- `ctx` - context.Context 上下文
 - `key` - 集合键
 - `member` - 要检查的成员
 
@@ -108,11 +108,11 @@ IsMember(ctx *gin.Context, key K, member V) (bool, error)
 获取集合中的成员数量。
 
 ```go
-Count(ctx *gin.Context, key K) (int64, error)
+Count(ctx context.Context, key K) (int64, error)
 ```
 
 **参数：**
-- `ctx` - Gin 上下文
+- `ctx` - context.Context 上下文
 - `key` - 集合键
 
 **返回值：**
@@ -124,11 +124,11 @@ Count(ctx *gin.Context, key K) (int64, error)
 从集合中移除指定的成员。
 
 ```go
-Remove(ctx *gin.Context, key K, members ...V) error
+Remove(ctx context.Context, key K, members ...V) error
 ```
 
 **参数：**
-- `ctx` - Gin 上下文
+- `ctx` - context.Context 上下文
 - `key` - 集合键
 - `members` - 要移除的成员（可变参数）
 
@@ -140,11 +140,11 @@ Remove(ctx *gin.Context, key K, members ...V) error
 删除整个集合。
 
 ```go
-Delete(ctx *gin.Context, key K) error
+Delete(ctx context.Context, key K) error
 ```
 
 **参数：**
-- `ctx` - Gin 上下文
+- `ctx` - context.Context 上下文
 - `key` - 集合键
 
 **返回值：**
@@ -166,42 +166,42 @@ type UserTagsCache struct {
 
 // [!code highlight:5]
 // Add 添加用户标签
-func (c *UserTagsCache) Add(ctx *gin.Context, userID string, tags ...string) error {
+func (c *UserTagsCache) Add(ctx context.Context, userID string, tags ...string) error {
     key := "user:tags:" + userID
     return c.RDB.SAdd(ctx, key, tags).Err()
 }
 
 // [!code highlight:5]
 // Members 获取所有标签
-func (c *UserTagsCache) Members(ctx *gin.Context, userID string) ([]string, error) {
+func (c *UserTagsCache) Members(ctx context.Context, userID string) ([]string, error) {
     key := "user:tags:" + userID
     return c.RDB.SMembers(ctx, key).Result()
 }
 
 // [!code highlight:5]
 // IsMember 检查标签是否存在
-func (c *UserTagsCache) IsMember(ctx *gin.Context, userID string, tag string) (bool, error) {
+func (c *UserTagsCache) IsMember(ctx context.Context, userID string, tag string) (bool, error) {
     key := "user:tags:" + userID
     return c.RDB.SIsMember(ctx, key, tag).Result()
 }
 
 // [!code highlight:5]
 // Count 获取标签数量
-func (c *UserTagsCache) Count(ctx *gin.Context, userID string) (int64, error) {
+func (c *UserTagsCache) Count(ctx context.Context, userID string) (int64, error) {
     key := "user:tags:" + userID
     return c.RDB.SCard(ctx, key).Result()
 }
 
 // [!code highlight:5]
 // Remove 移除标签
-func (c *UserTagsCache) Remove(ctx *gin.Context, userID string, tags ...string) error {
+func (c *UserTagsCache) Remove(ctx context.Context, userID string, tags ...string) error {
     key := "user:tags:" + userID
     return c.RDB.SRem(ctx, key, tags).Err()
 }
 
 // [!code highlight:4]
 // Delete 删除所有标签
-func (c *UserTagsCache) Delete(ctx *gin.Context, userID string) error {
+func (c *UserTagsCache) Delete(ctx context.Context, userID string) error {
     key := "user:tags:" + userID
     return c.RDB.Del(ctx, key).Err()
 }
@@ -222,7 +222,7 @@ func NewUserTagsService(cache *xCache.Cache) *UserTagsService {
 
 // [!code highlight:6]
 // AddTags 添加用户标签
-func (s *UserTagsService) AddTags(ctx *gin.Context, userID string, tags ...string) error {
+func (s *UserTagsService) AddTags(ctx context.Context, userID string, tags ...string) error {
     // 更新数据库
     if err := s.addTagsToDB(userID, tags...); err != nil {
         return err
@@ -235,7 +235,7 @@ func (s *UserTagsService) AddTags(ctx *gin.Context, userID string, tags ...strin
 
 // [!code highlight:11]
 // GetTags 获取用户标签
-func (s *UserTagsService) GetTags(ctx *gin.Context, userID string) ([]string, error) {
+func (s *UserTagsService) GetTags(ctx context.Context, userID string) ([]string, error) {
     // 先从缓存获取
     tags, err := s.cache.Members(ctx, userID)
     if err != nil {
@@ -261,13 +261,13 @@ func (s *UserTagsService) GetTags(ctx *gin.Context, userID string) ([]string, er
 
 // [!code highlight:5]
 // HasTag 检查用户是否有指定标签
-func (s *UserTagsService) HasTag(ctx *gin.Context, userID string, tag string) (bool, error) {
+func (s *UserTagsService) HasTag(ctx context.Context, userID string, tag string) (bool, error) {
     return s.cache.IsMember(ctx, userID, tag)
 }
 
 // [!code highlight:6]
 // RemoveTags 移除用户标签
-func (s *UserTagsService) RemoveTags(ctx *gin.Context, userID string, tags ...string) error {
+func (s *UserTagsService) RemoveTags(ctx context.Context, userID string, tags ...string) error {
     // 更新数据库
     if err := s.removeTagsFromDB(userID, tags...); err != nil {
         return err
@@ -385,7 +385,7 @@ count := len(members)
 区分空集合和不存在的集合：
 
 ```go
-func (s *UserTagsService) GetTags(ctx *gin.Context, userID string) ([]string, error) {
+func (s *UserTagsService) GetTags(ctx context.Context, userID string) ([]string, error) {
     tags, err := s.cache.Members(ctx, userID)
     if err != nil {
         return nil, err
@@ -410,21 +410,21 @@ func (s *UserTagsService) GetTags(ctx *gin.Context, userID string) ([]string, er
 
 ```go
 // 交集：获取两个用户的共同标签
-func (c *UserTagsCache) CommonTags(ctx *gin.Context, userID1, userID2 string) ([]string, error) {
+func (c *UserTagsCache) CommonTags(ctx context.Context, userID1, userID2 string) ([]string, error) {
     key1 := "user:tags:" + userID1
     key2 := "user:tags:" + userID2
     return c.RDB.SInter(ctx, key1, key2).Result()
 }
 
 // 并集：获取两个用户的所有标签
-func (c *UserTagsCache) AllTags(ctx *gin.Context, userID1, userID2 string) ([]string, error) {
+func (c *UserTagsCache) AllTags(ctx context.Context, userID1, userID2 string) ([]string, error) {
     key1 := "user:tags:" + userID1
     key2 := "user:tags:" + userID2
     return c.RDB.SUnion(ctx, key1, key2).Result()
 }
 
 // 差集：获取用户1独有的标签
-func (c *UserTagsCache) UniqueTags(ctx *gin.Context, userID1, userID2 string) ([]string, error) {
+func (c *UserTagsCache) UniqueTags(ctx context.Context, userID1, userID2 string) ([]string, error) {
     key1 := "user:tags:" + userID1
     key2 := "user:tags:" + userID2
     return c.RDB.SDiff(ctx, key1, key2).Result()
@@ -437,13 +437,13 @@ func (c *UserTagsCache) UniqueTags(ctx *gin.Context, userID1, userID2 string) ([
 
 ```go
 // 随机获取一个标签
-func (c *UserTagsCache) RandomTag(ctx *gin.Context, userID string) (string, error) {
+func (c *UserTagsCache) RandomTag(ctx context.Context, userID string) (string, error) {
     key := "user:tags:" + userID
     return c.RDB.SRandMember(ctx, key).Result()
 }
 
 // 随机获取多个标签
-func (c *UserTagsCache) RandomTags(ctx *gin.Context, userID string, count int64) ([]string, error) {
+func (c *UserTagsCache) RandomTags(ctx context.Context, userID string, count int64) ([]string, error) {
     key := "user:tags:" + userID
     return c.RDB.SRandMemberN(ctx, key, count).Result()
 }
@@ -455,7 +455,7 @@ func (c *UserTagsCache) RandomTags(ctx *gin.Context, userID string, count int64)
 
 ```go
 // 将标签从一个用户移动到另一个用户
-func (c *UserTagsCache) MoveTag(ctx *gin.Context, fromUserID, toUserID, tag string) error {
+func (c *UserTagsCache) MoveTag(ctx context.Context, fromUserID, toUserID, tag string) error {
     fromKey := "user:tags:" + fromUserID
     toKey := "user:tags:" + toUserID
     return c.RDB.SMove(ctx, fromKey, toKey, tag).Err()
@@ -469,7 +469,7 @@ func (c *UserTagsCache) MoveTag(ctx *gin.Context, fromUserID, toUserID, tag stri
 批量操作多个集合：
 
 ```go
-func (c *UserTagsCache) AddTagsToMultipleUsers(ctx *gin.Context, userTags map[string][]string) error {
+func (c *UserTagsCache) AddTagsToMultipleUsers(ctx context.Context, userTags map[string][]string) error {
     pipe := c.RDB.Pipeline()
 
     for userID, tags := range userTags {
@@ -487,7 +487,7 @@ func (c *UserTagsCache) AddTagsToMultipleUsers(ctx *gin.Context, userTags map[st
 避免单个集合成员过多：
 
 ```go
-func (c *UserTagsCache) Add(ctx *gin.Context, userID string, tags ...string) error {
+func (c *UserTagsCache) Add(ctx context.Context, userID string, tags ...string) error {
     key := "user:tags:" + userID
 
     // [!code highlight:5]

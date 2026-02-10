@@ -98,11 +98,11 @@ type UserCache struct {
 }
 
 // 实现 KeyCache 接口
-func (c *UserCache) Get(ctx *gin.Context, userID string) (*User, bool, error) {
+func (c *UserCache) Get(ctx context.Context, userID string) (*User, bool, error) {
     // 实现获取逻辑
 }
 
-func (c *UserCache) Set(ctx *gin.Context, userID string, user *User) error {
+func (c *UserCache) Set(ctx context.Context, userID string, user *User) error {
     // 实现设置逻辑
 }
 ```

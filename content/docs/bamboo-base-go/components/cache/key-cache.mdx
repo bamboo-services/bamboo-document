@@ -14,10 +14,10 @@ import { TypeTable } from '@/components/type-table';
 
 ```go
 type KeyCache[K any, V any] interface {
-    Get(ctx *gin.Context, key K) (*V, bool, error)
-    Set(ctx *gin.Context, key K, value *V) error
-    Exists(ctx *gin.Context, key K) (bool, error)
-    Delete(ctx *gin.Context, key K) error
+    Get(ctx context.Context, key K) (*V, bool, error)
+    Set(ctx context.Context, key K, value *V) error
+    Exists(ctx context.Context, key K) (bool, error)
+    Delete(ctx context.Context, key K) error
 }
 ```
 
@@ -45,11 +45,11 @@ type KeyCache[K any, V any] interface {
 根据键检索值。
 
 ```go
-Get(ctx *gin.Context, key K) (*V, bool, error)
+Get(ctx context.Context, key K) (*V, bool, error)
 ```
 
 **参数：**
-- `ctx` - Gin 上下文
+- `ctx` - context.Context 上下文
 - `key` - 缓存键
 
 **返回值：**
@@ -62,11 +62,11 @@ Get(ctx *gin.Context, key K) (*V, bool, error)
 将键值对存入缓存。
 
 ```go
-Set(ctx *gin.Context, key K, value *V) error
+Set(ctx context.Context, key K, value *V) error
 ```
 
 **参数：**
-- `ctx` - Gin 上下文
+- `ctx` - context.Context 上下文
 - `key` - 缓存键
 - `value` - 指向值的指针（可以为 nil）
 
@@ -80,11 +80,11 @@ Set(ctx *gin.Context, key K, value *V) error
 检查指定键是否存在。
 
 ```go
-Exists(ctx *gin.Context, key K) (bool, error)
+Exists(ctx context.Context, key K) (bool, error)
 ```
 
 **参数：**
-- `ctx` - Gin 上下文
+- `ctx` - context.Context 上下文
 - `key` - 缓存键
 
 **返回值：**
@@ -96,11 +96,11 @@ Exists(ctx *gin.Context, key K) (bool, error)
 从缓存中移除指定的键。
 
 ```go
-Delete(ctx *gin.Context, key K) error
+Delete(ctx context.Context, key K) error
 ```
 
 **参数：**
-- `ctx` - Gin 上下文
+- `ctx` - context.Context 上下文
 - `key` - 缓存键
 
 **返回值：**
@@ -133,7 +133,7 @@ type UserCache struct {
 
 // [!code highlight:15]
 // Get 获取用户缓存
-func (c *UserCache) Get(ctx *gin.Context, userID string) (*User, bool, error) {
+func (c *UserCache) Get(ctx context.Context, userID string) (*User, bool, error) {
     key := "user:" + userID
 
     val, err := c.RDB.Get(ctx, key).Result()
@@ -154,7 +154,7 @@ func (c *UserCache) Get(ctx *gin.Context, userID string) (*User, bool, error) {
 
 // [!code highlight:17]
 // Set 设置用户缓存
-func (c *UserCache) Set(ctx *gin.Context, userID string, user *User) error {
+func (c *UserCache) Set(ctx context.Context, userID string, user *User) error {
     if user == nil {
         return nil
     }
@@ -171,7 +171,7 @@ func (c *UserCache) Set(ctx *gin.Context, userID string, user *User) error {
 
 // [!code highlight:5]
 // Exists 检查用户是否存在
-func (c *UserCache) Exists(ctx *gin.Context, userID string) (bool, error) {
+func (c *UserCache) Exists(ctx context.Context, userID string) (bool, error) {
     key := "user:" + userID
     count, err := c.RDB.Exists(ctx, key).Result()
     return count > 0, err
@@ -179,7 +179,7 @@ func (c *UserCache) Exists(ctx *gin.Context, userID string) (bool, error) {
 
 // [!code highlight:4]
 // Delete 删除用户缓存
-func (c *UserCache) Delete(ctx *gin.Context, userID string) error {
+func (c *UserCache) Delete(ctx context.Context, userID string) error {
     key := "user:" + userID
     return c.RDB.Del(ctx, key).Err()
 }
@@ -200,7 +200,7 @@ func NewUserService(cache *xCache.Cache) *UserService {
 
 // [!code highlight:11]
 // GetUser 获取用户（带缓存）
-func (s *UserService) GetUser(ctx *gin.Context, userID string) (*User, error) {
+func (s *UserService) GetUser(ctx context.Context, userID string) (*User, error) {
     // 先从缓存获取
     user, exists, err := s.cache.Get(ctx, userID)
     if err != nil {
@@ -225,7 +225,7 @@ func (s *UserService) GetUser(ctx *gin.Context, userID string) (*User, error) {
 
 // [!code highlight:2]
 // DeleteUser 删除用户并清除缓存
-func (s *UserService) DeleteUser(ctx *gin.Context, userID string) error {
+func (s *UserService) DeleteUser(ctx context.Context, userID string) error {
     // 删除数据库记录
     if err := s.deleteUserFromDB(userID); err != nil {
         return err
@@ -285,7 +285,7 @@ type ConfigCache interface {
 使用前缀区分不同类型的缓存：
 
 ```go
-func (c *UserCache) Get(ctx *gin.Context, userID string) (*User, bool, error) {
+func (c *UserCache) Get(ctx context.Context, userID string) (*User, bool, error) {
     // [!code highlight:2]
     // 使用 "user:" 前缀
     key := "user:" + userID
@@ -298,7 +298,7 @@ func (c *UserCache) Get(ctx *gin.Context, userID string) (*User, bool, error) {
 在 `Set` 方法中正确处理 `nil` 值：
 
 ```go
-func (c *UserCache) Set(ctx *gin.Context, userID string, user *User) error {
+func (c *UserCache) Set(ctx context.Context, userID string, user *User) error {
     // [!code highlight:3]
     // 如果值为 nil，直接返回
     if user == nil {
@@ -313,7 +313,7 @@ func (c *UserCache) Set(ctx *gin.Context, userID string, user *User) error {
 区分缓存未命中和真实错误：
 
 ```go
-func (c *UserCache) Get(ctx *gin.Context, userID string) (*User, bool, error) {
+func (c *UserCache) Get(ctx context.Context, userID string) (*User, bool, error) {
     val, err := c.RDB.Get(ctx, key).Result()
     // [!code highlight:3]
     // 缓存未命中不是错误
@@ -351,7 +351,7 @@ data, _ := proto.Marshal(user)
 虽然 `KeyCache` 接口不支持批量操作，但可以使用 Pipeline：
 
 ```go
-func (c *UserCache) SetBatch(ctx *gin.Context, users map[string]*User) error {
+func (c *UserCache) SetBatch(ctx context.Context, users map[string]*User) error {
     pipe := c.RDB.Pipeline()
 
     for userID, user := range users {

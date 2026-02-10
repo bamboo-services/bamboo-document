@@ -13,14 +13,16 @@ import { TypeTable } from '@/components/type-table';
 ## 接口定义
 
 ```go
-type HashCache[K any, F comparable, V any] interface {
-    Get(ctx *gin.Context, key K, field F) (*V, bool, error)
-    Set(ctx *gin.Context, key K, field F, value *V) error
-    GetAll(ctx *gin.Context, key K) (map[F]V, error)
-    SetAll(ctx *gin.Context, key K, fields map[F]*V) error
-    Exists(ctx *gin.Context, key K, field F) (bool, error)
-    Remove(ctx *gin.Context, key K, fields ...F) error
-    Delete(ctx *gin.Context, key K) error
+type HashCache[K any, F comparable, V any, S any] interface {
+    Get(ctx context.Context, key K, field F) (*V, bool, error)
+    Set(ctx context.Context, key K, field F, value *V) error
+    GetAll(ctx context.Context, key K) (map[F]V, error)
+    GetAllStruct(ctx context.Context, key K) (S, error)
+    SetAll(ctx context.Context, key K, fields map[F]*V) error
+    SetAllStruct(ctx context.Context, key K, value S) error
+    Exists(ctx context.Context, key K, field F) (bool, error)
+    Remove(ctx context.Context, key K, fields ...F) error
+    Delete(ctx context.Context, key K) error
 }
 ```
 
@@ -40,6 +42,11 @@ type HashCache[K any, F comparable, V any] interface {
     },
     V: {
       description: '字段值的类型',
+      type: 'any',
+      required: true,
+    },
+    S: {
+      description: '结构体类型，用于批量读写结构化字段',
       type: 'any',
       required: true,
     },
@@ -67,11 +74,11 @@ user:123 → {
 获取指定字段的值。
 
 ```go
-Get(ctx *gin.Context, key K, field F) (*V, bool, error)
+Get(ctx context.Context, key K, field F) (*V, bool, error)
 ```
 
 **参数：**
-- `ctx` - Gin 上下文
+- `ctx` - context.Context 上下文
 - `key` - 哈希键
 - `field` - 字段键
 
@@ -85,11 +92,11 @@ Get(ctx *gin.Context, key K, field F) (*V, bool, error)
 设置单个字段的值。
 
 ```go
-Set(ctx *gin.Context, key K, field F, value *V) error
+Set(ctx context.Context, key K, field F, value *V) error
 ```
 
 **参数：**
-- `ctx` - Gin 上下文
+- `ctx` - context.Context 上下文
 - `key` - 哈希键
 - `field` - 字段键
 - `value` - 指向值的指针
@@ -102,15 +109,31 @@ Set(ctx *gin.Context, key K, field F, value *V) error
 获取哈希表中的所有字段和值。
 
 ```go
-GetAll(ctx *gin.Context, key K) (map[F]V, error)
+GetAll(ctx context.Context, key K) (map[F]V, error)
 ```
 
 **参数：**
-- `ctx` - Gin 上下文
+- `ctx` - context.Context 上下文
 - `key` - 哈希键
 
 **返回值：**
 - `map[F]V` - 所有字段和值的映射
+- `error` - 错误信息
+
+### GetAllStruct
+
+获取哈希表中的所有字段和值，直接映射到指定结构体。
+
+```go
+GetAllStruct(ctx context.Context, key K) (S, error)
+```
+
+**参数：**
+- `ctx` - context.Context 上下文
+- `key` - 哈希键
+
+**返回值：**
+- `S` - 结构体映射结果
 - `error` - 错误信息
 
 ### SetAll
@@ -118,13 +141,29 @@ GetAll(ctx *gin.Context, key K) (map[F]V, error)
 批量设置多个字段的值。
 
 ```go
-SetAll(ctx *gin.Context, key K, fields map[F]*V) error
+SetAll(ctx context.Context, key K, fields map[F]*V) error
 ```
 
 **参数：**
-- `ctx` - Gin 上下文
+- `ctx` - context.Context 上下文
 - `key` - 哈希键
 - `fields` - 字段和值的映射
+
+**返回值：**
+- `error` - 错误信息
+
+### SetAllStruct
+
+批量设置多个字段的值，使用指定结构体进行写入。
+
+```go
+SetAllStruct(ctx context.Context, key K, value S) error
+```
+
+**参数：**
+- `ctx` - context.Context 上下文
+- `key` - 哈希键
+- `value` - 结构体数据
 
 **返回值：**
 - `error` - 错误信息
@@ -134,11 +173,11 @@ SetAll(ctx *gin.Context, key K, fields map[F]*V) error
 检查指定字段是否存在。
 
 ```go
-Exists(ctx *gin.Context, key K, field F) (bool, error)
+Exists(ctx context.Context, key K, field F) (bool, error)
 ```
 
 **参数：**
-- `ctx` - Gin 上下文
+- `ctx` - context.Context 上下文
 - `key` - 哈希键
 - `field` - 字段键
 
@@ -151,11 +190,11 @@ Exists(ctx *gin.Context, key K, field F) (bool, error)
 从哈希表中移除指定的字段。
 
 ```go
-Remove(ctx *gin.Context, key K, fields ...F) error
+Remove(ctx context.Context, key K, fields ...F) error
 ```
 
 **参数：**
-- `ctx` - Gin 上下文
+- `ctx` - context.Context 上下文
 - `key` - 哈希键
 - `fields` - 要移除的字段列表（可变参数）
 
@@ -167,11 +206,11 @@ Remove(ctx *gin.Context, key K, fields ...F) error
 删除整个哈希表。
 
 ```go
-Delete(ctx *gin.Context, key K) error
+Delete(ctx context.Context, key K) error
 ```
 
 **参数：**
-- `ctx` - Gin 上下文
+- `ctx` - context.Context 上下文
 - `key` - 哈希键
 
 **返回值：**
@@ -183,9 +222,9 @@ Delete(ctx *gin.Context, key K) error
 
 ```go title="cache/user_config.go"
 import (
+    "context"
     "encoding/json"
 
-    "github.com/gin-gonic/gin"
     "github.com/redis/go-redis/v9"
     xCache "github.com/bamboo-services/bamboo-base-go/cache"
 )
@@ -202,7 +241,7 @@ type UserConfigCache struct {
 
 // [!code highlight:17]
 // Get 获取单个配置项
-func (c *UserConfigCache) Get(ctx *gin.Context, userID string, field string) (*string, bool, error) {
+func (c *UserConfigCache) Get(ctx context.Context, userID string, field string) (*string, bool, error) {
     key := "user:config:" + userID
 
     val, err := c.RDB.HGet(ctx, key, field).Result()
@@ -218,14 +257,14 @@ func (c *UserConfigCache) Get(ctx *gin.Context, userID string, field string) (*s
 
 // [!code highlight:5]
 // Set 设置单个配置项
-func (c *UserConfigCache) Set(ctx *gin.Context, userID string, field string, value *string) error {
+func (c *UserConfigCache) Set(ctx context.Context, userID string, field string, value *string) error {
     key := "user:config:" + userID
     return c.RDB.HSet(ctx, key, field, *value).Err()
 }
 
 // [!code highlight:13]
 // GetAll 获取所有配置
-func (c *UserConfigCache) GetAll(ctx *gin.Context, userID string) (map[string]string, error) {
+func (c *UserConfigCache) GetAll(ctx context.Context, userID string) (map[string]string, error) {
     key := "user:config:" + userID
 
     result, err := c.RDB.HGetAll(ctx, key).Result()
@@ -238,7 +277,7 @@ func (c *UserConfigCache) GetAll(ctx *gin.Context, userID string) (map[string]st
 
 // [!code highlight:13]
 // SetAll 批量设置配置
-func (c *UserConfigCache) SetAll(ctx *gin.Context, userID string, fields map[string]*string) error {
+func (c *UserConfigCache) SetAll(ctx context.Context, userID string, fields map[string]*string) error {
     key := "user:config:" + userID
 
     data := make(map[string]interface{})
@@ -253,21 +292,21 @@ func (c *UserConfigCache) SetAll(ctx *gin.Context, userID string, fields map[str
 
 // [!code highlight:5]
 // Exists 检查配置项是否存在
-func (c *UserConfigCache) Exists(ctx *gin.Context, userID string, field string) (bool, error) {
+func (c *UserConfigCache) Exists(ctx context.Context, userID string, field string) (bool, error) {
     key := "user:config:" + userID
     return c.RDB.HExists(ctx, key, field).Result()
 }
 
 // [!code highlight:5]
 // Remove 删除配置项
-func (c *UserConfigCache) Remove(ctx *gin.Context, userID string, fields ...string) error {
+func (c *UserConfigCache) Remove(ctx context.Context, userID string, fields ...string) error {
     key := "user:config:" + userID
     return c.RDB.HDel(ctx, key, fields...).Err()
 }
 
 // [!code highlight:4]
 // Delete 删除所有配置
-func (c *UserConfigCache) Delete(ctx *gin.Context, userID string) error {
+func (c *UserConfigCache) Delete(ctx context.Context, userID string) error {
     key := "user:config:" + userID
     return c.RDB.Del(ctx, key).Err()
 }
@@ -288,7 +327,7 @@ func NewUserConfigService(cache *xCache.Cache) *UserConfigService {
 
 // [!code highlight:11]
 // GetTheme 获取用户主题
-func (s *UserConfigService) GetTheme(ctx *gin.Context, userID string) (string, error) {
+func (s *UserConfigService) GetTheme(ctx context.Context, userID string) (string, error) {
     theme, exists, err := s.cache.Get(ctx, userID, "theme")
     if err != nil {
         return "", err
@@ -301,7 +340,7 @@ func (s *UserConfigService) GetTheme(ctx *gin.Context, userID string) (string, e
 
 // [!code highlight:6]
 // UpdateTheme 更新用户主题
-func (s *UserConfigService) UpdateTheme(ctx *gin.Context, userID string, theme string) error {
+func (s *UserConfigService) UpdateTheme(ctx context.Context, userID string, theme string) error {
     // 更新数据库
     if err := s.updateThemeInDB(userID, theme); err != nil {
         return err
@@ -314,7 +353,7 @@ func (s *UserConfigService) UpdateTheme(ctx *gin.Context, userID string, theme s
 
 // [!code highlight:5]
 // GetAllConfig 获取所有配置
-func (s *UserConfigService) GetAllConfig(ctx *gin.Context, userID string) (map[string]string, error) {
+func (s *UserConfigService) GetAllConfig(ctx context.Context, userID string) (map[string]string, error) {
     config, err := s.cache.GetAll(ctx, userID)
     if err != nil {
         return nil, err
@@ -342,7 +381,7 @@ func (s *UserConfigService) GetAllConfig(ctx *gin.Context, userID string) (map[s
 
 // [!code highlight:2]
 // ResetConfig 重置配置
-func (s *UserConfigService) ResetConfig(ctx *gin.Context, userID string) error {
+func (s *UserConfigService) ResetConfig(ctx context.Context, userID string) error {
     // 删除数据库配置
     if err := s.deleteConfigFromDB(userID); err != nil {
         return err
@@ -436,7 +475,7 @@ timezone, _ := cache.Get(ctx, userID, "timezone")
 只更新变化的字段：
 
 ```go
-func (s *UserConfigService) UpdatePartial(ctx *gin.Context, userID string, updates map[string]string) error {
+func (s *UserConfigService) UpdatePartial(ctx context.Context, userID string, updates map[string]string) error {
     fields := make(map[string]*string)
     for k, v := range updates {
         val := v
@@ -465,7 +504,7 @@ cache.Delete(ctx, userID)
 批量操作多个哈希表：
 
 ```go
-func (c *UserConfigCache) SetMultipleUsers(ctx *gin.Context, configs map[string]map[string]*string) error {
+func (c *UserConfigCache) SetMultipleUsers(ctx context.Context, configs map[string]map[string]*string) error {
     pipe := c.RDB.Pipeline()
 
     for userID, fields := range configs {

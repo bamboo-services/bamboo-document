@@ -101,7 +101,62 @@ requestID := xCtxUtil.GetRequestKey(c.Request.Context())
 func GetErrorMessage(ctx context.Context) string
 ```
 
-## 数据库函数
+## 通用组件获取
+
+当需要读取自定义注入的组件时，可使用泛型的 `MustGet` / `Get`：
+
+```go
+import xConsts "github.com/bamboo-services/bamboo-base-go/context"
+```
+
+### MustGet
+
+通用组件获取（Panic 版本）。
+
+```go title="custom.go"
+// [!code highlight]
+func MustGet[T any](ctx context.Context, key xConsts.ContextKey) T
+```
+
+**读取优先级：**
+1. `RegNodeKey` 聚合的节点列表
+2. `ctx.Value(key)`
+
+**说明：**
+- 若传入 `*gin.Context` 会自动转换为 `c.Request.Context()`
+- 未找到组件时会触发 `panic`
+
+**示例：**
+
+```go
+// [!code highlight:3]
+// 直接从 Gin 上下文获取
+cache := xCtxUtil.MustGet[*xCache.Cache](c, xConsts.CacheKey)
+
+// [!code highlight:3]
+// 或者先获取标准 context
+ctx := c.Request.Context()
+cache := xCtxUtil.MustGet[*xCache.Cache](ctx, xConsts.CacheKey)
+```
+
+### Get
+
+通用组件获取（错误返回版本）。
+
+```go title="custom.go"
+// [!code highlight]
+func Get[T any](ctx context.Context, key xConsts.ContextKey) (T, *xError.Error)
+```
+
+**示例：**
+
+```go
+cache, err := xCtxUtil.Get[*xCache.Cache](ctx, xConsts.CacheKey)
+if err != nil {
+    return nil, err
+}
+```
+
 
 ### MustGetDB
 
@@ -311,6 +366,16 @@ func GenerateGeneSnowflakeID(ctx context.Context, gene xSnowflake.Gene) (xSnowfl
     GetErrorMessage: {
       description: '获取错误消息',
       type: '(ctx context.Context) string',
+      required: true,
+    },
+    MustGet: {
+      description: '通用组件获取（panic）',
+      type: '(ctx context.Context, key ContextKey) T',
+      required: true,
+    },
+    Get: {
+      description: '通用组件获取（错误返回）',
+      type: '(ctx context.Context, key ContextKey) (T, *xError.Error)',
       required: true,
     },
     MustGetDB: {

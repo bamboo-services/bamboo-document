@@ -4,6 +4,7 @@
   "pages": [
     "index",
     "context",
+    "http",
     "http-logger",
     "panic-recovery"
   ]

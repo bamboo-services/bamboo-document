@@ -1,0 +1,146 @@
+---
+title: 类型解析
+description: Parse 提供通用类型解析与转换能力
+icon: Braces
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# 类型解析
+
+`xUtil.Parse()` 提供统一的类型解析入口，覆盖整数、浮点数、布尔与字符串的常见转换场景。
+
+```go
+import xUtil "github.com/bamboo-services/bamboo-base-go/utility"
+```
+
+## 快速使用
+
+```go
+parser := xUtil.Parse()
+
+// [!code highlight:2]
+// 整数解析
+age, ok := parser.Int("18")
+
+// [!code highlight:2]
+// 布尔解析
+enabled, ok := parser.Bool("yes")
+```
+
+## 解析规则
+
+- 所有方法返回 `(value, ok)`，`ok` 为 `false` 表示类型不支持或解析失败
+- `string` 输入会先 `TrimSpace` 再解析
+- 浮点输入解析整数时会**截断小数部分**
+- `Uint*` 在负数或超出范围时返回失败
+
+## 方法一览
+
+<TypeTable
+  type={{
+    Int: {
+      description: '整数解析（含 Int8/16/32/64）',
+      type: '(value any) (int, bool)',
+      required: true,
+    },
+    Uint: {
+      description: '无符号整数解析（含 Uint8/16/32/64）',
+      type: '(value any) (uint, bool)',
+      required: true,
+    },
+    Float32: {
+      description: '浮点解析（含 Float64）',
+      type: '(value any) (float32, bool)',
+      required: true,
+    },
+    Bool: {
+      description: '布尔解析（支持常见字符串）',
+      type: '(value any) (bool, bool)',
+      required: true,
+    },
+    String: {
+      description: '字符串解析（支持 []byte/数值/Stringer/error）',
+      type: '(value any) (string, bool)',
+      required: true,
+    },
+  }}
+/>
+
+## 整数解析
+
+```go
+value, ok := xUtil.Parse().Int("123")
+```
+
+**支持类型：** 所有整数、浮点数、`string`
+
+**规则：**
+- 字符串按十进制解析
+- 浮点数会截断小数部分
+- 超出范围或类型不支持返回失败
+
+## 无符号整数解析
+
+```go
+value, ok := xUtil.Parse().Uint("123")
+```
+
+**支持类型：** 所有整数、浮点数、`string`
+
+**规则：**
+- 负数或超出范围返回失败
+- 浮点数会截断小数部分
+
+## 浮点解析
+
+```go
+value32, ok := xUtil.Parse().Float32("3.14")
+value64, ok := xUtil.Parse().Float64(3.14)
+```
+
+**支持类型：** 所有整数、浮点数、`string`
+
+**规则：**
+- `Float32` 超出可表示范围会失败
+- `Float64` 解析失败或类型不支持会失败
+
+## 布尔解析
+
+```go
+value, ok := xUtil.Parse().Bool("enabled")
+```
+
+**支持类型：** `bool`、所有整数、浮点数、`string`
+
+**字符串识别：**
+- `true`, `1`, `yes`, `on`, `enabled` → `true`
+- `false`, `0`, `no`, `off`, `disabled` → `false`
+
+**数值规则：**
+- 非 0 为 `true`，0 为 `false`
+
+## 字符串解析
+
+```go
+value, ok := xUtil.Parse().String([]byte("hello"))
+```
+
+**支持类型：** `string`、`[]byte`、`fmt.Stringer`、`error`、基础数值类型
+
+**规则：**
+- 数值类型按十进制格式化
+- 浮点数使用 Go 默认格式规则
+
+## 失败语义
+
+- `Int*`/`Uint*`/`Float*`：返回 `0` 和 `false`
+- `Bool`：返回 `false` 和 `false`
+- `String`：返回空字符串和 `false`
+
+## 下一步
+
+<Cards>
+  <Card title="通用工具" href="./common" />
+  <Card title="字符串处理" href="./string" />
+</Cards>

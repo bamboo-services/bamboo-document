@@ -23,6 +23,11 @@ import xUtil "github.com/bamboo-services/bamboo-base-go/utility"
       type: 'common.go',
       required: true,
     },
+    parse: {
+      description: '类型解析：数字、布尔、字符串解析与转换',
+      type: 'parse.go',
+      required: true,
+    },
     string: {
       description: '字符串处理：空白检查、截断、命名转换、脱敏',
       type: 'string.go',
@@ -140,6 +145,7 @@ key := xUtil.GenerateSecurityKey()            // "cs_a1b2c3d4..."
 
 <Cards>
   <Card title="通用工具" href="./common" />
+  <Card title="类型解析" href="./parse" />
   <Card title="字符串处理" href="./string" />
   <Card title="时间处理" href="./time" />
   <Card title="数据验证" href="./validate" />

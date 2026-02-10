@@ -1,0 +1,98 @@
+---
+title: HTTP 工具
+description: xHttp 提供请求头常量与 Token 解析能力
+icon: Globe
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# HTTP 工具
+
+`xHttp` 提供常见请求头常量与 Token 解析工具，便于在 Gin 请求中统一读取。
+
+```go
+import xHttp "github.com/bamboo-services/bamboo-base-go/http"
+```
+
+## 快速使用
+
+```go
+// [!code highlight:2]
+// 解析 Authorization
+authorization, err := xHttp.GetAuthorization(c)
+
+// [!code highlight:2]
+// 获取自定义 Token
+accessToken := xHttp.GetToken(c, xHttp.HeaderAccessToken)
+```
+
+## Header 类型
+
+`Header` 是对 HTTP 头字段名称的类型封装，便于复用常用标头。
+
+<TypeTable
+  type={{
+    Header: {
+      description: 'HTTP 标头名称封装类型',
+      type: 'string',
+      required: true,
+    },
+  }}
+/>
+
+### 常用 Header 常量
+
+覆盖常见请求头、响应头与自定义头字段：
+
+```go
+xHttp.HeaderAuthorization
+xHttp.HeaderAccessToken
+xHttp.HeaderRefreshToken
+xHttp.HeaderRequestUUID
+xHttp.HeaderContentType
+xHttp.HeaderXForwardedFor
+```
+
+### Header 方法
+
+```go
+xHttp.HeaderAuthorization.String() // "Authorization"
+
+xHttp.Header("X-Trace-Id").IsCustom() // true
+xHttp.Header("").IsEmpty()            // true
+```
+
+- `String()`：返回标准字符串名称
+- `IsEmpty()`：判断是否为空
+- `IsCustom()`：判断是否为自定义标头（`X-` / `x-` 前缀）
+
+## GetAuthorization
+
+从请求头中解析 `Authorization`，要求为 `Bearer <token>` 格式：
+
+```go
+// [!code highlight:3]
+token, err := xHttp.GetAuthorization(c)
+if err != nil {
+    return err
+}
+```
+
+**错误场景：**
+- 缺少 `Authorization` 请求头
+- 请求头格式不是 `Bearer <token>`
+
+## GetToken
+
+根据指定的头字段读取 Token（支持 `X-Access-Token` / `X-Refresh-Token`）：
+
+```go
+// [!code highlight:2]
+accessToken := xHttp.GetToken(c, xHttp.HeaderAccessToken)
+refreshToken := xHttp.GetToken(c, xHttp.HeaderRefreshToken)
+```
+
+**行为说明：**
+- 非 `HeaderAccessToken` / `HeaderRefreshToken` 会回退到 `HeaderAccessToken`
+- 识别并剥离 `Bearer ` 前缀
+- 不做有效性校验，缺失时返回空字符串

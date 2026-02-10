@@ -14,15 +14,15 @@ import { TypeTable } from '@/components/type-table';
 
 ```go
 type ListCache[K any, V any] interface {
-    Prepend(ctx *gin.Context, key K, values ...V) error
-    Append(ctx *gin.Context, key K, values ...V) error
-    Range(ctx *gin.Context, key K, start int64, end int64) ([]V, error)
-    Index(ctx *gin.Context, key K, index int64) (*V, error)
-    Len(ctx *gin.Context, key K) (int64, error)
-    Pop(ctx *gin.Context, key K) (*V, error)
-    PopLast(ctx *gin.Context, key K) (*V, error)
-    Remove(ctx *gin.Context, key K, count int64, value V) error
-    Delete(ctx *gin.Context, key K) error
+    Prepend(ctx context.Context, key K, values ...V) error
+    Append(ctx context.Context, key K, values ...V) error
+    Range(ctx context.Context, key K, start int64, end int64) ([]V, error)
+    Index(ctx context.Context, key K, index int64) (*V, error)
+    Len(ctx context.Context, key K) (int64, error)
+    Pop(ctx context.Context, key K) (*V, error)
+    PopLast(ctx context.Context, key K) (*V, error)
+    Remove(ctx context.Context, key K, count int64, value V) error
+    Delete(ctx context.Context, key K) error
 }
 ```
 
@@ -62,11 +62,11 @@ message:queue → ["msg1", "msg2", "msg3", "msg2"]
 将一个或多个值插入到列表头部（左侧）。
 
 ```go
-Prepend(ctx *gin.Context, key K, values ...V) error
+Prepend(ctx context.Context, key K, values ...V) error
 ```
 
 **参数：**
-- `ctx` - Gin 上下文
+- `ctx` - context.Context 上下文
 - `key` - 列表键
 - `values` - 要插入的值（可变参数）
 
@@ -80,11 +80,11 @@ Prepend(ctx *gin.Context, key K, values ...V) error
 将一个或多个值追加到列表尾部（右侧）。
 
 ```go
-Append(ctx *gin.Context, key K, values ...V) error
+Append(ctx context.Context, key K, values ...V) error
 ```
 
 **参数：**
-- `ctx` - Gin 上下文
+- `ctx` - context.Context 上下文
 - `key` - 列表键
 - `values` - 要追加的值（可变参数）
 
@@ -96,11 +96,11 @@ Append(ctx *gin.Context, key K, values ...V) error
 按索引范围获取列表元素。
 
 ```go
-Range(ctx *gin.Context, key K, start int64, end int64) ([]V, error)
+Range(ctx context.Context, key K, start int64, end int64) ([]V, error)
 ```
 
 **参数：**
-- `ctx` - Gin 上下文
+- `ctx` - context.Context 上下文
 - `key` - 列表键
 - `start` - 起始索引（支持负数）
 - `end` - 结束索引（支持负数）
@@ -119,11 +119,11 @@ Range(ctx *gin.Context, key K, start int64, end int64) ([]V, error)
 获取指定索引位置的元素。
 
 ```go
-Index(ctx *gin.Context, key K, index int64) (*V, error)
+Index(ctx context.Context, key K, index int64) (*V, error)
 ```
 
 **参数：**
-- `ctx` - Gin 上下文
+- `ctx` - context.Context 上下文
 - `key` - 列表键
 - `index` - 索引位置（支持负数）
 
@@ -136,11 +136,11 @@ Index(ctx *gin.Context, key K, index int64) (*V, error)
 获取列表的长度。
 
 ```go
-Len(ctx *gin.Context, key K) (int64, error)
+Len(ctx context.Context, key K) (int64, error)
 ```
 
 **参数：**
-- `ctx` - Gin 上下文
+- `ctx` - context.Context 上下文
 - `key` - 列表键
 
 **返回值：**
@@ -152,11 +152,11 @@ Len(ctx *gin.Context, key K) (int64, error)
 从列表头部弹出一个元素并返回。
 
 ```go
-Pop(ctx *gin.Context, key K) (*V, error)
+Pop(ctx context.Context, key K) (*V, error)
 ```
 
 **参数：**
-- `ctx` - Gin 上下文
+- `ctx` - context.Context 上下文
 - `key` - 列表键
 
 **返回值：**
@@ -168,11 +168,11 @@ Pop(ctx *gin.Context, key K) (*V, error)
 从列表尾部弹出一个元素并返回。
 
 ```go
-PopLast(ctx *gin.Context, key K) (*V, error)
+PopLast(ctx context.Context, key K) (*V, error)
 ```
 
 **参数：**
-- `ctx` - Gin 上下文
+- `ctx` - context.Context 上下文
 - `key` - 列表键
 
 **返回值：**
@@ -184,11 +184,11 @@ PopLast(ctx *gin.Context, key K) (*V, error)
 从列表中移除指定数量的匹配元素。
 
 ```go
-Remove(ctx *gin.Context, key K, count int64, value V) error
+Remove(ctx context.Context, key K, count int64, value V) error
 ```
 
 **参数：**
-- `ctx` - Gin 上下文
+- `ctx` - context.Context 上下文
 - `key` - 列表键
 - `count` - 移除数量
   - `count > 0`：从头部开始移除
@@ -204,11 +204,11 @@ Remove(ctx *gin.Context, key K, count int64, value V) error
 删除整个列表。
 
 ```go
-Delete(ctx *gin.Context, key K) error
+Delete(ctx context.Context, key K) error
 ```
 
 **参数：**
-- `ctx` - Gin 上下文
+- `ctx` - context.Context 上下文
 - `key` - 列表键
 
 **返回值：**
@@ -239,7 +239,7 @@ type MessageQueueCache struct {
 
 // [!code highlight:10]
 // Prepend 在队列头部插入消息
-func (c *MessageQueueCache) Prepend(ctx *gin.Context, queueName string, messages ...string) error {
+func (c *MessageQueueCache) Prepend(ctx context.Context, queueName string, messages ...string) error {
     key := "queue:" + queueName
     values := make([]interface{}, len(messages))
     for i, msg := range messages {
@@ -250,7 +250,7 @@ func (c *MessageQueueCache) Prepend(ctx *gin.Context, queueName string, messages
 
 // [!code highlight:10]
 // Append 在队列尾部追加消息
-func (c *MessageQueueCache) Append(ctx *gin.Context, queueName string, messages ...string) error {
+func (c *MessageQueueCache) Append(ctx context.Context, queueName string, messages ...string) error {
     key := "queue:" + queueName
     values := make([]interface{}, len(messages))
     for i, msg := range messages {
@@ -261,14 +261,14 @@ func (c *MessageQueueCache) Append(ctx *gin.Context, queueName string, messages 
 
 // [!code highlight:5]
 // Range 获取指定范围的消息
-func (c *MessageQueueCache) Range(ctx *gin.Context, queueName string, start, end int64) ([]string, error) {
+func (c *MessageQueueCache) Range(ctx context.Context, queueName string, start, end int64) ([]string, error) {
     key := "queue:" + queueName
     return c.RDB.LRange(ctx, key, start, end).Result()
 }
 
 // [!code highlight:9]
 // Index 获取指定位置的消息
-func (c *MessageQueueCache) Index(ctx *gin.Context, queueName string, index int64) (*string, error) {
+func (c *MessageQueueCache) Index(ctx context.Context, queueName string, index int64) (*string, error) {
     key := "queue:" + queueName
     val, err := c.RDB.LIndex(ctx, key, index).Result()
     if err == redis.Nil {
@@ -279,14 +279,14 @@ func (c *MessageQueueCache) Index(ctx *gin.Context, queueName string, index int6
 
 // [!code highlight:5]
 // Len 获取队列长度
-func (c *MessageQueueCache) Len(ctx *gin.Context, queueName string) (int64, error) {
+func (c *MessageQueueCache) Len(ctx context.Context, queueName string) (int64, error) {
     key := "queue:" + queueName
     return c.RDB.LLen(ctx, key).Result()
 }
 
 // [!code highlight:9]
 // Pop 从队列头部弹出消息
-func (c *MessageQueueCache) Pop(ctx *gin.Context, queueName string) (*string, error) {
+func (c *MessageQueueCache) Pop(ctx context.Context, queueName string) (*string, error) {
     key := "queue:" + queueName
     val, err := c.RDB.LPop(ctx, key).Result()
     if err == redis.Nil {
@@ -297,7 +297,7 @@ func (c *MessageQueueCache) Pop(ctx *gin.Context, queueName string) (*string, er
 
 // [!code highlight:9]
 // PopLast 从队列尾部弹出消息
-func (c *MessageQueueCache) PopLast(ctx *gin.Context, queueName string) (*string, error) {
+func (c *MessageQueueCache) PopLast(ctx context.Context, queueName string) (*string, error) {
     key := "queue:" + queueName
     val, err := c.RDB.RPop(ctx, key).Result()
     if err == redis.Nil {
@@ -308,14 +308,14 @@ func (c *MessageQueueCache) PopLast(ctx *gin.Context, queueName string) (*string
 
 // [!code highlight:5]
 // Remove 移除指定消息
-func (c *MessageQueueCache) Remove(ctx *gin.Context, queueName string, count int64, message string) error {
+func (c *MessageQueueCache) Remove(ctx context.Context, queueName string, count int64, message string) error {
     key := "queue:" + queueName
     return c.RDB.LRem(ctx, key, count, message).Err()
 }
 
 // [!code highlight:4]
 // Delete 删除整个队列
-func (c *MessageQueueCache) Delete(ctx *gin.Context, queueName string) error {
+func (c *MessageQueueCache) Delete(ctx context.Context, queueName string) error {
     key := "queue:" + queueName
     return c.RDB.Del(ctx, key).Err()
 }
@@ -336,31 +336,31 @@ func NewMessageQueueService(cache *xCache.Cache) *MessageQueueService {
 
 // [!code highlight:7]
 // Enqueue 入队（追加到尾部）
-func (s *MessageQueueService) Enqueue(ctx *gin.Context, queueName string, message string) error {
+func (s *MessageQueueService) Enqueue(ctx context.Context, queueName string, message string) error {
     return s.cache.Append(ctx, queueName, message)
 }
 
 // [!code highlight:5]
 // Dequeue 出队（从头部弹出）
-func (s *MessageQueueService) Dequeue(ctx *gin.Context, queueName string) (*string, error) {
+func (s *MessageQueueService) Dequeue(ctx context.Context, queueName string) (*string, error) {
     return s.cache.Pop(ctx, queueName)
 }
 
 // [!code highlight:5]
 // Peek 查看队列头部（不弹出）
-func (s *MessageQueueService) Peek(ctx *gin.Context, queueName string) (*string, error) {
+func (s *MessageQueueService) Peek(ctx context.Context, queueName string) (*string, error) {
     return s.cache.Index(ctx, queueName, 0)
 }
 
 // [!code highlight:5]
 // Size 获取队列大小
-func (s *MessageQueueService) Size(ctx *gin.Context, queueName string) (int64, error) {
+func (s *MessageQueueService) Size(ctx context.Context, queueName string) (int64, error) {
     return s.cache.Len(ctx, queueName)
 }
 
 // [!code highlight:5]
 // GetRecent 获取最近的 N 条消息
-func (s *MessageQueueService) GetRecent(ctx *gin.Context, queueName string, count int64) ([]string, error) {
+func (s *MessageQueueService) GetRecent(ctx context.Context, queueName string, count int64) ([]string, error) {
     return s.cache.Range(ctx, queueName, -count, -1)
 }
 ```
@@ -450,7 +450,7 @@ item, _ := cache.Pop(ctx, "stack")  // 返回 "item3"
 使用 `LTrim` 保持固定长度：
 
 ```go
-func (c *MessageQueueCache) AppendWithLimit(ctx *gin.Context, queueName string, message string, maxLen int64) error {
+func (c *MessageQueueCache) AppendWithLimit(ctx context.Context, queueName string, message string, maxLen int64) error {
     key := "queue:" + queueName
 
     // [!code highlight:2]
@@ -470,7 +470,7 @@ func (c *MessageQueueCache) AppendWithLimit(ctx *gin.Context, queueName string, 
 使用 `Range` 实现分页：
 
 ```go
-func (s *MessageQueueService) GetPage(ctx *gin.Context, queueName string, page, pageSize int64) ([]string, error) {
+func (s *MessageQueueService) GetPage(ctx context.Context, queueName string, page, pageSize int64) ([]string, error) {
     start := (page - 1) * pageSize
     end := start + pageSize - 1
     return s.cache.Range(ctx, queueName, start, end)
@@ -499,7 +499,7 @@ cache.Append(ctx, "queue", "msg3")
 
 ```go
 // 阻塞弹出（等待 5 秒）
-func (c *MessageQueueCache) BlockingPop(ctx *gin.Context, queueName string, timeout time.Duration) (*string, error) {
+func (c *MessageQueueCache) BlockingPop(ctx context.Context, queueName string, timeout time.Duration) (*string, error) {
     key := "queue:" + queueName
     result, err := c.RDB.BLPop(ctx, timeout, key).Result()
     if err == redis.Nil {
@@ -521,7 +521,7 @@ func (c *MessageQueueCache) BlockingPop(ctx *gin.Context, queueName string, time
 
 ```go
 // 从源队列弹出并推入目标队列
-func (c *MessageQueueCache) Move(ctx *gin.Context, srcQueue, dstQueue string) error {
+func (c *MessageQueueCache) Move(ctx context.Context, srcQueue, dstQueue string) error {
     srcKey := "queue:" + srcQueue
     dstKey := "queue:" + dstQueue
     _, err := c.RDB.RPopLPush(ctx, srcKey, dstKey).Result()
@@ -535,13 +535,13 @@ func (c *MessageQueueCache) Move(ctx *gin.Context, srcQueue, dstQueue string) er
 
 ```go
 // 在 pivot 元素之前插入
-func (c *MessageQueueCache) InsertBefore(ctx *gin.Context, queueName, pivot, value string) error {
+func (c *MessageQueueCache) InsertBefore(ctx context.Context, queueName, pivot, value string) error {
     key := "queue:" + queueName
     return c.RDB.LInsertBefore(ctx, key, pivot, value).Err()
 }
 
 // 在 pivot 元素之后插入
-func (c *MessageQueueCache) InsertAfter(ctx *gin.Context, queueName, pivot, value string) error {
+func (c *MessageQueueCache) InsertAfter(ctx context.Context, queueName, pivot, value string) error {
     key := "queue:" + queueName
     return c.RDB.LInsertAfter(ctx, key, pivot, value).Err()
 }
@@ -554,7 +554,7 @@ func (c *MessageQueueCache) InsertAfter(ctx *gin.Context, queueName, pivot, valu
 批量操作多个列表：
 
 ```go
-func (c *MessageQueueCache) EnqueueMultiple(ctx *gin.Context, messages map[string][]string) error {
+func (c *MessageQueueCache) EnqueueMultiple(ctx context.Context, messages map[string][]string) error {
     pipe := c.RDB.Pipeline()
 
     for queueName, msgs := range messages {
@@ -578,7 +578,7 @@ func (c *MessageQueueCache) EnqueueMultiple(ctx *gin.Context, messages map[strin
 ```go
 const MaxQueueSize = 10000
 
-func (c *MessageQueueCache) Append(ctx *gin.Context, queueName string, messages ...string) error {
+func (c *MessageQueueCache) Append(ctx context.Context, queueName string, messages ...string) error {
     key := "queue:" + queueName
 
     // [!code highlight:5]
