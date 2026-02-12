@@ -94,7 +94,7 @@ slog.SetDefault(slog.New(handler))
 彩色格式，便于开发调试：
 
 ```
-2024-01-15 10:30:00.123 [INFO] [abc123] [CORE] 服务启动成功
+2024-01-15 10:30:00.123 [INFO] [abc123] [CORE] [DB] [Redis] >> 服务启动成功
     config=production
     port=8080
 ```
@@ -106,8 +106,9 @@ slog.SetDefault(slog.New(handler))
 | 时间戳 | `2006-01-02 15:04:05.000` | 灰色 |
 | 日志级别 | `[DEBU]` `[INFO]` `[WARN]` `[ERRO]` | 见下表 |
 | Trace ID | 请求追踪标识 | 蓝色 |
-| Logger 名称 | 模块标识 | 按类别着色 |
-| 消息 | 日志内容 | 默认色 |
+| Logger 名称 | 主模块标识 | 按类别着色 |
+| Option 名称 | 额外命名空间 | 青色（高亮）|
+| 消息 | 日志内容 | 默认色，前缀 `>>` |
 | 属性 | key=value 格式 | 棕色 |
 
 ### 文件输出

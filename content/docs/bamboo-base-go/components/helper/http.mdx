@@ -23,7 +23,7 @@ authorization, err := xHttp.GetAuthorization(c)
 
 // [!code highlight:2]
 // 获取自定义 Token
-accessToken := xHttp.GetToken(c, xHttp.HeaderAccessToken)
+accessToken := xHttp.GetToken(c, xHttp.HeaderAuthorization)
 ```
 
 ## Header 类型
@@ -46,7 +46,6 @@ accessToken := xHttp.GetToken(c, xHttp.HeaderAccessToken)
 
 ```go
 xHttp.HeaderAuthorization
-xHttp.HeaderAccessToken
 xHttp.HeaderRefreshToken
 xHttp.HeaderRequestUUID
 xHttp.HeaderContentType
@@ -84,15 +83,15 @@ if err != nil {
 
 ## GetToken
 
-根据指定的头字段读取 Token（支持 `X-Access-Token` / `X-Refresh-Token`）：
+根据指定的头字段读取 Token（支持 `Authorization` / `X-Refresh-Token`）：
 
 ```go
 // [!code highlight:2]
-accessToken := xHttp.GetToken(c, xHttp.HeaderAccessToken)
+accessToken := xHttp.GetToken(c, xHttp.HeaderAuthorization)
 refreshToken := xHttp.GetToken(c, xHttp.HeaderRefreshToken)
 ```
 
 **行为说明：**
-- 非 `HeaderAccessToken` / `HeaderRefreshToken` 会回退到 `HeaderAccessToken`
+- 非 `HeaderAuthorization` / `HeaderRefreshToken` 会回退到 `HeaderAuthorization`
 - 识别并剥离 `Bearer ` 前缀
 - 不做有效性校验，缺失时返回空字符串

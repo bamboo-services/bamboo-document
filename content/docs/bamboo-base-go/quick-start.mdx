@@ -63,7 +63,7 @@ DATABASE_TIMEZONE=Asia/Shanghai
 NOSQL_HOST=localhost
 NOSQL_PORT=6379
 NOSQL_PASS=
-NOSQL_DB=0
+NOSQL_DATABASE=0
 NOSQL_POOL_SIZE=10
 
 # 雪花算法配置（可选，默认自动生成）
@@ -239,7 +239,7 @@ func InitRedis(ctx context.Context) (any, error) {
     rdb := redis.NewClient(&redis.Options{
         Addr:     xEnv.GetEnvString(xEnv.NoSqlHost, "localhost") + ":" + xEnv.GetEnvString(xEnv.NoSqlPort, "6379"),
         Password: xEnv.GetEnvString(xEnv.NoSqlPass, ""),
-        DB:       xEnv.GetEnvInt(xEnv.NoSqlDB, 0),
+        DB:       xEnv.GetEnvInt(xEnv.NoSqlDatabase, 0),
         PoolSize: xEnv.GetEnvInt(xEnv.NoSqlPoolSize, 10),
     })
 

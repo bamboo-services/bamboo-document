@@ -20,11 +20,12 @@ type LogNamedLogger struct {
 
 ### WithName
 
-创建带名称的日志器：
+创建带名称的日志器，支持追加多个命名空间：
 
 ```go title="command.go"
 // [!code highlight]
-func WithName(name string) *LogNamedLogger
+// optionName 会按顺序追加到 logger 名称后显示，如 [CORE] [DB]
+func WithName(name string, optionName ...string) *LogNamedLogger
 ```
 
 **示例：**
@@ -34,7 +35,14 @@ func WithName(name string) *LogNamedLogger
 log := xLog.WithName(xLog.NamedCORE)
 log.Info(ctx, "服务启动成功")
 
-// 输出: 2024-01-15 10:30:00 [INFO] [abc123] [CORE] 服务启动成功
+// 输出: 2024-01-15 10:30:00 [INFO] [abc123] [CORE] >> 服务启动成功
+
+// [!code highlight:2]
+// 带多个命名空间
+dbLog := xLog.WithName(xLog.NamedCORE, "DB", "Redis")
+dbLog.Info(ctx, "数据库连接成功")
+
+// 输出: 2024-01-15 10:30:00 [INFO] [abc123] [CORE] [DB] [Redis] >> 数据库连接成功
 ```
 
 ## 四层架构类
