@@ -207,7 +207,7 @@ func GetUser(ctx *gin.Context, id string) (*entity.User, *xError.Error) {
 
     var user entity.User
     if dbErr := db.Where("id = ?", id).First(&user).Error; dbErr != nil {
-        return nil, xError.NewInternalServerError(ctx, "查询失败", dbErr)
+        return nil, xError.NewInternalServerError(ctx.Request.Context(), "查询失败", dbErr)
     }
     return &user, nil
 }
@@ -259,7 +259,7 @@ func GetCache(ctx *gin.Context, key string) (string, *xError.Error) {
 
     val, redisErr := rdb.Get(ctx, key).Result()
     if redisErr != nil {
-        return "", xError.NewError(ctx, xError.CacheError, "缓存读取失败", false, redisErr)
+        return "", xError.NewError(ctx.Request.Context(), xError.CacheError, "缓存读取失败", false, redisErr)
     }
     return val, nil
 }
@@ -462,7 +462,7 @@ func (l *UserLogic) CreateUser(c *gin.Context, username string) (*entity.User, *
     user.ID = userID
 
     if dbErr := db.Create(user).Error; dbErr != nil {
-        return nil, xError.NewInternalServerError(c, "创建用户失败", dbErr)
+        return nil, xError.NewInternalServerError(ctx, "创建用户失败", dbErr)
     }
 
     // [!code highlight:2]

@@ -29,6 +29,7 @@ github.com/bamboo-services/bamboo-base-go/
 ├── hook/                   # 钩子函数 (xHook)
 ├── http/                   # HTTP 常量 (xHttp)
 ├── log/                    # 日志系统 (xLog)
+├── main/                   # 服务运行时 (xMain)
 ├── middleware/             # 业务中间件 (xMiddle)
 ├── models/                 # 数据模型基类 (xModels)
 ├── register/               # 应用注册和初始化 (xReg)
@@ -87,6 +88,11 @@ github.com/bamboo-services/bamboo-base-go/
     'xMiddle': {
       description: '业务中间件（CORS、响应处理等）',
       type: '.../middleware',
+      required: true,
+    },
+    'xMain': {
+      description: '服务运行时（统一启动、信号监听、优雅关闭）',
+      type: '.../main',
       required: true,
     },
     'xModels': {

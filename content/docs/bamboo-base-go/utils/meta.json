@@ -3,6 +3,7 @@
   "icon": "Wrench",
   "pages": [
     "index",
+    "binding",
     "common",
     "parse",
     "string",

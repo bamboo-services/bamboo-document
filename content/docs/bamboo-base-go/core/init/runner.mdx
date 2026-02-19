@@ -1,0 +1,115 @@
+---
+title: 服务运行时
+description: xMain.Runner 统一启动 HTTP 服务并支持优雅关闭
+icon: Play
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# 服务运行时
+
+`xMain.Runner` 用于统一启动 HTTP 服务、托管后台协程并在信号到达时优雅关闭。
+
+```go
+import xMain "github.com/bamboo-services/bamboo-base-go/main"
+```
+
+## Runner
+
+```go title="runner.go"
+func Runner(
+    reg *xReg.Reg,
+    log *xLog.LogNamedLogger,
+    routeFunc func(reg *xReg.Reg),
+    goroutineFunc ...func(ctx context.Context, option ...any),
+)
+```
+
+## 功能
+
+- 从环境变量读取 `XLF_HOST` 与 `XLF_PORT` 作为监听地址，默认 `localhost:1118`。
+- 自动监听 `SIGINT`/`SIGTERM`，触发优雅关闭。
+- 支持注册路由函数。
+- 支持启动多个后台协程并统一等待退出。
+- HTTP 关闭超时时间为 30 秒。
+
+## 参数说明
+
+<TypeTable
+  type={{
+    reg: {
+      description: '注册中心，需包含有效的 Init 和 Serve',
+      type: '*xReg.Reg',
+      required: true,
+    },
+    log: {
+      description: '命名日志器，建议使用 xLog.WithName(xLog.NamedMAIN)',
+      type: '*xLog.LogNamedLogger',
+      required: true,
+    },
+    routeFunc: {
+      description: '路由注册函数，可为 nil',
+      type: 'func(reg *xReg.Reg)',
+      required: false,
+    },
+    goroutineFunc: {
+      description: '后台协程函数列表，接收 context.Context',
+      type: '...func(ctx context.Context, option ...any)',
+      required: false,
+    },
+  }}
+/>
+
+## 快速使用
+
+```go title="main.go"
+package main
+
+import (
+    "context"
+
+    xConsts "github.com/bamboo-services/bamboo-base-go/context"
+    xLog "github.com/bamboo-services/bamboo-base-go/log"
+    xMain "github.com/bamboo-services/bamboo-base-go/main"
+    xReg "github.com/bamboo-services/bamboo-base-go/register"
+    xRegNode "github.com/bamboo-services/bamboo-base-go/register/node"
+)
+
+func main() {
+    reg := xReg.Register(context.Background(), []xRegNode.RegNodeList{
+        {Key: xConsts.DatabaseKey, Node: initDatabase},
+        {Key: xConsts.RedisClientKey, Node: initRedis},
+    })
+
+    log := xLog.WithName(xLog.NamedMAIN)
+
+    xMain.Runner(reg, log, registerRoute)
+}
+```
+
+## 带后台任务示例
+
+```go
+func runConsumer(ctx context.Context, option ...any) {
+    for {
+        select {
+        case <-ctx.Done():
+            return
+        default:
+            // 消费任务
+        }
+    }
+}
+
+func main() {
+    // ... reg, log 初始化省略
+    xMain.Runner(reg, log, registerRoute, runConsumer)
+}
+```
+
+## 下一步
+
+<Cards>
+  <Card title="快速开始" href="./index" />
+  <Card title="引擎初始化" href="./engine" />
+</Cards>

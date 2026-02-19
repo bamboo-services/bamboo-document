@@ -16,19 +16,21 @@ icon: Package
 - 🆔 **分布式 ID** - 自定义雪花算法，支持业务基因
 - 📝 **统一响应** - 标准化 API 响应格式
 - 🔒 **类型安全** - 完整的类型定义和错误处理
+- 📄 **分页标准化** - 内置 `PageRequest`/`PageResponse` 泛型分页模型
+- ▶️ **运行时托管** - 内置 `xMain.Runner`，统一启动与优雅关闭
 
 ## 模块概览
 
 | 模块 | 描述 |
 |------|------|
-| [注册系统](./core/register) | Reg 结构体与初始化流程 |
-| [统一响应](./core/response) | BaseResponse 与响应中间件 |
-| [错误处理](./core/error) | IError 接口与 40+ 预定义错误码 |
+| [注册系统](./core/init) | Reg 结构体、节点初始化与 Runner 运行时 |
+| [统一响应](./core/result) | BaseResponse 与响应处理中间件 |
+| [错误处理](./core/result/error) | IError 接口与错误构造函数 |
 | [雪花算法](./components/snowflake) | 64 位分布式 ID 生成 |
-| [模型基类](./components/models) | GORM 实体基类与软删除 |
+| [模型基类](./components/models) | GORM 实体基类、软删除与分页模型 |
 | [日志系统](./components/log) | 基于 slog 的彩色日志 |
 | [中间件](./components/middleware) | CORS、响应处理等 |
-| [验证器](./utils/validator) | 自定义验证规则与中文翻译 |
+| [验证器](./components/validator) | 自定义验证规则与中文翻译 |
 
 ## 快速开始
 

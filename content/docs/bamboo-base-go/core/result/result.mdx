@@ -150,7 +150,7 @@ func (h *AppHandler) CreateApp(ctx *gin.Context) {
     if snowflakeErr != nil {
         // [!code highlight:2]
         // 使用 ctx.Error() 而不是直接返回
-        _ = ctx.Error(xError.NewError(ctx, xError.BadRequest, "商户 ID 非法", false))
+        _ = ctx.Error(xError.NewError(ctx.Request.Context(), xError.BadRequest, "商户 ID 非法", false))
         return
     }
 

@@ -76,7 +76,10 @@ Register(ctx, nodeList)
     ├── loggerInit()           // 2. 初始化日志（私有）
     ├── SnowflakeInit          // 3. 内置雪花算法节点
     ├── [自定义节点...]         // 4. 用户自定义节点
-    └── engineInit()           // 5. 启动 Gin 引擎（私有）
+    └── engineInit()           // 5. 初始化 Gin 引擎（私有）
+
+启动阶段（推荐）
+    └── xMain.Runner(...)      // 6. 启动 HTTP 服务并托管优雅关闭
 ```
 
 **示例：**
@@ -88,8 +91,11 @@ import (
     "context"
 
     xConsts "github.com/bamboo-services/bamboo-base-go/context"
+    xLog "github.com/bamboo-services/bamboo-base-go/log"
+    xMain "github.com/bamboo-services/bamboo-base-go/main"
     xReg "github.com/bamboo-services/bamboo-base-go/register"
     xRegNode "github.com/bamboo-services/bamboo-base-go/register/node"
+    "github.com/gin-gonic/gin"
 )
 
 func main() {
@@ -102,13 +108,12 @@ func main() {
         },
     })
 
-    // 注册路由
-    reg.Serve.GET("/ping", func(c *gin.Context) {
-        c.String(200, "pong")
+    log := xLog.WithName(xLog.NamedMAIN)
+    xMain.Runner(reg, log, func(reg *xReg.Reg) {
+        reg.Serve.GET("/ping", func(c *gin.Context) {
+            c.String(200, "pong")
+        })
     })
-
-    // 启动服务
-    reg.Serve.Run(":8080")
 }
 
 // [!code highlight:2]
@@ -212,6 +217,16 @@ reg.Init.Use(xConsts.SnowflakeNodeKey, xInit.SnowflakeInit)
 
 详见：[引擎初始化](./engine)
 
+### 服务运行时（公共）
+
+推荐使用 `xMain.Runner` 启动服务，统一处理：
+
+- 信号监听（`SIGINT`/`SIGTERM`）
+- 优雅关闭
+- 后台协程托管
+
+详见：[服务运行时](./runner)
+
 ## 上下文注入
 
 引擎初始化时会自动将节点管理器的上下文注入到每个 HTTP 请求：
@@ -292,6 +307,7 @@ func initRedis(ctx context.Context) (any, error) {
 ## 下一步
 
 <Cards>
+  <Card title="服务运行时" href="./runner" />
   <Card title="配置初始化" href="./config" />
   <Card title="日志初始化" href="./logger" />
   <Card title="雪花算法初始化" href="./snowflake" />

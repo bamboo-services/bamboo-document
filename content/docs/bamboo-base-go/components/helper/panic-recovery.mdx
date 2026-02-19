@@ -233,7 +233,7 @@ router.Use(xHelper.HttpLogger())      // 后注册
 ```go
 // [!code highlight:3]
 // 推荐：使用 xError
-ctx.Error(xError.NewError(ctx, xError.NotFound, "用户不存在", true))
+ctx.Error(xError.NewError(ctx.Request.Context(), xError.NotFound, "用户不存在", true))
 return
 
 // [!code highlight:2]

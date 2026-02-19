@@ -98,7 +98,7 @@ func (e *ErrMessage) String() string {
 
 ```go title="error_new.go"
 func NewError(
-    ctx *gin.Context,
+    ctx context.Context,
     err *ErrorCode,
     errorMessage ErrMessage,
     // [!code highlight]
@@ -111,7 +111,7 @@ func NewError(
 
 | 参数 | 类型 | 说明 |
 |------|------|------|
-| ctx | `*gin.Context` | Gin 上下文 |
+| ctx | `context.Context` | 标准上下文 |
 | err | `*ErrorCode` | 预定义错误码 |
 | errorMessage | `ErrMessage` | 自定义错误描述 |
 | throw | `bool` | 是否记录日志 |
@@ -125,7 +125,7 @@ func GetUser(ctx *gin.Context, id string) (*User, error) {
     if err != nil {
         // [!code highlight:6]
         return nil, xError.NewError(
-            ctx,
+            ctx.Request.Context(),
             xError.NotFound,
             "用户不存在",
             true,  // 记录日志
@@ -142,7 +142,7 @@ func GetUser(ctx *gin.Context, id string) (*User, error) {
 
 ```go title="error_new.go"
 func NewErrorHasData(
-    ctx *gin.Context,
+    ctx context.Context,
     err *ErrorCode,
     errorMessage ErrMessage,
     throw bool,
@@ -159,7 +159,7 @@ func ValidateUser(ctx *gin.Context, req *CreateUserReq) error {
     if req.Age < 18 {
         // [!code highlight:10]
         return xError.NewErrorHasData(
-            ctx,
+            ctx.Request.Context(),
             xError.ValidationError,
             "年龄不符合要求",
             true,
@@ -181,7 +181,7 @@ func ValidateUser(ctx *gin.Context, req *CreateUserReq) error {
 
 ```go title="error_library.go"
 func NewInternalServerError(
-    ctx *gin.Context,
+    ctx context.Context,
     errMessage ErrMessage,
     err error,
 ) *Error
@@ -194,7 +194,7 @@ func SaveUser(ctx *gin.Context, user *User) error {
     if err := db.Save(user); err != nil {
         // [!code highlight:4]
         return xError.NewInternalServerError(
-            ctx,
+            ctx.Request.Context(),
             "保存用户失败",
             err,
         )
@@ -224,7 +224,7 @@ func (h *AppHandler) CreateApp(ctx *gin.Context) {
     if snowflakeErr != nil {
         // [!code highlight:2]
         // 创建错误并传递给中间件处理
-        _ = ctx.Error(xError.NewError(ctx, xError.BadRequest, "商户 ID 非法", false))
+        _ = ctx.Error(xError.NewError(ctx.Request.Context(), xError.BadRequest, "商户 ID 非法", false))
         return
     }
 
@@ -304,10 +304,10 @@ func (s *UserService) GetUser(ctx *gin.Context, id string) (*entity.User, *xErro
     if err != nil {
         if errors.Is(err, gorm.ErrRecordNotFound) {
             // [!code highlight]
-            return nil, xError.NewError(ctx, xError.UserNotFound, "用户不存在", true, err)
+            return nil, xError.NewError(ctx.Request.Context(), xError.UserNotFound, "用户不存在", true, err)
         }
         // [!code highlight]
-        return nil, xError.NewInternalServerError(ctx, "查询用户失败", err)
+        return nil, xError.NewInternalServerError(ctx.Request.Context(), "查询用户失败", err)
     }
     return user, nil
 }

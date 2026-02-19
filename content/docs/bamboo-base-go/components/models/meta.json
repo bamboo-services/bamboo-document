@@ -3,6 +3,7 @@
   "icon": "Database",
   "pages": [
     "index",
+    "page",
     "soft-delete",
     "gene-provider"
   ]

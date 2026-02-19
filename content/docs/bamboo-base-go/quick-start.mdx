@@ -78,20 +78,14 @@ package main
 
 import (
     "context"
-    "errors"
-    "log/slog"
-    "net/http"
-    "os"
-    "os/signal"
-    "syscall"
 
     xConsts "github.com/bamboo-services/bamboo-base-go/context"
-    xEnv "github.com/bamboo-services/bamboo-base-go/env"
     xLog "github.com/bamboo-services/bamboo-base-go/log"
+    xMain "github.com/bamboo-services/bamboo-base-go/main"
     xReg "github.com/bamboo-services/bamboo-base-go/register"
     xRegNode "github.com/bamboo-services/bamboo-base-go/register/node"
-    "your-project/internal/app/route"
     "your-project/internal/app/startup"
+    "your-project/internal/app/route"
 )
 
 func main() {
@@ -104,47 +98,14 @@ func main() {
 
     log := xLog.WithName(xLog.NamedMAIN)
 
-    // 2. 创建上下文
-    ctx, cancel := context.WithCancel(reg.Init.Ctx)
-    defer cancel()
-
-    // 3. 监听中断信号
-    sigChan := make(chan os.Signal, 1)
-    signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-
-    // [!code highlight:2]
-    // 4. 注册路由
-    route.NewRoute(reg)
-
-    // 5. 创建 HTTP 服务器
-    getHost := xEnv.GetEnvString(xEnv.Host, "localhost")
-    getPort := xEnv.GetEnvString(xEnv.Port, "8080")
-    server := &http.Server{
-        Addr:    getHost + ":" + getPort,
-        Handler: reg.Serve,
-    }
-
-    // 6. 启动服务
-    go func() {
-        log.Info(reg.Init.Ctx, "服务器启动成功", slog.String("addr", "http://"+server.Addr))
-        if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-            log.Error(reg.Init.Ctx, err.Error())
-        }
-    }()
-
-    // 7. 优雅关闭
-    <-sigChan
-    log.Warn(reg.Init.Ctx, "正在关闭服务器...")
-    if err := server.Shutdown(ctx); err != nil {
-        log.Error(reg.Init.Ctx, err.Error())
-    }
-    log.Info(reg.Init.Ctx, "服务器已安全退出")
+    // 2. 交由 Runner 托管服务生命周期（路由注册 + 启动 + 优雅关闭）
+    xMain.Runner(reg, log, route.NewRoute)
 }
 ```
 
 ## 业务初始化
 
-数据库和 Redis 现在通过**节点化系统**注入，不再需要单独的 `startup` 包：
+数据库和 Redis 通过**节点化系统**注入，通常放在 `startup` 包中实现：
 
 ```go title="internal/app/startup/init_database.go"
 package startup
@@ -327,7 +288,7 @@ import (
     xError "github.com/bamboo-services/bamboo-base-go/error"
     xLog "github.com/bamboo-services/bamboo-base-go/log"
     xResult "github.com/bamboo-services/bamboo-base-go/result"
-    xVaild "github.com/bamboo-services/bamboo-base-go/validator"
+    xUtil "github.com/bamboo-services/bamboo-base-go/utility"
     "github.com/gin-gonic/gin"
     apiUser "your-project/api/user"
     "your-project/internal/logic"
@@ -348,11 +309,10 @@ func NewUserHandler() *UserHandler {
 func (h *UserHandler) Register(c *gin.Context) {
     h.log.Info(c, "开始处理用户注册请求")
 
-    // [!code highlight:5]
+    // [!code highlight:4]
     // 1. 验证并绑定数据
-    var req apiUser.RegisterRequest
-    if err := c.ShouldBindBodyWithJSON(&req); err != nil {
-        xVaild.HandleValidationError(c, err)
+    req := xUtil.BindData(c, &apiUser.RegisterRequest{})
+    if req == nil {
         return
     }
 
@@ -374,9 +334,8 @@ func (h *UserHandler) Register(c *gin.Context) {
 func (h *UserHandler) Login(c *gin.Context) {
     h.log.Info(c, "开始处理用户登录请求")
 
-    var req apiUser.LoginRequest
-    if err := c.ShouldBindBodyWithJSON(&req); err != nil {
-        xVaild.HandleValidationError(c, err)
+    req := xUtil.BindData(c, &apiUser.LoginRequest{})
+    if req == nil {
         return
     }
 
@@ -391,7 +350,7 @@ func (h *UserHandler) Login(c *gin.Context) {
     if !logic.NewUserLogic().VerifyPassword(user.Password, req.Password) {
         // [!code highlight:2]
         // 创建错误并传递给中间件
-        _ = c.Error(xError.NewError(c, xError.Unauthorized, "用户名或密码错误", false))
+        _ = c.Error(xError.NewError(c.Request.Context(), xError.Unauthorized, "用户名或密码错误", false))
         return
     }
 
@@ -439,14 +398,14 @@ func (l *UserLogic) CreateUser(c *gin.Context, username, email, password string)
     db.Model(&entity.User{}).Where("username = ?", username).Count(&count)
     if count > 0 {
         // [!code highlight]
-        return nil, xError.NewError(c, xError.Existed, "用户名已存在", false)
+        return nil, xError.NewError(c.Request.Context(), xError.Existed, "用户名已存在", false)
     }
 
     // 加密密码
     hashedPassword, err := xUtil.HashPassword(password)
     if err != nil {
         // [!code highlight]
-        return nil, xError.NewInternalServerError(c, "密码加密失败", err)
+        return nil, xError.NewInternalServerError(c.Request.Context(), "密码加密失败", err)
     }
 
     // [!code highlight:2]
@@ -462,7 +421,7 @@ func (l *UserLogic) CreateUser(c *gin.Context, username, email, password string)
 
     if err := db.Create(user).Error; err != nil {
         // [!code highlight]
-        return nil, xError.NewInternalServerError(c, "创建用户失败", err)
+        return nil, xError.NewInternalServerError(c.Request.Context(), "创建用户失败", err)
     }
 
     return user, nil
@@ -479,10 +438,10 @@ func (l *UserLogic) GetUserByUsername(c *gin.Context, username string) (*entity.
     if err := db.Where("username = ?", username).First(&user).Error; err != nil {
         if err == gorm.ErrRecordNotFound {
             // [!code highlight]
-            return nil, xError.NewError(c, xError.UserNotFound, "用户不存在", false, err)
+            return nil, xError.NewError(c.Request.Context(), xError.UserNotFound, "用户不存在", false, err)
         }
         // [!code highlight]
-        return nil, xError.NewInternalServerError(c, "查询用户失败", err)
+        return nil, xError.NewInternalServerError(c.Request.Context(), "查询用户失败", err)
     }
     return &user, nil
 }

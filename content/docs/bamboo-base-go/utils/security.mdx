@@ -107,7 +107,7 @@ func APIKeyMiddleware() gin.HandlerFunc {
         // [!code highlight:4]
         // 验证密钥格式
         if !xUtil.VerifySecurityKey(apiKey) {
-            ctx.Error(xError.NewError(ctx, xError.Unauthorized, "无效的 API 密钥", true))
+            ctx.Error(xError.NewError(ctx.Request.Context(), xError.Unauthorized, "无效的 API 密钥", true))
             return
         }
 

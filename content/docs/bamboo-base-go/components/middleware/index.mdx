@@ -110,7 +110,7 @@ func GetUser(ctx *gin.Context) {
     if err != nil {
         // [!code highlight:2]
         // 使用 xError 抛出错误，ResponseMiddleware 自动处理
-        ctx.Error(xError.NewError(ctx, xError.NotFound, "用户不存在", true))
+        ctx.Error(xError.NewError(ctx.Request.Context(), xError.NotFound, "用户不存在", true))
         return
     }
 

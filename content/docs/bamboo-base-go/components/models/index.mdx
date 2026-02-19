@@ -8,7 +8,7 @@ import { TypeTable } from '@/components/type-table';
 
 # 模型基类
 
-`xModels` 包提供与 GORM 深度集成的基础实体类型，自动处理主键生成和时间戳管理。
+`xModels` 包提供与 GORM 深度集成的基础实体类型与分页模型，自动处理主键生成、时间戳管理和分页响应构建。
 
 ```go
 import xModels "github.com/bamboo-services/bamboo-base-go/models"
@@ -217,6 +217,7 @@ data, _ := json.Marshal(user)
 ## 下一步
 
 <Cards>
+  <Card title="分页模型" href="./page" />
   <Card title="软删除实体" href="./soft-delete" />
   <Card title="基因提供者" href="./gene-provider" />
 </Cards>

@@ -1,0 +1,167 @@
+---
+title: 分页模型
+description: PageRequest 与 PageResponse 提供统一的分页请求和响应结构
+icon: ListOrdered
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# 分页模型
+
+`xModels` 提供通用分页模型，统一分页请求参数、排序规则和分页响应结构。
+
+```go
+import xModels "github.com/bamboo-services/bamboo-base-go/models"
+```
+
+## 核心类型
+
+### PageRequest
+
+分页请求参数：
+
+```go title="page.go"
+type PageRequest struct {
+    Page int64    `json:"page" form:"page" binding:"omitempty,min=1"`
+    Size int64    `json:"size" form:"size" binding:"omitempty,min=1,max=200"`
+    Sort PageSort `json:"sort" form:"sort" binding:"omitempty,enum_string=asc desc"`
+}
+```
+
+### PageResponse
+
+泛型分页响应结构：
+
+```go title="page.go"
+type PageResponse[T any] struct {
+    CurrentPage int64 `json:"current_page"`
+    TotalPages  int64 `json:"total_pages"`
+    TotalItems  int64 `json:"total_items"`
+    Size        int64 `json:"size"`
+    Items       T     `json:"items"`
+}
+```
+
+### PageSort
+
+排序方向枚举：
+
+```go
+const (
+    SortAsc  PageSort = "asc"
+    SortDesc PageSort = "desc"
+)
+```
+
+## 默认分页配置
+
+```go
+const (
+    DefaultPageNumber int64 = 1
+    DefaultPageSize   int64 = 20
+    DefaultPageMaxSize int64 = 200
+)
+
+var DefaultPageConfig = xModels.PageConfig{
+    DefaultPage: xModels.DefaultPageNumber,
+    DefaultSize: xModels.DefaultPageSize,
+    MaxSize:     xModels.DefaultPageMaxSize,
+    DefaultSort: xModels.SortAsc,
+}
+```
+
+## 快速使用
+
+### 解析分页请求
+
+```go
+func ListUsers(ctx *gin.Context) {
+    req := xModels.DefaultPageRequest()
+    _ = ctx.ShouldBindQuery(&req)
+    req = req.Normalize()
+
+    offset := req.Offset()
+    limit := req.Limit()
+    order := "created_at " + req.OrderDirection()
+
+    // 查询数据库...
+    _ = offset
+    _ = limit
+    _ = order
+}
+```
+
+### 构造分页响应
+
+```go
+func ListUsers(ctx *gin.Context) {
+    req := xModels.PageRequest{Page: 1, Size: 10}.Normalize()
+
+    totalItems := int64(95)
+    users := []UserDTO{{ID: 1, Username: "alice"}}
+
+    page := xModels.NewPageFromRequest(req, totalItems, users)
+    xResult.SuccessHasData(ctx, "查询成功", page)
+}
+```
+
+响应示例：
+
+```json
+{
+  "current_page": 1,
+  "total_pages": 10,
+  "total_items": 95,
+  "size": 10,
+  "items": [
+    {
+      "id": 1,
+      "username": "alice"
+    }
+  ]
+}
+```
+
+## 常用方法
+
+<TypeTable
+  type={{
+    Normalize: {
+      description: '按默认配置规范化分页参数（纠正 page/size/sort）',
+      type: '() PageRequest',
+      required: true,
+    },
+    NormalizeWithConfig: {
+      description: '按自定义配置规范化分页参数',
+      type: '(config PageConfig) PageRequest',
+      required: true,
+    },
+    Offset: {
+      description: '计算分页偏移量 (page-1)*size',
+      type: '() int64',
+      required: true,
+    },
+    Limit: {
+      description: '获取分页条数（已规范化）',
+      type: '() int64',
+      required: true,
+    },
+    OrderDirection: {
+      description: '获取排序方向字符串（asc/desc）',
+      type: '() string',
+      required: true,
+    },
+    NewPageFromRequest: {
+      description: '从 PageRequest 构建分页响应',
+      type: '(req PageRequest, totalItems int64, items T) *PageResponse[T]',
+      required: true,
+    },
+  }}
+/>
+
+## 下一步
+
+<Cards>
+  <Card title="基础实体" href="./index" />
+  <Card title="基因提供者" href="./gene-provider" />
+</Cards>

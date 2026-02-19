@@ -94,7 +94,7 @@ func GetUser(ctx *gin.Context) {
     if err != nil {
         // [!code highlight:2]
         // 添加错误到 ctx.Errors，ResponseMiddleware 自动处理
-        ctx.Error(xError.NewError(ctx, xError.NotFound, "用户不存在", true))
+        ctx.Error(xError.NewError(ctx.Request.Context(), xError.NotFound, "用户不存在", true))
         return
     }
     xResult.Success(ctx, user)
@@ -147,7 +147,7 @@ func GetUser(ctx *gin.Context) {
 ```go
 // [!code highlight:2]
 // 创建带错误码的错误
-err := xError.NewError(ctx, xError.ParameterError, "参数格式错误", true)
+err := xError.NewError(ctx.Request.Context(), xError.ParameterError, "参数格式错误", true)
 ctx.Error(err)
 ```
 
@@ -195,7 +195,7 @@ func GetUser(ctx *gin.Context) {
     // [!code highlight:4]
     // 参数校验
     if id == "" {
-        ctx.Error(xError.NewError(ctx, xError.ParameterError, "用户ID不能为空", true))
+        ctx.Error(xError.NewError(ctx.Request.Context(), xError.ParameterError, "用户ID不能为空", true))
         return
     }
 
@@ -203,7 +203,7 @@ func GetUser(ctx *gin.Context) {
     if err != nil {
         // [!code highlight:3]
         // 业务错误
-        ctx.Error(xError.NewError(ctx, xError.NotFound, "用户不存在", true))
+        ctx.Error(xError.NewError(ctx.Request.Context(), xError.NotFound, "用户不存在", true))
         return
     }
 
@@ -219,7 +219,7 @@ func GetUser(ctx *gin.Context) {
 // [!code highlight:6]
 // 错误响应中携带额外数据
 ctx.Error(xError.NewErrorHasData(
-    ctx,
+    ctx.Request.Context(),
     xError.ParameterError,
     "参数校验失败",
     true,

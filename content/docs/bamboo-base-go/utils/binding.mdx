@@ -1,0 +1,77 @@
+---
+title: 请求绑定
+description: BindData 提供泛型 JSON 请求体绑定与校验
+icon: Braces
+---
+
+# 请求绑定
+
+`xUtil.BindData` 封装了 JSON 请求体绑定与校验失败处理，适用于 Gin Handler。
+
+```go
+import xUtil "github.com/bamboo-services/bamboo-base-go/utility"
+```
+
+## BindData
+
+```go title="binding.go"
+func BindData[T any](ctx *gin.Context, data *T) *T
+```
+
+行为说明：
+- 绑定成功：返回原始 `data` 指针。
+- 绑定失败：内部调用 `xVaild.HandleValidationError(ctx, err)`，并执行 `ctx.Abort()`，返回 `nil`。
+
+## 使用示例
+
+```go title="handler/user.go"
+type CreateUserRequest struct {
+    Username string `json:"username" binding:"required,min=3,max=32"`
+    Email    string `json:"email" binding:"required,email"`
+    Password string `json:"password" binding:"required,min=8"`
+}
+
+func CreateUser(ctx *gin.Context) {
+    req := xUtil.BindData(ctx, &CreateUserRequest{})
+    if req == nil {
+        return
+    }
+
+    // req 已完成绑定和校验
+    xResult.Success(ctx, "创建成功")
+}
+```
+
+## 与手动绑定对比
+
+手动写法：
+
+```go
+var req CreateUserRequest
+if err := ctx.ShouldBindBodyWithJSON(&req); err != nil {
+    xVaild.HandleValidationError(ctx, err)
+    return
+}
+```
+
+使用 `BindData`：
+
+```go
+req := xUtil.BindData(ctx, &CreateUserRequest{})
+if req == nil {
+    return
+}
+```
+
+## 注意事项
+
+- 该函数用于 JSON 请求体场景。
+- 返回 `nil` 代表请求已被中止，调用方应立即 `return`。
+- 如果你需要自定义错误响应结构，可保留手动绑定流程。
+
+## 下一步
+
+<Cards>
+  <Card title="数据验证" href="../components/validator" />
+  <Card title="结果处理" href="../core/result" />
+</Cards>
