@@ -53,6 +53,18 @@ const (
 )
 ```
 
+### PageProvider
+
+当业务请求结构体实现该接口时，可通过 `GetPageRequest` 统一提取分页参数：
+
+```go
+type PageProvider interface {
+    GetPageSettings() PageRequest
+}
+
+func GetPageRequest[T any](req T) PageRequest
+```
+
 ## 默认分页配置
 
 ```go
@@ -101,6 +113,28 @@ func ListUsers(ctx *gin.Context) {
     users := []UserDTO{{ID: 1, Username: "alice"}}
 
     page := xModels.NewPageFromRequest(req, totalItems, users)
+    xResult.SuccessHasData(ctx, "查询成功", page)
+}
+```
+
+### 从业务请求统一提取分页参数
+
+```go
+type ListUserRequest struct {
+    Keyword string
+    Page    xModels.PageRequest
+}
+
+func (r ListUserRequest) GetPageSettings() xModels.PageRequest {
+    return r.Page
+}
+
+func ListUsers(ctx *gin.Context) {
+    req := ListUserRequest{}
+    _ = ctx.ShouldBindQuery(&req)
+
+    pageReq := xModels.GetPageRequest(req)
+    page := xModels.NewPageFromRequest(pageReq, 95, []UserDTO{})
     xResult.SuccessHasData(ctx, "查询成功", page)
 }
 ```

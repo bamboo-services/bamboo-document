@@ -227,6 +227,12 @@ reg.Init.Use(xConsts.SnowflakeNodeKey, xInit.SnowflakeInit)
 
 详见：[服务运行时](./runner)
 
+### gRPC 运行时（公共）
+
+如果需要与 HTTP 进程统一托管 gRPC 服务，可使用 `xGrpcRunner.New(...)` 生成任务函数后传入 `xMain.Runner`。
+
+详见：[gRPC 运行时](./grpc-runner)
+
 ## 上下文注入
 
 引擎初始化时会自动将节点管理器的上下文注入到每个 HTTP 请求：
@@ -246,12 +252,12 @@ func injectContext(ctx context.Context) func(c *gin.Context) {
 
 ## 调试模式
 
-通过环境变量 `DEBUG` 控制调试模式：
+通过环境变量 `XLF_DEBUG` 控制调试模式：
 
 | 环境变量 | 值 | 效果 |
 |---------|-----|------|
-| `DEBUG` | `true` | 启用调试模式，日志级别为 Debug |
-| `DEBUG` | `false` 或未设置 | 生产模式，日志级别为 Info |
+| `XLF_DEBUG` | `true` | 启用调试模式，日志级别为 Debug |
+| `XLF_DEBUG` | `false` 或未设置 | 生产模式，日志级别为 Info |
 
 ## 完整示例
 
@@ -308,6 +314,7 @@ func initRedis(ctx context.Context) (any, error) {
 
 <Cards>
   <Card title="服务运行时" href="./runner" />
+  <Card title="gRPC 运行时" href="./grpc-runner" />
   <Card title="配置初始化" href="./config" />
   <Card title="日志初始化" href="./logger" />
   <Card title="雪花算法初始化" href="./snowflake" />

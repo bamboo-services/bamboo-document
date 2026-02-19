@@ -18,6 +18,7 @@ icon: Package
 - 🔒 **类型安全** - 完整的类型定义和错误处理
 - 📄 **分页标准化** - 内置 `PageRequest`/`PageResponse` 泛型分页模型
 - ▶️ **运行时托管** - 内置 `xMain.Runner`，统一启动与优雅关闭
+- 🔌 **gRPC 支持** - 提供 `xGrpcRunner`、追踪拦截器与错误包装能力
 
 ## 模块概览
 
@@ -26,6 +27,7 @@ icon: Package
 | [注册系统](./core/init) | Reg 结构体、节点初始化与 Runner 运行时 |
 | [统一响应](./core/result) | BaseResponse 与响应处理中间件 |
 | [错误处理](./core/result/error) | IError 接口与错误构造函数 |
+| [gRPC 运行时](./core/init/grpc-runner) | gRPC 启动、服务注册与优雅关闭 |
 | [雪花算法](./components/snowflake) | 64 位分布式 ID 生成 |
 | [模型基类](./components/models) | GORM 实体基类、软删除与分页模型 |
 | [日志系统](./components/log) | 基于 slog 的彩色日志 |
@@ -42,16 +44,24 @@ go get github.com/bamboo-services/bamboo-base-go
 package main
 
 import (
-    "github.com/bamboo-services/bamboo-base-go/web"
-    xResult "github.com/bamboo-services/bamboo-base-go/web/result"
+    "context"
+
+    "github.com/gin-gonic/gin"
+
+    xLog "github.com/bamboo-services/bamboo-base-go/log"
+    xMain "github.com/bamboo-services/bamboo-base-go/main"
+    xReg "github.com/bamboo-services/bamboo-base-go/register"
 )
 
 func main() {
-    r := web.Default()
-    r.GET("/ping", func(c *gin.Context) {
-        xResult.Success(c, "pong")
+    reg := xReg.Register(context.Background(), nil)
+    log := xLog.WithName(xLog.NamedMAIN)
+
+    xMain.Runner(reg, log, func(reg *xReg.Reg) {
+        reg.Serve.GET("/ping", func(c *gin.Context) {
+            c.JSON(200, gin.H{"message": "pong"})
+        })
     })
-    r.Run(":8080")
 }
 ```
 
@@ -59,6 +69,6 @@ func main() {
 
 <Cards>
   <Card title="入门指南" href="../guide/getting-started" />
-  <Card title="核心架构" href="./core/architecture" />
+  <Card title="核心架构" href="./architecture" />
   <Card title="GitHub 仓库" href="https://github.com/bamboo-services/bamboo-base-go" />
 </Cards>

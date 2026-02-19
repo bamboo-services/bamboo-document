@@ -50,6 +50,10 @@ XLF_DEBUG=true
 XLF_HOST=localhost
 XLF_PORT=8080
 
+# gRPC 配置（可选）
+GRPC_PORT=1119
+GRPC_REFLECTION=false
+
 # 数据库配置
 DATABASE_HOST=localhost
 DATABASE_PORT=5432
@@ -102,6 +106,23 @@ func main() {
     xMain.Runner(reg, log, route.NewRoute)
 }
 ```
+
+## 可选：HTTP + gRPC 一体化启动
+
+当服务同时暴露 HTTP 与 gRPC 接口时，可将 gRPC 任务函数直接挂入 `xMain.Runner`：
+
+```go title="main.go"
+grpcTask := xGrpcRunner.New(
+    xGrpcRunner.WithLogger(xLog.WithName(xLog.NamedGRPC)),
+    xGrpcRunner.WithRegisterService(func(ctx context.Context, server grpc.ServiceRegistrar) {
+        // 注册你的 gRPC Service
+    }),
+)
+
+xMain.Runner(reg, log, route.NewRoute, grpcTask)
+```
+
+完整说明参见：[gRPC 运行时](./core/init/grpc-runner)
 
 ## 业务初始化
 

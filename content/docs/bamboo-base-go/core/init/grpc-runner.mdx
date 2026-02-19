@@ -1,0 +1,111 @@
+---
+title: gRPC 运行时
+description: xGrpcRunner.New 将 gRPC 服务挂载到 xMain.Runner 生命周期中
+icon: Radio
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# gRPC 运行时
+
+`xGrpcRunner` 提供 gRPC 服务的启动与优雅退出能力，可直接作为 `xMain.Runner` 的附加协程使用。
+
+```go
+import xGrpcRunner "github.com/bamboo-services/bamboo-base-go/grpc/runner"
+```
+
+## 核心入口
+
+```go title="grpc/runner/runner.go"
+func New(options ...Option) func(ctx context.Context, option ...any)
+```
+
+返回值可直接传给：
+
+```go
+xMain.Runner(reg, log, registerRoute, grpcTask)
+```
+
+## 常用 Option
+
+<TypeTable
+  type={{
+    WithRegisterService: {
+      description: '注册 gRPC 服务（可调用 pb 生成的 RegisterXxxServer）',
+      type: '(registerService RegisterServiceFunc) Option',
+      required: true,
+    },
+    WithLogger: {
+      description: '指定 gRPC 日志器，建议 xLog.NamedGRPC',
+      type: '(logger *xLog.LogNamedLogger) Option',
+      required: false,
+    },
+    WithGracefulStopTimeout: {
+      description: '设置 gRPC 优雅停止超时时间',
+      type: '(timeout time.Duration) Option',
+      required: false,
+    },
+    WithUnaryInterceptors: {
+      description: '追加一元拦截器（默认已内置 Trace）',
+      type: '(interceptors ...grpc.UnaryServerInterceptor) Option',
+      required: false,
+    },
+    WithStreamInterceptors: {
+      description: '追加流式拦截器',
+      type: '(interceptors ...grpc.StreamServerInterceptor) Option',
+      required: false,
+    },
+  }}
+/>
+
+## 集成示例
+
+```go title="main.go"
+package main
+
+import (
+    "context"
+    "time"
+
+    xLog "github.com/bamboo-services/bamboo-base-go/log"
+    xMain "github.com/bamboo-services/bamboo-base-go/main"
+    xReg "github.com/bamboo-services/bamboo-base-go/register"
+
+    xGrpcRunner "github.com/bamboo-services/bamboo-base-go/grpc/runner"
+    "google.golang.org/grpc"
+)
+
+func main() {
+    reg := xReg.Register(context.Background(), nil)
+    log := xLog.WithName(xLog.NamedMAIN)
+
+    grpcTask := xGrpcRunner.New(
+        xGrpcRunner.WithLogger(xLog.WithName(xLog.NamedGRPC)),
+        xGrpcRunner.WithGracefulStopTimeout(30*time.Second),
+        xGrpcRunner.WithRegisterService(func(ctx context.Context, server grpc.ServiceRegistrar) {
+            // 在这里注册你的服务：
+            // xGrpcGenerate.RegisterYourServiceServer(server, yourHandler)
+        }),
+    )
+
+    xMain.Runner(reg, log, registerRoute, grpcTask)
+}
+```
+
+## 内置行为
+
+- 默认使用 `GRPC_PORT`（默认 `1119`）作为监听端口。
+- 默认启用追踪拦截器 `Trace`（复用或生成 `x-request-uuid`）。
+- 由 `xMain.Runner` 统一管理退出信号：`SIGINT`/`SIGTERM`。
+- `GRPC_REFLECTION=true` 时启用反射。
+
+## 错误处理
+
+`xGrpcRunner` 可配合 `xGrpcError` 与 `xGrpcResult` 使用，将业务错误映射为标准 gRPC status，并附带结构化错误详情。
+
+## 下一步
+
+<Cards>
+  <Card title="服务运行时（HTTP）" href="./runner" />
+  <Card title="快速开始" href="../../quick-start" />
+</Cards>

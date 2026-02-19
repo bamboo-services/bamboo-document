@@ -107,9 +107,25 @@ func main() {
 }
 ```
 
+## 与 gRPC 一起托管
+
+```go
+grpcTask := xGrpcRunner.New(
+    xGrpcRunner.WithLogger(xLog.WithName(xLog.NamedGRPC)),
+    xGrpcRunner.WithRegisterService(func(ctx context.Context, server grpc.ServiceRegistrar) {
+        // 注册 gRPC 服务
+    }),
+)
+
+xMain.Runner(reg, log, registerRoute, grpcTask)
+```
+
+这样可以让 HTTP 与 gRPC 共享同一套信号处理和优雅退出流程。
+
 ## 下一步
 
 <Cards>
   <Card title="快速开始" href="./index" />
+  <Card title="gRPC 运行时" href="./grpc-runner" />
   <Card title="引擎初始化" href="./engine" />
 </Cards>

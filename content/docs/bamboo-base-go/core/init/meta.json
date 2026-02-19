@@ -4,6 +4,7 @@
   "pages": [
     "index",
     "runner",
+    "grpc-runner",
     "config",
     "logger",
     "snowflake",

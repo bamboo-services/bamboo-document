@@ -1,28 +1,37 @@
 ---
 title: 请求绑定
-description: BindData 提供泛型 JSON 请求体绑定与校验
+description: BindData / BindQuery / BindURI / BindHeader 的统一绑定与校验
 icon: Braces
 ---
 
 # 请求绑定
 
-`xUtil.BindData` 封装了 JSON 请求体绑定与校验失败处理，适用于 Gin Handler。
+`xUtil` 提供 4 个泛型绑定函数，分别覆盖请求体、查询参数、路径参数与请求头。
 
 ```go
 import xUtil "github.com/bamboo-services/bamboo-base-go/utility"
 ```
 
-## BindData
+## 统一行为
+
+四个函数都遵循同一套行为：
+
+- 绑定成功：返回传入的 `data` 指针。
+- 绑定失败：调用 `xVaild.HandleValidationError(ctx, err)`，执行 `ctx.Abort()`，并返回 `nil`。
+- 调用方拿到 `nil` 时，应立即 `return`，避免重复写响应。
+
+## API 列表
 
 ```go title="binding.go"
 func BindData[T any](ctx *gin.Context, data *T) *T
+func BindQuery[T any](ctx *gin.Context, data *T) *T
+func BindURI[T any](ctx *gin.Context, data *T) *T
+func BindHeader[T any](ctx *gin.Context, data *T) *T
 ```
 
-行为说明：
-- 绑定成功：返回原始 `data` 指针。
-- 绑定失败：内部调用 `xVaild.HandleValidationError(ctx, err)`，并执行 `ctx.Abort()`，返回 `nil`。
-
 ## 使用示例
+
+### 1) JSON 请求体：BindData
 
 ```go title="handler/user.go"
 type CreateUserRequest struct {
@@ -42,32 +51,86 @@ func CreateUser(ctx *gin.Context) {
 }
 ```
 
-## 与手动绑定对比
+### 2) Query 参数：BindQuery
+
+```go
+type ListUserQuery struct {
+    Page int64 `form:"page" binding:"omitempty,min=1"`
+    Size int64 `form:"size" binding:"omitempty,min=1,max=200"`
+}
+
+func ListUsers(ctx *gin.Context) {
+    query := xUtil.BindQuery(ctx, &ListUserQuery{})
+    if query == nil {
+        return
+    }
+
+    xResult.SuccessHasData(ctx, "查询成功", query)
+}
+```
+
+### 3) URI 参数：BindURI
+
+```go
+type UserURI struct {
+    UserID int64 `uri:"user_id" binding:"required,min=1"`
+}
+
+func GetUser(ctx *gin.Context) {
+    uri := xUtil.BindURI(ctx, &UserURI{})
+    if uri == nil {
+        return
+    }
+
+    xResult.SuccessHasData(ctx, "查询成功", gin.H{"user_id": uri.UserID})
+}
+```
+
+### 4) Header 参数：BindHeader
+
+```go
+type TraceHeader struct {
+    RequestID string `header:"X-Request-UUID" binding:"required"`
+}
+
+func GetProfile(ctx *gin.Context) {
+    header := xUtil.BindHeader(ctx, &TraceHeader{})
+    if header == nil {
+        return
+    }
+
+    xResult.SuccessHasData(ctx, "ok", gin.H{"request_id": header.RequestID})
+}
+```
+
+## 与手动绑定对比（以 Query 为例）
 
 手动写法：
 
 ```go
-var req CreateUserRequest
-if err := ctx.ShouldBindBodyWithJSON(&req); err != nil {
+var query ListUserQuery
+if err := ctx.ShouldBindQuery(&query); err != nil {
     xVaild.HandleValidationError(ctx, err)
+    ctx.Abort()
     return
 }
 ```
 
-使用 `BindData`：
+使用 `BindQuery`：
 
 ```go
-req := xUtil.BindData(ctx, &CreateUserRequest{})
-if req == nil {
+query := xUtil.BindQuery(ctx, &ListUserQuery{})
+if query == nil {
     return
 }
 ```
 
 ## 注意事项
 
-- 该函数用于 JSON 请求体场景。
+- `BindData` 使用 JSON 绑定，适用于请求体场景。
+- `BindQuery` / `BindURI` / `BindHeader` 分别用于 query、路径参数与 header。
 - 返回 `nil` 代表请求已被中止，调用方应立即 `return`。
-- 如果你需要自定义错误响应结构，可保留手动绑定流程。
+- 需要完全自定义错误处理时，可保留手动绑定流程。
 
 ## 下一步
 
