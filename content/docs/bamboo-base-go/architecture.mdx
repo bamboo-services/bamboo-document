@@ -22,7 +22,7 @@ import { TypeTable } from '@/components/type-table';
 github.com/bamboo-services/bamboo-base-go/
 ├── base_response.go        # 根包：统一响应结构体 (xBase)
 │
-├── context/                # 上下文常量 (xCtx/xConsts)
+├── context/                # 上下文常量 (xConsts)
 ├── env/                    # 环境变量管理 (xEnv)
 ├── error/                  # 错误码和错误处理 (xError)
 ├── helper/                 # 核心中间件 (xHelper)
@@ -50,7 +50,7 @@ github.com/bamboo-services/bamboo-base-go/
       type: 'github.com/bamboo-services/bamboo-base-go',
       required: true,
     },
-    'xCtx': {
+    'xConsts': {
       description: '上下文键常量定义',
       type: '.../context',
       required: true,
@@ -156,7 +156,7 @@ graph TD
 
     xModels[xModels<br/>数据模型] --> xSnowflake
 
-    xCtxUtil[xCtxUtil<br/>上下文工具] --> xCtx[xCtx<br/>上下文常量]
+    xCtxUtil[xCtxUtil<br/>上下文工具] --> xConsts[xConsts<br/>上下文常量]
     xCtxUtil --> xSnowflake"
 />
 
@@ -169,7 +169,7 @@ flowchart TD
     B --> C[LoggerInit<br/>初始化日志系统]
     C --> D[SnowflakeInit<br/>初始化雪花算法节点]
     D --> E[EngineInit<br/>创建 Gin 引擎]
-    E --> F[SystemContextInit<br/>注册系统上下文中间件]
+    E --> F[injectContext<br/>合并初始化上下文]
     F --> G[返回 *Reg]"
 />
 
@@ -177,13 +177,15 @@ flowchart TD
 package main
 
 import (
+    "context"
+
     xReg "github.com/bamboo-services/bamboo-base-go/register"
 )
 
 func main() {
-    // [!code highlight]
+    // [!code highlight:2]
     // 一键初始化所有组件
-    reg := xReg.Register()
+    reg := xReg.Register(context.Background(), nil)
 
     // 注册路由...
 
@@ -213,5 +215,5 @@ func main() {
 
 <Cards>
   <Card title="快速开始" href="./core/init" />
-  <Card title="响应处理" href="./core/result" />
+  <Card title="响应处理" href="./core/result/result" />
 </Cards>

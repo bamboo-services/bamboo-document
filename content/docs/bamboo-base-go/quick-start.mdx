@@ -111,6 +111,15 @@ func main() {
 
 当服务同时暴露 HTTP 与 gRPC 接口时，可将 gRPC 任务函数直接挂入 `xMain.Runner`：
 
+需要额外引入 gRPC 运行时相关包：
+
+```go
+import (
+    xGrpcRunner "github.com/bamboo-services/bamboo-base-go/grpc/runner"
+    "google.golang.org/grpc"
+)
+```
+
 ```go title="main.go"
 grpcTask := xGrpcRunner.New(
     xGrpcRunner.WithLogger(xLog.WithName(xLog.NamedGRPC)),
@@ -133,6 +142,7 @@ package startup
 
 import (
     "context"
+    "log/slog"
     "strings"
 
     xEnv "github.com/bamboo-services/bamboo-base-go/env"
@@ -535,5 +545,5 @@ curl -X POST http://localhost:8080/api/v1/user/login \
 <Cards>
   <Card title="核心架构" href="./architecture" />
   <Card title="初始化详解" href="./core/init" />
-  <Card title="响应处理" href="./core/result" />
+  <Card title="响应处理" href="./core/result/result" />
 </Cards>
