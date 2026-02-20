@@ -99,6 +99,19 @@ func main() {
 - 由 `xMain.Runner` 统一管理退出信号：`SIGINT`/`SIGTERM`。
 - `GRPC_REFLECTION=true` 时启用反射。
 
+## 拦截器链路
+
+默认链路中已包含 `Trace()`。你可以通过 `WithUnaryInterceptors(...)` 追加内置拦截器：
+
+```go
+xGrpcRunner.WithUnaryInterceptors(
+    xGrpcInterface.Recover(),
+    xGrpcInterface.InitContext(reg.Init.Ctx),
+)
+```
+
+> 说明：最近版本中 `Trace()` 与 `Recover()` 已调整为**无参函数**，`InitContext` 仍需传入主上下文。
+
 ## 错误处理
 
 `xGrpcRunner` 可配合 `xGrpcError` 与 `xGrpcResult` 使用，将业务错误映射为标准 gRPC status，并附带结构化错误详情。
@@ -106,6 +119,9 @@ func main() {
 ## 下一步
 
 <Cards>
-  <Card title="服务运行时（HTTP）" href="./runner" />
-  <Card title="快速开始" href="../../quick-start" />
+  <Card title="gRPC 模块概览" href="./index" />
+  <Card title="内置拦截器" href="./interceptors" />
+  <Card title="内置 Proto" href="./proto" />
+  <Card title="服务运行时（HTTP）" href="../core/init/runner" />
+  <Card title="快速开始" href="../quick-start" />
 </Cards>

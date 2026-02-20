@@ -1,0 +1,98 @@
+---
+title: 内置 Proto
+description: 记录 bamboo-base-go 内置 proto 定义，业务端可直接引用
+icon: FileText
+---
+
+# 内置 Proto
+
+脚手架内置了 2 个基础 proto 文件，业务端可直接复用，避免重复定义基础响应结构。
+
+## 文件列表
+
+- `proto/base.proto`
+- `proto/error.proto`
+
+## 1) error.proto
+
+```proto
+syntax = "proto3";
+
+package xBase;
+
+import "google/protobuf/any.proto";
+
+option go_package = "./grpc/generate;xGrpcGenerate";
+
+message GrpcError {
+  uint64 code = 1;
+  string output = 2;
+  string message = 3;
+  string error_message = 4;
+  google.protobuf.Any data = 5;
+}
+```
+
+## 2) base.proto
+
+```proto
+syntax = "proto3";
+
+package xBase;
+
+import "google/protobuf/any.proto";
+import "proto/error.proto";
+
+option go_package = "./grpc/generate;xGrpcGenerate";
+
+message BaseResponse {
+  string context = 1;
+  string output = 2;
+  uint64 code = 3;
+  string message = 4;
+  optional string error_message = 5;
+  optional int64 overhead = 6;
+  google.protobuf.Any data = 7;
+  GrpcError error = 8;
+}
+```
+
+## 业务端引用方式
+
+### A. 在 proto 中直接 import（推荐在脚手架目录结构下）
+
+```proto
+import "proto/base.proto";
+import "proto/error.proto";
+```
+
+### B. 在 Go 代码中直接复用生成类型
+
+```go
+import xGrpcGenerate "github.com/bamboo-services/bamboo-base-go/grpc/generate"
+
+func buildResp() *xGrpcGenerate.BaseResponse {
+    return &xGrpcGenerate.BaseResponse{
+        Output:  "Success",
+        Code:    200,
+        Message: "ok",
+    }
+}
+```
+
+## 生成命令
+
+```bash
+# 默认 proto
+make proto
+
+# 指定 proto
+make proto PROTO_FILE=./proto/error.proto
+```
+
+## 下一步
+
+<Cards>
+  <Card title="gRPC 运行时" href="./runner" />
+  <Card title="内置拦截器" href="./interceptors" />
+</Cards>

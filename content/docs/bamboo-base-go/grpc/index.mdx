@@ -1,0 +1,24 @@
+---
+title: gRPC（可选）
+description: Bamboo Base 的可选 gRPC 运行时能力
+icon: Radio
+---
+
+# gRPC（可选）
+
+`bamboo-base-go` 的核心是 HTTP + 节点化初始化；gRPC 属于**可选扩展能力**，按需接入。
+
+适用场景：
+
+- 需要同时暴露 HTTP 与 gRPC 接口。
+- 希望与 `xMain.Runner` 共享同一套信号处理与优雅关闭流程。
+- 需要统一的 trace、错误码映射与结构化错误详情。
+
+## 快速入口
+
+<Cards>
+  <Card title="gRPC 运行时" href="./runner" />
+  <Card title="内置拦截器" href="./interceptors" />
+  <Card title="内置 Proto" href="./proto" />
+  <Card title="快速开始" href="../quick-start" />
+</Cards>

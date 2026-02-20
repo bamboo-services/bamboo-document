@@ -1,0 +1,78 @@
+---
+title: 内置拦截器
+description: Trace / Recover / InitContext 三个内置 gRPC 一元拦截器
+icon: ShieldCheck
+---
+
+# 内置拦截器
+
+`bamboo-base-go` 内置 3 个常用 gRPC 一元拦截器，分别负责链路追踪、panic 保护和上下文注入。
+
+```go
+import xGrpcInterface "github.com/bamboo-services/bamboo-base-go/grpc/interceptor"
+```
+
+## 1) Trace（默认启用）
+
+```go
+func Trace() grpc.UnaryServerInterceptor
+```
+
+作用：
+
+- 从 incoming metadata 读取 `x-request-uuid`；若不存在则自动生成 UUID。
+- 将请求 ID 写入 `context`（`xCtx.RequestKey`）。
+- 记录请求开始时间（`xCtx.UserStartTimeKey`）。
+- 将 `x-request-uuid` 写入 gRPC header 和 trailer，便于全链路追踪。
+
+> `xGrpcRunner.New(...)` 默认会把 `Trace()` 放到拦截器链首位。
+
+## 2) Recover（可选挂载）
+
+```go
+func Recover() grpc.UnaryServerInterceptor
+```
+
+作用：
+
+- 捕获 handler 中的 panic，避免服务进程崩溃。
+- 将 panic 转换为统一 gRPC 错误响应（内部使用 `ServerInternalError`）。
+- 记录方法名与 panic 内容，便于排障。
+
+## 3) InitContext（可选挂载）
+
+```go
+func InitContext(mainCtx context.Context) grpc.UnaryServerInterceptor
+```
+
+作用：
+
+- 从主上下文提取 `xCtx.RegNodeKey`（节点初始化结果集合）。
+- 注入到每个 gRPC 请求上下文，便于业务逻辑复用已注册组件。
+- 将业务错误转换为标准 gRPC status，并通过 details 携带结构化错误数据。
+
+## 推荐挂载方式
+
+```go
+grpcTask := xGrpcRunner.New(
+    xGrpcRunner.WithRegisterService(registerGrpcService),
+    xGrpcRunner.WithUnaryInterceptors(
+        xGrpcInterface.Recover(),
+        xGrpcInterface.InitContext(reg.Init.Ctx),
+    ),
+)
+```
+
+链路顺序（实际）：
+
+1. `Trace()`（Runner 默认）
+2. `Recover()`（你追加）
+3. `InitContext(...)`（你追加）
+4. 业务 Handler
+
+## 下一步
+
+<Cards>
+  <Card title="gRPC 运行时" href="./runner" />
+  <Card title="内置 Proto" href="./proto" />
+</Cards>

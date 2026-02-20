@@ -227,11 +227,7 @@ reg.Init.Use(xConsts.SnowflakeNodeKey, xInit.SnowflakeInit)
 
 详见：[服务运行时](./runner)
 
-### gRPC 运行时（公共）
-
-如果需要与 HTTP 进程统一托管 gRPC 服务，可使用 `xGrpcRunner.New(...)` 生成任务函数后传入 `xMain.Runner`。
-
-详见：[gRPC 运行时](./grpc-runner)
+> gRPC 为可选能力，已拆分到独立板块：[`gRPC（可选）`](../../grpc)
 
 ## 上下文注入
 
@@ -314,7 +310,6 @@ func initRedis(ctx context.Context) (any, error) {
 
 <Cards>
   <Card title="服务运行时" href="./runner" />
-  <Card title="gRPC 运行时" href="./grpc-runner" />
   <Card title="配置初始化" href="./config" />
   <Card title="日志初始化" href="./logger" />
   <Card title="雪花算法初始化" href="./snowflake" />
