@@ -192,13 +192,13 @@ func (rn *RegNode) Exec() {
 
 从 `.env` 文件加载环境变量配置。
 
-详见：[配置初始化](./config)
+详见：[配置初始化](/docs/bamboo-base-go/core/init/config)
 
 ### 日志初始化（私有）
 
 初始化日志记录器，支持控制台彩色输出和文件 JSON 记录。
 
-详见：[日志初始化](./logger)
+详见：[日志初始化](/docs/bamboo-base-go/core/init/logger)
 
 ### 雪花算法节点（内置）
 
@@ -209,13 +209,13 @@ func (rn *RegNode) Exec() {
 reg.Init.Use(xConsts.SnowflakeNodeKey, xInit.SnowflakeInit)
 ```
 
-详见：[雪花算法初始化](./snowflake)
+详见：[雪花算法初始化](/docs/bamboo-base-go/core/init/snowflake)
 
 ### 引擎初始化（私有）
 
 初始化 Gin 引擎，注册内置中间件和验证器，并注入初始化上下文。
 
-详见：[引擎初始化](./engine)
+详见：[引擎初始化](/docs/bamboo-base-go/core/init/engine)
 
 ### 服务运行时（公共）
 
@@ -225,9 +225,9 @@ reg.Init.Use(xConsts.SnowflakeNodeKey, xInit.SnowflakeInit)
 - 优雅关闭
 - 后台协程托管
 
-详见：[服务运行时](./runner)
+详见：[服务运行时](/docs/bamboo-base-go/core/init/runner)
 
-> gRPC 为可选能力，已拆分到独立板块：[`gRPC（可选）`](../../grpc)
+> gRPC 为可选能力，已拆分到独立板块：[`gRPC（可选）`](/docs/bamboo-base-go/grpc)
 
 ## 上下文注入
 
@@ -309,9 +309,9 @@ func initRedis(ctx context.Context) (any, error) {
 ## 下一步
 
 <Cards>
-  <Card title="服务运行时" href="./runner" />
-  <Card title="配置初始化" href="./config" />
-  <Card title="日志初始化" href="./logger" />
-  <Card title="雪花算法初始化" href="./snowflake" />
-  <Card title="引擎初始化" href="./engine" />
+  <Card title="服务运行时" href="/docs/bamboo-base-go/core/init/runner" />
+  <Card title="配置初始化" href="/docs/bamboo-base-go/core/init/config" />
+  <Card title="日志初始化" href="/docs/bamboo-base-go/core/init/logger" />
+  <Card title="雪花算法初始化" href="/docs/bamboo-base-go/core/init/snowflake" />
+  <Card title="引擎初始化" href="/docs/bamboo-base-go/core/init/engine" />
 </Cards>
