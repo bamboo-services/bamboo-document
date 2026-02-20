@@ -6,7 +6,6 @@
     "runner",
     "interceptors",
     "proto",
-    "error",
     "result"
   ]
 }

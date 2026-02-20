@@ -1,12 +1,12 @@
 ---
 title: 内置拦截器
-description: Trace / Recover / InitContext 三个内置 gRPC 一元拦截器
+description: Trace / Recover / InitContext / ResponseBuilder 四个内置 gRPC 一元拦截器
 icon: ShieldCheck
 ---
 
 # 内置拦截器
 
-`bamboo-base-go` 内置 3 个常用 gRPC 一元拦截器，分别负责链路追踪、panic 保护和上下文注入。
+`bamboo-base-go` 内置 4 个常用 gRPC 一元拦截器，分别负责链路追踪、panic 保护、上下文注入和统一响应构建。
 
 ```go
 import xGrpcInterface "github.com/bamboo-services/bamboo-base-go/grpc/interceptor"
@@ -48,8 +48,79 @@ func InitContext(mainCtx context.Context) grpc.UnaryServerInterceptor
 作用：
 
 - 从主上下文提取 `xCtx.RegNodeKey`（节点初始化结果集合）。
-- 注入到每个 gRPC 请求上下文，便于业务逻辑复用已注册组件。
-- 将业务错误转换为标准 gRPC status，并通过 details 携带结构化错误数据。
+- 注入到每个 gRPC 请求上下文，便于业务逻辑复用已注册组件（如数据库、Redis 等）。
+
+## 4) ResponseBuilder（可选挂载）
+
+```go
+func ResponseBuilder() grpc.UnaryServerInterceptor
+```
+
+作用：
+
+- **统一处理 handler 返回值**，自动完成错误转换与响应元数据注入。
+- 应放在拦截器链**末端**（最接近 handler），以捕获所有上游行为。
+
+### 三种处理路径
+
+| 场景 | 条件 | 行为 |
+|------|------|------|
+| **错误转换** | handler 返回 `error` | 提取 `*xError.Error`，映射为 gRPC status error |
+| **成功注入** | handler 返回响应对象 | 提取 `BaseResponse`，注入 `context`（追踪 ID）和 `overhead`（耗时） |
+| **防御性处理** | 既无响应也无错误 | 返回 `DeveloperError`，提示检查代码逻辑 |
+
+### 错误转换流程
+
+```
+handler 返回 error
+    ↓
+errors.As → 提取 *xError.Error
+    ↓ (提取失败则包装为 ServerInternalError)
+xGrpc.ToGrpcStatusCode → 映射为 gRPC status code
+    ↓
+status.Error(code, message) → 返回给客户端
+```
+
+业务 handler 只需返回标准 `*xError.Error` 即可，无需手动构建 gRPC status：
+
+```go
+func (s *UserServer) GetUser(ctx context.Context, req *pb.GetUserRequest) (*xGrpcGenerate.BaseResponse, error) {
+    user, xErr := s.service.FindByID(ctx, req.Id)
+    if xErr != nil {
+        // 直接返回 *xError.Error，ResponseBuilder 自动转换
+        // [!code highlight]
+        return nil, xErr
+    }
+    return xGrpcResult.Success(ctx, "获取成功"), nil
+}
+```
+
+### HTTP → gRPC 状态码映射
+
+`ResponseBuilder` 内部通过 `xGrpc.ToGrpcStatusCode` 将业务错误码映射为 gRPC 状态码：
+
+| HTTP 状态码 | gRPC Status Code |
+|------------|-----------------|
+| 400 | `InvalidArgument` |
+| 401 | `Unauthenticated` |
+| 403 | `PermissionDenied` |
+| 404 | `NotFound` |
+| 405 | `Unimplemented` |
+| 406 | `FailedPrecondition` |
+| 408 | `DeadlineExceeded` |
+| 409 | `Aborted` |
+| 410 | `NotFound` |
+| 413 | `ResourceExhausted` |
+| 415 | `InvalidArgument` |
+| 422 | `FailedPrecondition` |
+| 429 | `ResourceExhausted` |
+| 500 | `Internal` |
+| 502 | `Unavailable` |
+| 503 | `Unavailable` |
+| 504 | `DeadlineExceeded` |
+| 其他 | `Unknown` |
+
+> 映射规则：`错误码 / 100` 取整为 HTTP 状态码，再映射到 gRPC status code。
 
 ## 推荐挂载方式
 
@@ -59,6 +130,8 @@ grpcTask := xGrpcRunner.New(
     xGrpcRunner.WithUnaryInterceptors(
         xGrpcInterface.Recover(),
         xGrpcInterface.InitContext(reg.Init.Ctx),
+        // [!code highlight]
+        xGrpcInterface.ResponseBuilder(),
     ),
 )
 ```
@@ -68,11 +141,13 @@ grpcTask := xGrpcRunner.New(
 1. `Trace()`（Runner 默认）
 2. `Recover()`（你追加）
 3. `InitContext(...)`（你追加）
-4. 业务 Handler
+4. `ResponseBuilder()`（你追加）
+5. 业务 Handler
 
 ## 下一步
 
 <Cards>
   <Card title="gRPC 运行时" href="/docs/bamboo-base-go/grpc/runner" />
+  <Card title="gRPC 结果处理" href="/docs/bamboo-base-go/grpc/result" />
   <Card title="内置 Proto" href="/docs/bamboo-base-go/grpc/proto" />
 </Cards>

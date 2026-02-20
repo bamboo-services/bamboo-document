@@ -14,137 +14,120 @@ import xGrpcResult "github.com/bamboo-services/bamboo-base-go/grpc/result"
 
 ## Success
 
-返回无数据的成功响应。
+返回无数据的成功响应，填充 `Output`、`Code`、`Message` 三个业务语义字段。
 
 ```go
 func Success(ctx context.Context, message string) *xGrpcGenerate.BaseResponse
 ```
 
+> 请求追踪 ID（`context`）和耗时（`overhead`）由 `ResponseBuilder` 拦截器统一注入，无需手动填写。
+
 **示例：**
 
 ```go
 func (s *UserServer) DeleteUser(ctx context.Context, req *pb.DeleteUserRequest) (*xGrpcGenerate.BaseResponse, error) {
-    if err := s.repo.Delete(ctx, req.Id); err != nil {
-        return nil, xGrpcError.Wrap(xError.InternalServerError, "删除失败", err).ToStatus().Err()
+    xErr := s.service.Delete(ctx, req.Id)
+    if xErr != nil {
+        return nil, xErr
     }
     // [!code highlight]
     return xGrpcResult.Success(ctx, "删除成功"), nil
 }
 ```
 
-## SuccessHasData
+## SuccessWith\[T\]
 
-返回带数据的成功响应，自动将 `data` 序列化为 `google.protobuf.Any`。
+泛型函数，创建包含业务数据的成功响应，通过反射自动注入 `BaseResponse` 字段。
 
 ```go
-func SuccessHasData(ctx context.Context, message string, data any) *xGrpcGenerate.BaseResponse
+func SuccessWith[T any](ctx context.Context, message string) T
 ```
 
-### toProtoAny 序列化路径
+### 类型约束
 
-内部 `toProtoAny` 按以下顺序尝试序列化：
+- `T` 必须是**指针类型**（如 `*pb.YourResponse`）。
+- `T` 指向的结构体中必须包含名为 `BaseResponse`、类型为 `*xGrpcGenerate.BaseResponse` 的字段。
+- 若不满足条件，函数会 **panic** 以在开发阶段尽早暴露错误。
 
-| 优先级 | 条件 | 处理方式 |
-|--------|------|---------|
-| 1 | 实现 `proto.Message` | 直接 `anypb.New(data)` |
-| 2 | 实现 `json.Marshaler` | 调用 `MarshalJSON()` → 包装为 `StringValue` |
-| 3 | 默认 | `json.Marshal(data)` → 包装为 `StringValue` |
+### 工作原理
 
-**示例：**
+```
+SuccessWith[*pb.YourResponse](ctx, "操作成功")
+    ↓
+reflect.New(YourResponse{})
+    ↓
+设置 BaseResponse 字段 = &BaseResponse{Output: "Success", Code: 200, Message: "操作成功"}
+    ↓
+返回 *pb.YourResponse（调用者继续填充业务字段）
+```
 
-```go
-func (s *UserServer) GetUser(ctx context.Context, req *pb.GetUserRequest) (*xGrpcGenerate.BaseResponse, error) {
-    user, err := s.repo.FindByID(ctx, req.Id)
-    if err != nil {
-        return nil, xGrpcError.Wrap(xError.NotFound, "用户不存在", err).ToStatus().Err()
-    }
-    // [!code highlight]
-    return xGrpcResult.SuccessHasData(ctx, "获取成功", user), nil
+### Proto 定义示例
+
+```proto title="proto/upload.proto"
+syntax = "proto3";
+
+package yourService;
+
+import "proto/base.proto";
+
+option go_package = "./generate;pb";
+
+message UploadResponse {
+  // [!code highlight]
+  xBase.BaseResponse base_response = 1;
+  string file_url = 2;
+  int64 file_size = 3;
 }
 ```
 
-## Error
-
-构建标准错误响应（不终止，由调用方决定是否返回）。
+### Handler 使用示例
 
 ```go
-func Error(ctx context.Context, errorCode *xError.ErrorCode, errorMessage xError.ErrMessage, data any) *xGrpcGenerate.BaseResponse
-```
-
-**示例：**
-
-```go
-// [!code highlight:4]
-return xGrpcResult.Error(
-    ctx, xError.BadRequest, "参数不合法", nil,
-), nil
-```
-
-## ErrorByGrpcError
-
-从 `*xGrpcError.Error` 直接构建响应，保留完整错误结构。
-
-```go
-func ErrorByGrpcError(ctx context.Context, grpcErr *xGrpcError.Error) *xGrpcGenerate.BaseResponse
-```
-
-**示例：**
-
-```go
-grpcErr := xGrpcError.New(xError.NotFound, "订单不存在")
-// [!code highlight]
-return xGrpcResult.ErrorByGrpcError(ctx, grpcErr), nil
-```
-
-## AbortError
-
-构建错误响应并同时返回 gRPC error，适用于拦截器中直接中止请求。
-
-```go
-func AbortError(ctx context.Context, errorCode *xError.ErrorCode, errorMessage xError.ErrMessage, data any) (*xGrpcGenerate.BaseResponse, error)
-```
-
-**示例（拦截器中）：**
-
-```go
-func AuthInterceptor(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-    md, _ := metadata.FromIncomingContext(ctx)
-    token := md.Get("authorization")
-    if len(token) == 0 {
-        // [!code highlight]
-        return xGrpcResult.AbortError(ctx, xError.Unauthorized, "缺少认证 Token", nil)
+func (s *FileServer) Upload(ctx context.Context, req *pb.UploadRequest) (*pb.UploadResponse, error) {
+    result, xErr := s.service.Upload(ctx, req.FileName, req.Content)
+    if xErr != nil {
+        return nil, xErr
     }
-    return handler(ctx, req)
+
+    // [!code highlight:4]
+    resp := xGrpcResult.SuccessWith[*pb.UploadResponse](ctx, "上传成功")
+    resp.FileUrl = result.URL
+    resp.FileSize = result.Size
+    return resp, nil
 }
 ```
 
 ## 完整 Handler 示例
+
+展示新版错误处理模式：业务 handler 直接返回 `*xError.Error`，由 `ResponseBuilder` 拦截器统一转换。
 
 ```go
 func (s *OrderServer) CreateOrder(ctx context.Context, req *pb.CreateOrderRequest) (*xGrpcGenerate.BaseResponse, error) {
     // 参数校验
     if req.UserId == 0 {
         // [!code highlight]
-        return xGrpcResult.AbortError(ctx, xError.BadRequest, "用户 ID 不能为空", nil)
+        return nil, xError.NewError(ctx, xError.BadRequest, "用户 ID 不能为空", false)
     }
 
-    // 调用 service（复用 HTTP 层错误）
-    order, xErr := s.service.CreateOrder(ctx, req.UserId, req.Amount)
+    // 调用 service（错误直接返回，ResponseBuilder 负责转换）
+    xErr := s.service.CreateOrder(ctx, req.UserId, req.Amount)
     if xErr != nil {
         // [!code highlight]
-        return nil, xGrpcError.From(xErr).ToStatus().Err()
+        return nil, xErr
     }
 
     // 成功响应
     // [!code highlight]
-    return xGrpcResult.SuccessHasData(ctx, "订单创建成功", order), nil
+    return xGrpcResult.Success(ctx, "订单创建成功"), nil
 }
 ```
+
+> **重要**：错误处理由 [`ResponseBuilder`](/docs/bamboo-base-go/grpc/interceptors) 拦截器统一负责。handler 中只需将 `*xError.Error` 作为 `error` 返回，拦截器会自动完成错误码映射和 gRPC status 构建。
 
 ## 下一步
 
 <Cards>
-  <Card title="gRPC 错误处理" href="/docs/bamboo-base-go/grpc/error" />
   <Card title="内置 Proto" href="/docs/bamboo-base-go/grpc/proto" />
   <Card title="内置拦截器" href="/docs/bamboo-base-go/grpc/interceptors" />
+  <Card title="gRPC 运行时" href="/docs/bamboo-base-go/grpc/runner" />
 </Cards>

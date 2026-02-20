@@ -115,6 +115,7 @@ func main() {
 
 ```go
 import (
+    xGrpcInterface "github.com/bamboo-services/bamboo-base-go/grpc/interceptor"
     xGrpcRunner "github.com/bamboo-services/bamboo-base-go/grpc/runner"
     "google.golang.org/grpc"
 )
@@ -126,6 +127,12 @@ grpcTask := xGrpcRunner.New(
     xGrpcRunner.WithRegisterService(func(ctx context.Context, server grpc.ServiceRegistrar) {
         // 注册你的 gRPC Service
     }),
+    // [!code highlight:5]
+    xGrpcRunner.WithUnaryInterceptors(
+        xGrpcInterface.Recover(),
+        xGrpcInterface.InitContext(reg.Init.Ctx),
+        xGrpcInterface.ResponseBuilder(),
+    ),
 )
 
 xMain.Runner(reg, log, route.NewRoute, grpcTask)

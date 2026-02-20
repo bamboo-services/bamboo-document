@@ -6,93 +6,109 @@ icon: FileText
 
 # 内置 Proto
 
-脚手架内置了 2 个基础 proto 文件，业务端可直接复用，避免重复定义基础响应结构。
+脚手架内置了 `base.proto` 基础响应结构，业务端可直接复用，避免重复定义。
 
-## 文件列表
-
-- `proto/base.proto`
-- `proto/error.proto`
-
-## 1) error.proto
+## base.proto
 
 ```proto
 syntax = "proto3";
 
 package xBase;
 
-import "google/protobuf/any.proto";
+option go_package = ".;xGrpcGenerate";
 
-option go_package = "./grpc/generate;xGrpcGenerate";
-
-message GrpcError {
-  uint64 code = 1;
-  string output = 2;
-  string message = 3;
-  string error_message = 4;
-  google.protobuf.Any data = 5;
-}
-```
-
-## 2) base.proto
-
-```proto
-syntax = "proto3";
-
-package xBase;
-
-import "google/protobuf/any.proto";
-import "proto/error.proto";
-
-option go_package = "./grpc/generate;xGrpcGenerate";
-
+// BaseResponse 表示 gRPC 统一响应的元信息部分。
 message BaseResponse {
+  // 请求追踪标识（对应 HTTP 的 X-Request-UUID）。
   string context = 1;
+  // 输出标识（如 "Success"、"PARAMETER_ERROR"）。
   string output = 2;
+  // 业务状态码（200 表示成功，其余与 xError.ErrorCode.Code 对应）。
   uint64 code = 3;
+  // 人类可读的描述信息。
   string message = 4;
+  // 补充性错误详情，仅在错误场景下填充。
   optional string error_message = 5;
+  // 请求处理耗时（微秒），仅在调试模式下填充。
   optional int64 overhead = 6;
-  google.protobuf.Any data = 7;
-  GrpcError error = 8;
 }
 ```
+
+### 字段说明
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `context` | `string` | 请求追踪 ID，由 `Trace` 拦截器生成，`ResponseBuilder` 注入 |
+| `output` | `string` | 输出标识，如 `"Success"`、`"PARAMETER_ERROR"` |
+| `code` | `uint64` | 业务状态码，`200` 表示成功 |
+| `message` | `string` | 人类可读的描述信息 |
+| `error_message` | `optional string` | 补充性错误详情，仅错误场景填充 |
+| `overhead` | `optional int64` | 请求处理耗时（微秒），仅调试模式填充 |
+
+> `BaseResponse` 是纯元信息结构，**不包含 `data` 字段**。业务数据通过自定义响应 proto 嵌入 `BaseResponse`，由 [`SuccessWith[T]`](/docs/bamboo-base-go/grpc/result) 泛型注入。
+
+## Buf 管理
+
+Proto 生成已从 `make proto` 迁移到 [Buf](https://buf.build/)。
+
+### buf.yaml
+
+```yaml title="buf.yaml"
+version: v2
+modules:
+  - path: proto
+deps:
+  - buf.build/protocolbuffers/wellknowntypes
+```
+
+### buf.gen.yaml
+
+```yaml title="buf.gen.yaml"
+version: v2
+plugins:
+  - protoc_builtin: go
+    out: grpc/generate
+    opt:
+      - paths=source_relative
+```
+
+### 生成命令
+
+```bash
+buf generate
+```
+
+生成结果输出到 `grpc/generate/` 目录。
 
 ## 业务端引用方式
 
-### A. 在 proto 中直接 import（推荐在脚手架目录结构下）
-
-```proto
-import "proto/base.proto";
-import "proto/error.proto";
-```
-
-### B. 在 Go 代码中直接复用生成类型
+业务端**不需要自己创建 proto 文件来引用 `BaseResponse`**，直接在 Go 代码中 import 即可：
 
 ```go
 import xGrpcGenerate "github.com/bamboo-services/bamboo-base-go/grpc/generate"
-
-func buildResp() *xGrpcGenerate.BaseResponse {
-    return &xGrpcGenerate.BaseResponse{
-        Output:  "Success",
-        Code:    200,
-        Message: "ok",
-    }
-}
 ```
 
-## 生成命令
+如需携带业务数据，在业务 proto 中嵌入 `BaseResponse` 字段：
 
-```bash
-# 默认 proto
-make proto
+```proto title="proto/your_service.proto"
+syntax = "proto3";
 
-# 指定 proto
-make proto PROTO_FILE=./proto/error.proto
+package yourService;
+
+import "proto/base.proto";
+
+option go_package = "./generate;pb";
+
+message YourResponse {
+  xBase.BaseResponse base_response = 1;
+  // 你的业务字段...
+  string name = 2;
+}
 ```
 
 ## 下一步
 
 <Cards>
-  <Card title="gRPC 运行时" href="/docs/bamboo-base-go/grpc/runner" />
+  <Card title="gRPC 结果处理" href="/docs/bamboo-base-go/grpc/result" />
   <Card title="内置拦截器" href="/docs/bamboo-base-go/grpc/interceptors" />
 </Cards>

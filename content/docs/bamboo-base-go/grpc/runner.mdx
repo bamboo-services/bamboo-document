@@ -71,6 +71,7 @@ import (
     xMain "github.com/bamboo-services/bamboo-base-go/main"
     xReg "github.com/bamboo-services/bamboo-base-go/register"
 
+    xGrpcInterface "github.com/bamboo-services/bamboo-base-go/grpc/interceptor"
     xGrpcRunner "github.com/bamboo-services/bamboo-base-go/grpc/runner"
     "google.golang.org/grpc"
 )
@@ -84,8 +85,14 @@ func main() {
         xGrpcRunner.WithGracefulStopTimeout(30*time.Second),
         xGrpcRunner.WithRegisterService(func(ctx context.Context, server grpc.ServiceRegistrar) {
             // 在这里注册你的服务：
-            // xGrpcGenerate.RegisterYourServiceServer(server, yourHandler)
+            // pb.RegisterYourServiceServer(server, yourHandler)
         }),
+        // [!code highlight:5]
+        xGrpcRunner.WithUnaryInterceptors(
+            xGrpcInterface.Recover(),
+            xGrpcInterface.InitContext(reg.Init.Ctx),
+            xGrpcInterface.ResponseBuilder(),
+        ),
     )
 
     xMain.Runner(reg, log, registerRoute, grpcTask)
@@ -107,14 +114,26 @@ func main() {
 xGrpcRunner.WithUnaryInterceptors(
     xGrpcInterface.Recover(),
     xGrpcInterface.InitContext(reg.Init.Ctx),
+    // [!code highlight]
+    xGrpcInterface.ResponseBuilder(),
 )
 ```
 
-> 说明：最近版本中 `Trace()` 与 `Recover()` 已调整为**无参函数**，`InitContext` 仍需传入主上下文。
+完整链路顺序：
+
+1. `Trace()`（Runner 默认）
+2. `Recover()`（你追加）
+3. `InitContext(...)`（你追加）
+4. `ResponseBuilder()`（你追加）
+5. 业务 Handler
+
+> 说明：`Trace()` 与 `Recover()` 为**无参函数**，`InitContext` 需传入主上下文，`ResponseBuilder` 为无参函数。
 
 ## 错误处理
 
-`xGrpcRunner` 可配合 `xGrpcError` 与 `xGrpcResult` 使用，将业务错误映射为标准 gRPC status，并附带结构化错误详情。
+`xGrpcRunner` 配合 `ResponseBuilder` 拦截器与 `xError` 使用。业务 handler 直接返回 `*xError.Error`，`ResponseBuilder` 自动将其映射为标准 gRPC status 返回给客户端。
+
+详见 [内置拦截器](/docs/bamboo-base-go/grpc/interceptors) 中的 ResponseBuilder 章节。
 
 ## 下一步
 
@@ -122,6 +141,6 @@ xGrpcRunner.WithUnaryInterceptors(
   <Card title="gRPC 模块概览" href="/docs/bamboo-base-go/grpc" />
   <Card title="内置拦截器" href="/docs/bamboo-base-go/grpc/interceptors" />
   <Card title="内置 Proto" href="/docs/bamboo-base-go/grpc/proto" />
-  <Card title="服务运行时（HTTP）" href="/docs/bamboo-base-go/core/init/runner" />
+  <Card title="gRPC 结果处理" href="/docs/bamboo-base-go/grpc/result" />
   <Card title="快速开始" href="/docs/bamboo-base-go/quick-start" />
 </Cards>
