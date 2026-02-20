@@ -5,6 +5,8 @@
     "index",
     "runner",
     "interceptors",
-    "proto"
+    "proto",
+    "error",
+    "result"
   ]
 }

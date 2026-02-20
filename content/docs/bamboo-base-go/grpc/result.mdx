@@ -1,0 +1,150 @@
+---
+title: gRPC 结果处理
+description: xGrpcResult 包提供统一的 gRPC 响应构建函数
+icon: ArrowLeftRight
+---
+
+# xGrpcResult 包
+
+`xGrpcResult` 包提供统一的 gRPC 响应构建函数，基于内置 `BaseResponse` proto 消息封装。
+
+```go
+import xGrpcResult "github.com/bamboo-services/bamboo-base-go/grpc/result"
+```
+
+## Success
+
+返回无数据的成功响应。
+
+```go
+func Success(ctx context.Context, message string) *xGrpcGenerate.BaseResponse
+```
+
+**示例：**
+
+```go
+func (s *UserServer) DeleteUser(ctx context.Context, req *pb.DeleteUserRequest) (*xGrpcGenerate.BaseResponse, error) {
+    if err := s.repo.Delete(ctx, req.Id); err != nil {
+        return nil, xGrpcError.Wrap(xError.InternalServerError, "删除失败", err).ToStatus().Err()
+    }
+    // [!code highlight]
+    return xGrpcResult.Success(ctx, "删除成功"), nil
+}
+```
+
+## SuccessHasData
+
+返回带数据的成功响应，自动将 `data` 序列化为 `google.protobuf.Any`。
+
+```go
+func SuccessHasData(ctx context.Context, message string, data any) *xGrpcGenerate.BaseResponse
+```
+
+### toProtoAny 序列化路径
+
+内部 `toProtoAny` 按以下顺序尝试序列化：
+
+| 优先级 | 条件 | 处理方式 |
+|--------|------|---------|
+| 1 | 实现 `proto.Message` | 直接 `anypb.New(data)` |
+| 2 | 实现 `json.Marshaler` | 调用 `MarshalJSON()` → 包装为 `StringValue` |
+| 3 | 默认 | `json.Marshal(data)` → 包装为 `StringValue` |
+
+**示例：**
+
+```go
+func (s *UserServer) GetUser(ctx context.Context, req *pb.GetUserRequest) (*xGrpcGenerate.BaseResponse, error) {
+    user, err := s.repo.FindByID(ctx, req.Id)
+    if err != nil {
+        return nil, xGrpcError.Wrap(xError.NotFound, "用户不存在", err).ToStatus().Err()
+    }
+    // [!code highlight]
+    return xGrpcResult.SuccessHasData(ctx, "获取成功", user), nil
+}
+```
+
+## Error
+
+构建标准错误响应（不终止，由调用方决定是否返回）。
+
+```go
+func Error(ctx context.Context, errorCode *xError.ErrorCode, errorMessage xError.ErrMessage, data any) *xGrpcGenerate.BaseResponse
+```
+
+**示例：**
+
+```go
+// [!code highlight:4]
+return xGrpcResult.Error(
+    ctx, xError.BadRequest, "参数不合法", nil,
+), nil
+```
+
+## ErrorByGrpcError
+
+从 `*xGrpcError.Error` 直接构建响应，保留完整错误结构。
+
+```go
+func ErrorByGrpcError(ctx context.Context, grpcErr *xGrpcError.Error) *xGrpcGenerate.BaseResponse
+```
+
+**示例：**
+
+```go
+grpcErr := xGrpcError.New(xError.NotFound, "订单不存在")
+// [!code highlight]
+return xGrpcResult.ErrorByGrpcError(ctx, grpcErr), nil
+```
+
+## AbortError
+
+构建错误响应并同时返回 gRPC error，适用于拦截器中直接中止请求。
+
+```go
+func AbortError(ctx context.Context, errorCode *xError.ErrorCode, errorMessage xError.ErrMessage, data any) (*xGrpcGenerate.BaseResponse, error)
+```
+
+**示例（拦截器中）：**
+
+```go
+func AuthInterceptor(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+    md, _ := metadata.FromIncomingContext(ctx)
+    token := md.Get("authorization")
+    if len(token) == 0 {
+        // [!code highlight]
+        return xGrpcResult.AbortError(ctx, xError.Unauthorized, "缺少认证 Token", nil)
+    }
+    return handler(ctx, req)
+}
+```
+
+## 完整 Handler 示例
+
+```go
+func (s *OrderServer) CreateOrder(ctx context.Context, req *pb.CreateOrderRequest) (*xGrpcGenerate.BaseResponse, error) {
+    // 参数校验
+    if req.UserId == 0 {
+        // [!code highlight]
+        return xGrpcResult.AbortError(ctx, xError.BadRequest, "用户 ID 不能为空", nil)
+    }
+
+    // 调用 service（复用 HTTP 层错误）
+    order, xErr := s.service.CreateOrder(ctx, req.UserId, req.Amount)
+    if xErr != nil {
+        // [!code highlight]
+        return nil, xGrpcError.From(xErr).ToStatus().Err()
+    }
+
+    // 成功响应
+    // [!code highlight]
+    return xGrpcResult.SuccessHasData(ctx, "订单创建成功", order), nil
+}
+```
+
+## 下一步
+
+<Cards>
+  <Card title="gRPC 错误处理" href="./error" />
+  <Card title="内置 Proto" href="./proto" />
+  <Card title="内置拦截器" href="./interceptors" />
+</Cards>
