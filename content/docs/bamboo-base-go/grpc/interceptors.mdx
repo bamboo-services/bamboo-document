@@ -1,35 +1,41 @@
 ---
 title: 内置拦截器
-description: Trace / Recover / InitContext / ResponseBuilder 四个内置 gRPC 一元拦截器
+description: 一元/流式拦截器、服务级中间件分发机制
 icon: ShieldCheck
 ---
 
 # 内置拦截器
 
-`bamboo-base-go` 内置 4 个常用 gRPC 一元拦截器，分别负责链路追踪、panic 保护、上下文注入和统一响应构建。
+`bamboo-base-go` 将拦截器按类型拆分到独立包，并提供服务级中间件分发机制。
 
 ```go
-import xGrpcInterface "github.com/bamboo-services/bamboo-base-go/grpc/interceptor"
+// 一元拦截器
+import xGrpcIUnary "github.com/bamboo-services/bamboo-base-go/grpc/interceptor/unary"
+
+// 流式拦截器
+import xGrpcIStream "github.com/bamboo-services/bamboo-base-go/grpc/interceptor/stream"
 ```
 
-## 1) Trace（默认启用）
+## 一元拦截器（Unary）
 
-```go
+### 1) Trace（默认启用）
+
+```go title="grpc/interceptor/unary/trace.go"
 func Trace() grpc.UnaryServerInterceptor
 ```
 
 作用：
 
-- 从 incoming metadata 读取 `x-request-uuid`；若不存在则自动生成 UUID。
-- 将请求 ID 写入 `context`（`xCtx.RequestKey`）。
-- 记录请求开始时间（`xCtx.UserStartTimeKey`）。
-- 将 `x-request-uuid` 写入 gRPC header 和 trailer，便于全链路追踪。
+- 从 incoming metadata 读取 `x_request_uuid`；若不存在则自动生成 UUID。
+- 将请求 ID 写入 `context`（`xConsts.RequestKey`）。
+- 记录请求开始时间（`xConsts.UserStartTimeKey`）。
+- 将 `x_request_uuid` 写入 gRPC **Trailer**，便于全链路追踪。
 
 > `xGrpcRunner.New(...)` 默认会把 `Trace()` 放到拦截器链首位。
 
-## 2) Recover（可选挂载）
+### 2) Recover（可选挂载）
 
-```go
+```go title="grpc/interceptor/unary/recover.go"
 func Recover() grpc.UnaryServerInterceptor
 ```
 
@@ -39,20 +45,20 @@ func Recover() grpc.UnaryServerInterceptor
 - 将 panic 转换为统一 gRPC 错误响应（内部使用 `ServerInternalError`）。
 - 记录方法名与 panic 内容，便于排障。
 
-## 3) InitContext（可选挂载）
+### 3) InitContext（可选挂载）
 
-```go
+```go title="grpc/interceptor/unary/init_context.go"
 func InitContext(mainCtx context.Context) grpc.UnaryServerInterceptor
 ```
 
 作用：
 
-- 从主上下文提取 `xCtx.RegNodeKey`（节点初始化结果集合）。
+- 从主上下文提取 `xConsts.RegNodeKey`（节点初始化结果集合）。
 - 注入到每个 gRPC 请求上下文，便于业务逻辑复用已注册组件（如数据库、Redis 等）。
 
-## 4) ResponseBuilder（可选挂载）
+### 4) ResponseBuilder（可选挂载）
 
-```go
+```go title="grpc/interceptor/unary/response_builder.go"
 func ResponseBuilder() grpc.UnaryServerInterceptor
 ```
 
@@ -61,7 +67,7 @@ func ResponseBuilder() grpc.UnaryServerInterceptor
 - **统一处理 handler 返回值**，自动完成错误转换与响应元数据注入。
 - 应放在拦截器链**末端**（最接近 handler），以捕获所有上游行为。
 
-### 三种处理路径
+#### 三种处理路径
 
 | 场景 | 条件 | 行为 |
 |------|------|------|
@@ -69,33 +75,7 @@ func ResponseBuilder() grpc.UnaryServerInterceptor
 | **成功注入** | handler 返回响应对象 | 提取 `BaseResponse`，注入 `context`（追踪 ID）和 `overhead`（耗时） |
 | **防御性处理** | 既无响应也无错误 | 返回 `DeveloperError`，提示检查代码逻辑 |
 
-### 错误转换流程
-
-```
-handler 返回 error
-    ↓
-errors.As → 提取 *xError.Error
-    ↓ (提取失败则包装为 ServerInternalError)
-xGrpc.ToGrpcStatusCode → 映射为 gRPC status code
-    ↓
-status.Error(code, message) → 返回给客户端
-```
-
-业务 handler 只需返回标准 `*xError.Error` 即可，无需手动构建 gRPC status：
-
-```go
-func (s *UserServer) GetUser(ctx context.Context, req *pb.GetUserRequest) (*xGrpcGenerate.BaseResponse, error) {
-    user, xErr := s.service.FindByID(ctx, req.Id)
-    if xErr != nil {
-        // 直接返回 *xError.Error，ResponseBuilder 自动转换
-        // [!code highlight]
-        return nil, xErr
-    }
-    return xGrpcResult.Success(ctx, "获取成功"), nil
-}
-```
-
-### HTTP → gRPC 状态码映射
+#### HTTP → gRPC 状态码映射
 
 `ResponseBuilder` 内部通过 `xGrpc.ToGrpcStatusCode` 将业务错误码映射为 gRPC 状态码：
 
@@ -120,33 +100,183 @@ func (s *UserServer) GetUser(ctx context.Context, req *pb.GetUserRequest) (*xGrp
 | 504 | `DeadlineExceeded` |
 | 其他 | `Unknown` |
 
-> 映射规则：`错误码 / 100` 取整为 HTTP 状态码，再映射到 gRPC status code。
+### 5) Middleware（服务级中间件分发）
 
-## 推荐挂载方式
+```go title="grpc/interceptor/unary/middleware.go"
+func Middleware() grpc.UnaryServerInterceptor
+```
+
+作用：
+
+- 根据 `FullMethod` 解析出服务名，在全局注册表中查找对应的中间件链并依次执行。
+- 若服务未注册中间件，直接透传到下一个 handler。
+- 中间件链执行遵循**洋葱模型**。
+
+---
+
+## 流式拦截器（Stream）
+
+流式拦截器与一元拦截器功能对应，用于处理 gRPC 流式请求。
+
+### 1) Trace
+
+```go title="grpc/interceptor/stream/trace.go"
+func Trace() grpc.StreamServerInterceptor
+```
+
+### 2) Recover
+
+```go title="grpc/interceptor/stream/recover.go"
+func Recover() grpc.StreamServerInterceptor
+```
+
+### 3) InitContext
+
+```go title="grpc/interceptor/stream/init_context.go"
+func InitContext(mainCtx context.Context) grpc.StreamServerInterceptor
+```
+
+### 4) Middleware
+
+```go title="grpc/interceptor/stream/middleware.go"
+func Middleware() grpc.StreamServerInterceptor
+```
+
+> 流式拦截器**没有** `ResponseBuilder`，因为流式响应由业务代码直接控制。
+
+---
+
+## 服务级中间件分发
+
+### 概述
+
+`xGrpcMiddle` 包提供**按服务注册中间件**的能力，支持将中间件精确绑定到特定 gRPC 服务。
 
 ```go
+import xGrpcMiddle "github.com/bamboo-services/bamboo-base-go/grpc/middleware"
+```
+
+### 注册函数
+
+```go
+// 注册一元中间件
+func UseUnary(desc grpc.ServiceDesc, middlewares ...UnaryMiddlewareFunc)
+
+// 注册流式中间件
+func UseStream(desc grpc.ServiceDesc, middlewares ...StreamMiddlewareFunc)
+```
+
+### 查找函数
+
+```go
+// 查找一元中间件链
+func LookupUnary(serviceName string) []UnaryMiddlewareFunc
+
+// 查找流式中间件链
+func LookupStream(serviceName string) []StreamMiddlewareFunc
+
+// 从 FullMethod 提取服务名
+func ExtractServiceName(fullMethod string) string
+```
+
+### 洋葱模型执行顺序
+
+注册顺序 `[A, B, C]` 的执行顺序为：
+
+```
+A-enter → B-enter → C-enter → handler → C-exit → B-exit → A-exit
+```
+
+### 使用示例
+
+**1. 定义中间件**：
+
+```go title="middleware/app_verify.go"
+func UnaryAppVerify(mainCtx context.Context) grpc.UnaryServerInterceptor {
+    log := xLog.WithName(xLog.NamedMIDE, "UnaryAppVerify")
+    appLogic := logic.NewAppLogic(mainCtx)
+
+    return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+        // 从 metadata 提取认证信息
+        appIDStr, xErr := xUtil.ExtractMetadata(ctx, xGrpcConst.MetadataAppAccessID)
+        secretKey, xErr := xUtil.ExtractMetadata(ctx, xGrpcConst.MetadataAppSecretKey)
+        if xErr != nil {
+            return nil, xErr
+        }
+
+        // 验证逻辑...
+
+        return handler(ctx, req)
+    }
+}
+```
+
+**2. 注册到服务**：
+
+```go title="proto/normal_upload.go"
+func NewNormalUploadProto(ctx context.Context, server grpc.ServiceRegistrar) *NormalUploadProto {
+    handler := &NormalUploadProto{
+        log: xLog.WithName(xLog.NamedGRPC, "NormalUploadProto"),
+        // ...
+    }
+
+    // 注册 gRPC 服务
+    bGrpcApi.RegisterNormalUploadServiceServer(server, handler)
+
+    // [!code highlight]
+    // 绑定服务级中间件（只对此服务生效）
+    xGrpcMiddle.UseUnary(bGrpcApi.NormalUploadService_ServiceDesc, middleware.UnaryAppVerify(ctx))
+
+    return handler
+}
+```
+
+**3. 启用分发拦截器**：
+
+```go title="main.go"
 grpcTask := xGrpcRunner.New(
     xGrpcRunner.WithRegisterService(registerGrpcService),
     xGrpcRunner.WithUnaryInterceptors(
-        xGrpcInterface.Recover(),
-        xGrpcInterface.InitContext(reg.Init.Ctx),
+        xGrpcIUnary.InitContext(reg.Init.Ctx),
+        xGrpcIUnary.Recover(),
         // [!code highlight]
-        xGrpcInterface.ResponseBuilder(),
+        xGrpcIUnary.Middleware(),      // 服务级中间件分发
+        xGrpcIUnary.ResponseBuilder(), // 放在最后
     ),
 )
 ```
 
-链路顺序（实际）：
+---
+
+## 推荐挂载顺序
+
+```go
+xGrpcRunner.WithUnaryInterceptors(
+    xGrpcIUnary.InitContext(reg.Init.Ctx),  // 1. 注入上下文
+    xGrpcIUnary.Recover(),                   // 2. Panic 捕获
+    xGrpcIUnary.Middleware(),                // 3. 服务级中间件分发
+    xGrpcIUnary.ResponseBuilder(),           // 4. 响应构建（最后）
+)
+```
+
+> `Trace()` 由 Runner 默认添加，位于链首。
+
+完整链路顺序：
 
 1. `Trace()`（Runner 默认）
-2. `Recover()`（你追加）
-3. `InitContext(...)`（你追加）
-4. `ResponseBuilder()`（你追加）
-5. 业务 Handler
+2. `InitContext(...)`（你追加）
+3. `Recover()`（你追加）
+4. `Middleware()`（你追加）
+5. 服务级中间件链（若有）
+6. `ResponseBuilder()`（你追加）
+7. 业务 Handler
+
+---
 
 ## 下一步
 
 <Cards>
+  <Card title="gRPC 常量" href="/docs/bamboo-base-go/grpc/constants" />
   <Card title="gRPC 运行时" href="/docs/bamboo-base-go/grpc/runner" />
   <Card title="gRPC 结果处理" href="/docs/bamboo-base-go/grpc/result" />
   <Card title="内置 Proto" href="/docs/bamboo-base-go/grpc/proto" />

@@ -68,15 +68,16 @@ syntax = "proto3";
 
 package yourService;
 
-import "proto/base.proto";
+import "link/base.proto";
 
-option go_package = "./generate;pb";
+option go_package = "./internal/proto/api;bGrpcApi";
 
 message UploadResponse {
   // [!code highlight]
   xBase.BaseResponse base_response = 1;
-  string file_url = 2;
-  int64 file_size = 3;
+  string file_id = 2;
+  string file_url = 3;
+  int64 file_size = 4;
 }
 ```
 
@@ -89,8 +90,9 @@ func (s *FileServer) Upload(ctx context.Context, req *pb.UploadRequest) (*pb.Upl
         return nil, xErr
     }
 
-    // [!code highlight:4]
+    // [!code highlight:5]
     resp := xGrpcResult.SuccessWith[*pb.UploadResponse](ctx, "上传成功")
+    resp.FileId = result.ID
     resp.FileUrl = result.URL
     resp.FileSize = result.Size
     return resp, nil
@@ -129,5 +131,6 @@ func (s *OrderServer) CreateOrder(ctx context.Context, req *pb.CreateOrderReques
 <Cards>
   <Card title="内置 Proto" href="/docs/bamboo-base-go/grpc/proto" />
   <Card title="内置拦截器" href="/docs/bamboo-base-go/grpc/interceptors" />
+  <Card title="gRPC 常量" href="/docs/bamboo-base-go/grpc/constants" />
   <Card title="gRPC 运行时" href="/docs/bamboo-base-go/grpc/runner" />
 </Cards>

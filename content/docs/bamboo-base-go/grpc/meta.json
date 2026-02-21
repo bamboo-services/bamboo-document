@@ -5,6 +5,7 @@
     "index",
     "runner",
     "interceptors",
+    "constants",
     "proto",
     "result"
   ]

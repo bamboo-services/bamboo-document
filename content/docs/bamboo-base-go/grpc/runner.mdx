@@ -71,7 +71,7 @@ import (
     xMain "github.com/bamboo-services/bamboo-base-go/main"
     xReg "github.com/bamboo-services/bamboo-base-go/register"
 
-    xGrpcInterface "github.com/bamboo-services/bamboo-base-go/grpc/interceptor"
+    xGrpcIUnary "github.com/bamboo-services/bamboo-base-go/grpc/interceptor/unary"
     xGrpcRunner "github.com/bamboo-services/bamboo-base-go/grpc/runner"
     "google.golang.org/grpc"
 )
@@ -87,11 +87,10 @@ func main() {
             // 在这里注册你的服务：
             // pb.RegisterYourServiceServer(server, yourHandler)
         }),
-        // [!code highlight:5]
+        // [!code highlight:4]
         xGrpcRunner.WithUnaryInterceptors(
-            xGrpcInterface.Recover(),
-            xGrpcInterface.InitContext(reg.Init.Ctx),
-            xGrpcInterface.ResponseBuilder(),
+            xGrpcIUnary.InitContext(reg.Init.Ctx),
+            xGrpcIUnary.ResponseBuilder(),
         ),
     )
 
@@ -102,7 +101,7 @@ func main() {
 ## 内置行为
 
 - 默认使用 `GRPC_PORT`（默认 `1119`）作为监听端口。
-- 默认启用追踪拦截器 `Trace`（复用或生成 `x-request-uuid`）。
+- 默认启用追踪拦截器 `Trace`（复用或生成 `x_request_uuid`）。
 - 由 `xMain.Runner` 统一管理退出信号：`SIGINT`/`SIGTERM`。
 - `GRPC_REFLECTION=true` 时启用反射。
 
@@ -112,22 +111,39 @@ func main() {
 
 ```go
 xGrpcRunner.WithUnaryInterceptors(
-    xGrpcInterface.Recover(),
-    xGrpcInterface.InitContext(reg.Init.Ctx),
+    xGrpcIUnary.InitContext(reg.Init.Ctx),
+    xGrpcIUnary.Recover(),
     // [!code highlight]
-    xGrpcInterface.ResponseBuilder(),
+    xGrpcIUnary.Middleware(),      // 服务级中间件分发
+    xGrpcIUnary.ResponseBuilder(), // 放在最后
 )
 ```
 
 完整链路顺序：
 
 1. `Trace()`（Runner 默认）
-2. `Recover()`（你追加）
-3. `InitContext(...)`（你追加）
-4. `ResponseBuilder()`（你追加）
-5. 业务 Handler
+2. `InitContext(...)`（你追加）
+3. `Recover()`（你追加）
+4. `Middleware()`（你追加）
+5. 服务级中间件链（若有）
+6. `ResponseBuilder()`（你追加）
+7. 业务 Handler
 
-> 说明：`Trace()` 与 `Recover()` 为**无参函数**，`InitContext` 需传入主上下文，`ResponseBuilder` 为无参函数。
+## 流式拦截器
+
+如需使用流式 RPC，可通过 `WithStreamInterceptors` 追加流式拦截器：
+
+```go
+import xGrpcIStream "github.com/bamboo-services/bamboo-base-go/grpc/interceptor/stream"
+
+xGrpcRunner.WithStreamInterceptors(
+    xGrpcIStream.InitContext(reg.Init.Ctx),
+    xGrpcIStream.Recover(),
+    xGrpcIStream.Middleware(),
+)
+```
+
+> 流式拦截器**没有** `ResponseBuilder`，因为流式响应由业务代码直接控制。
 
 ## 错误处理
 
@@ -140,6 +156,7 @@ xGrpcRunner.WithUnaryInterceptors(
 <Cards>
   <Card title="gRPC 模块概览" href="/docs/bamboo-base-go/grpc" />
   <Card title="内置拦截器" href="/docs/bamboo-base-go/grpc/interceptors" />
+  <Card title="gRPC 常量" href="/docs/bamboo-base-go/grpc/constants" />
   <Card title="内置 Proto" href="/docs/bamboo-base-go/grpc/proto" />
   <Card title="gRPC 结果处理" href="/docs/bamboo-base-go/grpc/result" />
   <Card title="快速开始" href="/docs/bamboo-base-go/quick-start" />
