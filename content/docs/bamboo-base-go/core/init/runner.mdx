@@ -11,7 +11,7 @@ import { TypeTable } from '@/components/type-table';
 `xMain.Runner` 用于统一启动 HTTP 服务、托管后台协程并在信号到达时优雅关闭。
 
 ```go
-import xMain "github.com/bamboo-services/bamboo-base-go/main"
+import xMain "github.com/bamboo-services/bamboo-base-go/major/main"
 ```
 
 ## Runner
@@ -68,17 +68,17 @@ package main
 import (
     "context"
 
-    xConsts "github.com/bamboo-services/bamboo-base-go/context"
-    xLog "github.com/bamboo-services/bamboo-base-go/log"
-    xMain "github.com/bamboo-services/bamboo-base-go/main"
-    xReg "github.com/bamboo-services/bamboo-base-go/register"
-    xRegNode "github.com/bamboo-services/bamboo-base-go/register/node"
+    xCtx "github.com/bamboo-services/bamboo-base-go/defined/context"
+    xLog "github.com/bamboo-services/bamboo-base-go/common/log"
+    xMain "github.com/bamboo-services/bamboo-base-go/major/main"
+    xReg "github.com/bamboo-services/bamboo-base-go/major/register"
+    xRegNode "github.com/bamboo-services/bamboo-base-go/major/register/node"
 )
 
 func main() {
     reg := xReg.Register(context.Background(), []xRegNode.RegNodeList{
-        {Key: xConsts.DatabaseKey, Node: initDatabase},
-        {Key: xConsts.RedisClientKey, Node: initRedis},
+        {Key: xCtx.DatabaseKey, Node: initDatabase},
+        {Key: xCtx.RedisClientKey, Node: initRedis},
     })
 
     log := xLog.WithName(xLog.NamedMAIN)

@@ -49,8 +49,8 @@ func (e *BaseEntity) BeforeCreate(tx *gorm.DB) error {
 package entity
 
 import (
-    xModels "github.com/bamboo-services/bamboo-base-go/models"
-    xSnowflake "github.com/bamboo-services/bamboo-base-go/snowflake"
+    xModels "github.com/bamboo-services/bamboo-base-go/major/models"
+    xSnowflake "github.com/bamboo-services/bamboo-base-go/common/snowflake"
 )
 
 type User struct {
@@ -208,8 +208,8 @@ func (o *OrderItem) GetGene() xSnowflake.Gene {
 package entity
 
 import (
-    xModels "github.com/bamboo-services/bamboo-base-go/models"
-    xSnowflake "github.com/bamboo-services/bamboo-base-go/snowflake"
+    xModels "github.com/bamboo-services/bamboo-base-go/major/models"
+    xSnowflake "github.com/bamboo-services/bamboo-base-go/common/snowflake"
 )
 
 // [!code highlight:2]

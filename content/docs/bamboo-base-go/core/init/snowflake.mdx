@@ -70,7 +70,7 @@ func Register(ctx context.Context, nodeList []xRegNode.RegNodeList) *Reg {
 
     // [!code highlight:2]
     // 内置节点：雪花算法
-    reg.Init.Use(xConsts.SnowflakeNodeKey, xInit.SnowflakeInit)
+    reg.Init.Use(xCtx.SnowflakeNodeKey, xInit.SnowflakeInit)
 
     // 用户自定义节点
     for _, node := range nodeList {
@@ -99,8 +99,8 @@ func Register(ctx context.Context, nodeList []xRegNode.RegNodeList) *Reg {
 
 ```go
 import (
-    xSnowflake "github.com/bamboo-services/bamboo-base-go/snowflake"
-    xCtxUtil "github.com/bamboo-services/bamboo-base-go/utility/ctxutil"
+    xSnowflake "github.com/bamboo-services/bamboo-base-go/common/snowflake"
+    xCtxUtil "github.com/bamboo-services/bamboo-base-go/common/utility/context"
 )
 
 func CreateUser(c *gin.Context) {
@@ -144,7 +144,7 @@ geneID, err := xCtxUtil.GenerateGeneSnowflakeID(ctx, xSnowflake.GeneUser)
 
 ```go title="utility/ctxutil/snowflake.go"
 func GetSnowflakeNode(ctx context.Context) *xSnowflake.Node {
-    value := ctx.Value(xConsts.SnowflakeNodeKey)
+    value := ctx.Value(xCtx.SnowflakeNodeKey)
     if value != nil {
         if node, ok := value.(*xSnowflake.Node); ok {
             return node

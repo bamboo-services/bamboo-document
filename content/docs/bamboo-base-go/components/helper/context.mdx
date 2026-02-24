@@ -32,12 +32,12 @@ func RequestContext() gin.HandlerFunc {
 
         // [!code highlight:3]
         // 3. 存储到 Gin Context
-        c.Set(xConsts.RequestKey.String(), requestID)
-        c.Set(xConsts.UserStartTimeKey.String(), time.Now())
+        c.Set(xCtx.RequestKey.String(), requestID)
+        c.Set(xCtx.UserStartTimeKey.String(), time.Now())
 
         // [!code highlight:3]
         // 4. 注入到标准 context (供 slog 日志使用)
-        ctx := context.WithValue(c.Request.Context(), xConsts.RequestKey, requestID)
+        ctx := context.WithValue(c.Request.Context(), xCtx.RequestKey, requestID)
         c.Request = c.Request.WithContext(ctx)
 
         c.Next()
@@ -93,7 +93,7 @@ func main() {
 func GetUser(ctx *gin.Context) {
     // [!code highlight:2]
     // 从 Gin Context 获取
-    requestID := ctx.GetString(xConsts.RequestKey.String())
+    requestID := ctx.GetString(xCtx.RequestKey.String())
 
     // 用于日志记录
     xLog.WithName(xLog.NamedCONT).SugarInfo(ctx, "处理用户请求",
@@ -111,7 +111,7 @@ func TimingMiddleware() gin.HandlerFunc {
 
         // [!code highlight:4]
         // 获取开始时间并计算耗时
-        if startTime, exists := ctx.Get(xConsts.UserStartTimeKey.String()); exists {
+        if startTime, exists := ctx.Get(xCtx.UserStartTimeKey.String()); exists {
             elapsed := time.Since(startTime.(time.Time))
             xLog.WithName(xLog.NamedMIDE).SugarInfo(ctx, "请求耗时",
                 "elapsed_ms", elapsed.Milliseconds(),

@@ -85,7 +85,7 @@ buf generate
 业务端**不需要自己创建 proto 文件来引用 `BaseResponse`**，直接在 Go 代码中 import 即可：
 
 ```go
-import xGrpcGenerate "github.com/bamboo-services/bamboo-base-go/grpc/generate"
+import xGrpcGenerate "github.com/bamboo-services/bamboo-base-go/plugins/grpc/generate"
 ```
 
 如需携带业务数据，在业务 proto 中嵌入 `BaseResponse` 字段：
@@ -109,6 +109,6 @@ message YourResponse {
 ## 下一步
 
 <Cards>
-  <Card title="gRPC 结果处理" href="/docs/bamboo-base-go/grpc/result" />
+  <Card title="gRPC 结果处理" href="/docs/bamboo-base-go/plugins/grpc/result" />
   <Card title="内置拦截器" href="/docs/bamboo-base-go/grpc/interceptors" />
 </Cards>

@@ -176,14 +176,14 @@ func (h *LogHandler) extractContextUUID(ctx context.Context) string {
     // [!code highlight:3]
     // 1. 从 gin.Context 提取
     if ginCtx, ok := ctx.(*gin.Context); ok {
-        if contextUUID, exists := ginCtx.Get(string(xConsts.RequestKey)); exists {
+        if contextUUID, exists := ginCtx.Get(string(xCtx.RequestKey)); exists {
             return contextUUID.(string)
         }
     }
 
     // [!code highlight:2]
     // 2. 从标准 context.Context 提取（包括 GORM 场景）
-    if contextUUID := ctx.Value(xConsts.RequestKey); contextUUID != nil {
+    if contextUUID := ctx.Value(xCtx.RequestKey); contextUUID != nil {
         return contextUUID.(string)
     }
 

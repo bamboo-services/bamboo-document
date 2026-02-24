@@ -11,7 +11,7 @@ icon: Package
 ## 特性
 
 - 🚀 **快速启动** - 基于 Gin 框架，一键启动 Web 服务
-- 🏗️ **模块化设计** - 清晰的模块划分，按需使用
+- 🏗️ **多模块分层** - 四层架构（defined / common / major / plugins），按需引入
 - 📦 **开箱即用** - 内置日志、配置、数据库等常用组件
 - 🆔 **分布式 ID** - 自定义雪花算法，支持业务基因
 - 📝 **统一响应** - 标准化 API 响应格式
@@ -22,22 +22,26 @@ icon: Package
 
 ## 模块概览
 
-| 模块 | 描述 |
-|------|------|
-| [注册系统](/docs/bamboo-base-go/core/init) | Reg 结构体、节点初始化与 Runner 运行时 |
-| [统一响应](/docs/bamboo-base-go/core/result) | BaseResponse 与响应处理中间件 |
-| [错误处理](/docs/bamboo-base-go/core/result/error) | IError 接口与错误构造函数 |
-| [gRPC（可选）](/docs/bamboo-base-go/grpc) | 可选扩展：gRPC 启动、服务注册与优雅关闭 |
-| [雪花算法](/docs/bamboo-base-go/components/snowflake) | 64 位分布式 ID 生成 |
-| [模型基类](/docs/bamboo-base-go/components/models) | GORM 实体基类、软删除与分页模型 |
-| [日志系统](/docs/bamboo-base-go/components/log) | 基于 slog 的彩色日志 |
-| [中间件](/docs/bamboo-base-go/components/middleware) | CORS、响应处理等 |
-| [验证器](/docs/bamboo-base-go/components/validator) | 自定义验证规则与中文翻译 |
+| 模块 | 层级 | 描述 |
+|------|------|------|
+| [注册系统](/docs/bamboo-base-go/core/init) | major | Reg 结构体、节点初始化与 Runner 运行时 |
+| [统一响应](/docs/bamboo-base-go/core/result) | common | BaseResponse 与响应处理中间件 |
+| [错误处理](/docs/bamboo-base-go/core/result/error) | common | IError 接口与错误构造函数 |
+| [gRPC（可选）](/docs/bamboo-base-go/grpc) | plugins | 可选扩展：gRPC 启动、服务注册与优雅关闭 |
+| [雪花算法](/docs/bamboo-base-go/components/snowflake) | common | 64 位分布式 ID 生成 |
+| [模型基类](/docs/bamboo-base-go/components/models) | major | GORM 实体基类、软删除与分页模型 |
+| [日志系统](/docs/bamboo-base-go/components/log) | common | 基于 slog 的彩色日志 |
+| [中间件](/docs/bamboo-base-go/components/middleware) | major | CORS、响应处理等 |
+| [验证器](/docs/bamboo-base-go/components/validator) | common | 自定义验证规则与中文翻译 |
 
 ## 快速开始
 
 ```bash
-go get github.com/bamboo-services/bamboo-base-go
+# 按需安装对应层级模块
+go get github.com/bamboo-services/bamboo-base-go/defined
+go get github.com/bamboo-services/bamboo-base-go/common
+go get github.com/bamboo-services/bamboo-base-go/major
+go get github.com/bamboo-services/bamboo-base-go/plugins/grpc  # 可选
 ```
 
 ```go
@@ -48,9 +52,9 @@ import (
 
     "github.com/gin-gonic/gin"
 
-    xLog "github.com/bamboo-services/bamboo-base-go/log"
-    xMain "github.com/bamboo-services/bamboo-base-go/main"
-    xReg "github.com/bamboo-services/bamboo-base-go/register"
+    xLog "github.com/bamboo-services/bamboo-base-go/common/log"
+    xMain "github.com/bamboo-services/bamboo-base-go/major/main"
+    xReg "github.com/bamboo-services/bamboo-base-go/major/register"
 )
 
 func main() {

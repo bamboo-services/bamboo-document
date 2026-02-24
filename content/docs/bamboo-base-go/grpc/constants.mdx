@@ -11,7 +11,7 @@ import { TypeTable } from '@/components/type-table';
 `bamboo-base-go` 提供类型安全的 gRPC 元数据常量，区分 **Metadata**（请求头）和 **Trailer**（响应尾）两种语义。
 
 ```go
-import xGrpcConst "github.com/bamboo-services/bamboo-base-go/grpc/constant"
+import xGrpcConst "github.com/bamboo-services/bamboo-base-go/plugins/grpc/constant"
 ```
 
 ## Metadata 常量
@@ -68,7 +68,7 @@ func (md Trailer) String() string
 `utility` 包提供从 gRPC 上下文中提取元数据的工具函数：
 
 ```go title="utility/grpc.go"
-import xUtil "github.com/bamboo-services/bamboo-base-go/utility"
+import xUtil "github.com/bamboo-services/bamboo-base-go/common/utility"
 
 func (g *grpc) ExtractMetadata(ctx context.Context, key xGrpcConst.Metadata) (string, *xError.Error)
 ```
@@ -82,8 +82,8 @@ func (g *grpc) ExtractMetadata(ctx context.Context, key xGrpcConst.Metadata) (st
 
 ```go
 import (
-    xGrpcConst "github.com/bamboo-services/bamboo-base-go/grpc/constant"
-    xUtil "github.com/bamboo-services/bamboo-base-go/utility"
+    xGrpcConst "github.com/bamboo-services/bamboo-base-go/plugins/grpc/constant"
+    xUtil "github.com/bamboo-services/bamboo-base-go/common/utility"
 )
 
 func (s *Server) Handle(ctx context.Context, req *pb.Request) (*pb.Response, error) {
@@ -106,11 +106,11 @@ func (s *Server) Handle(ctx context.Context, req *pb.Request) (*pb.Response, err
 import (
     "context"
 
-    xError "github.com/bamboo-services/bamboo-base-go/error"
-    xGrpcConst "github.com/bamboo-services/bamboo-base-go/grpc/constant"
-    xLog "github.com/bamboo-services/bamboo-base-go/log"
-    xSnowflake "github.com/bamboo-services/bamboo-base-go/snowflake"
-    xUtil "github.com/bamboo-services/bamboo-base-go/utility"
+    xError "github.com/bamboo-services/bamboo-base-go/common/error"
+    xGrpcConst "github.com/bamboo-services/bamboo-base-go/plugins/grpc/constant"
+    xLog "github.com/bamboo-services/bamboo-base-go/common/log"
+    xSnowflake "github.com/bamboo-services/bamboo-base-go/common/snowflake"
+    xUtil "github.com/bamboo-services/bamboo-base-go/common/utility"
     "google.golang.org/grpc"
 )
 
@@ -147,6 +147,6 @@ func UnaryAppVerify(mainCtx context.Context) grpc.UnaryServerInterceptor {
 
 <Cards>
   <Card title="服务级中间件" href="/docs/bamboo-base-go/grpc/interceptors" />
-  <Card title="gRPC 运行时" href="/docs/bamboo-base-go/grpc/runner" />
-  <Card title="gRPC 结果处理" href="/docs/bamboo-base-go/grpc/result" />
+  <Card title="gRPC 运行时" href="/docs/bamboo-base-go/plugins/grpc/runner" />
+  <Card title="gRPC 结果处理" href="/docs/bamboo-base-go/plugins/grpc/result" />
 </Cards>

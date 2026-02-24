@@ -15,14 +15,14 @@ icon: Plus
 ```go title="internal/constant/context/business.go"
 package bContext
 
-import xConsts "github.com/bamboo-services/bamboo-base-go/context"
+import xCtx "github.com/bamboo-services/bamboo-base-go/defined/context"
 
 const (
     // [!code highlight:4]
-    // 使用 xConsts.ContextKey 类型定义自定义键
-    TencentCloudForSmsKey xConsts.ContextKey = "business_tencent_cloud_sms" // 腾讯云短信
-    UserEntityKey         xConsts.ContextKey = "business_user_entity"       // 用户实体
-    MerchantEntityKey     xConsts.ContextKey = "business_merchant_entity"   // 商户实体
+    // 使用 xCtx.ContextKey 类型定义自定义键
+    TencentCloudForSmsKey xCtx.ContextKey = "business_tencent_cloud_sms" // 腾讯云短信
+    UserEntityKey         xCtx.ContextKey = "business_user_entity"       // 用户实体
+    MerchantEntityKey     xCtx.ContextKey = "business_merchant_entity"   // 商户实体
 )
 ```
 
@@ -45,9 +45,9 @@ package main
 import (
     "context"
 
-    xConsts "github.com/bamboo-services/bamboo-base-go/context"
-    xReg "github.com/bamboo-services/bamboo-base-go/register"
-    xRegNode "github.com/bamboo-services/bamboo-base-go/register/node"
+    xCtx "github.com/bamboo-services/bamboo-base-go/defined/context"
+    xReg "github.com/bamboo-services/bamboo-base-go/major/register"
+    xRegNode "github.com/bamboo-services/bamboo-base-go/major/register/node"
     bContext "your-project/internal/constant/context"
 )
 
@@ -55,8 +55,8 @@ func main() {
     // [!code highlight:8]
     reg := xReg.Register(context.Background(), []xRegNode.RegNodeList{
         // 框架资源
-        {Key: xConsts.DatabaseKey, Node: initDatabase},
-        {Key: xConsts.RedisClientKey, Node: initRedis},
+        {Key: xCtx.DatabaseKey, Node: initDatabase},
+        {Key: xCtx.RedisClientKey, Node: initRedis},
         // 业务资源
         {Key: bContext.TencentCloudForSmsKey, Node: initTencentSms},
     })
@@ -83,9 +83,9 @@ package middleware
 import (
     "context"
 
-    xError "github.com/bamboo-services/bamboo-base-go/error"
-    xResult "github.com/bamboo-services/bamboo-base-go/result"
-    xCtxUtil "github.com/bamboo-services/bamboo-base-go/utility/ctxutil"
+    xError "github.com/bamboo-services/bamboo-base-go/common/error"
+    xResult "github.com/bamboo-services/bamboo-base-go/major/result"
+    xCtxUtil "github.com/bamboo-services/bamboo-base-go/common/utility/context"
     "github.com/gin-gonic/gin"
     bContext "your-project/internal/constant/context"
     "your-project/internal/logic"
@@ -155,7 +155,7 @@ func MustGetUserEntity(ctx context.Context) *entity.User {
 package handler
 
 import (
-    xResult "github.com/bamboo-services/bamboo-base-go/result"
+    xResult "github.com/bamboo-services/bamboo-base-go/major/result"
     "github.com/gin-gonic/gin"
     bCtxUtil "your-project/pkg/ctx"
 )
@@ -206,19 +206,19 @@ your-project/
 ```go title="internal/constant/context/business.go"
 package bContext
 
-import xConsts "github.com/bamboo-services/bamboo-base-go/context"
+import xCtx "github.com/bamboo-services/bamboo-base-go/defined/context"
 
 const (
     // [!code highlight:5]
     // 用户相关
-    UserEntityKey     xConsts.ContextKey = "business_user_entity"
-    UserTokenKey      xConsts.ContextKey = "business_user_token"
-    UserPermissionKey xConsts.ContextKey = "business_user_permission"
+    UserEntityKey     xCtx.ContextKey = "business_user_entity"
+    UserTokenKey      xCtx.ContextKey = "business_user_token"
+    UserPermissionKey xCtx.ContextKey = "business_user_permission"
 
     // [!code highlight:3]
     // 第三方服务
-    TencentSmsKey     xConsts.ContextKey = "business_tencent_sms"
-    AliyunOssKey      xConsts.ContextKey = "business_aliyun_oss"
+    TencentSmsKey     xCtx.ContextKey = "business_tencent_sms"
+    AliyunOssKey      xCtx.ContextKey = "business_aliyun_oss"
 )
 ```
 
@@ -230,9 +230,9 @@ package main
 import (
     "context"
 
-    xConsts "github.com/bamboo-services/bamboo-base-go/context"
-    xReg "github.com/bamboo-services/bamboo-base-go/register"
-    xRegNode "github.com/bamboo-services/bamboo-base-go/register/node"
+    xCtx "github.com/bamboo-services/bamboo-base-go/defined/context"
+    xReg "github.com/bamboo-services/bamboo-base-go/major/register"
+    xRegNode "github.com/bamboo-services/bamboo-base-go/major/register/node"
     bContext "your-project/internal/constant/context"
 )
 
@@ -240,8 +240,8 @@ func main() {
     reg := xReg.Register(context.Background(), []xRegNode.RegNodeList{
         // [!code highlight:3]
         // 框架资源
-        {Key: xConsts.DatabaseKey, Node: initDatabase},
-        {Key: xConsts.RedisClientKey, Node: initRedis},
+        {Key: xCtx.DatabaseKey, Node: initDatabase},
+        {Key: xCtx.RedisClientKey, Node: initRedis},
 
         // [!code highlight:3]
         // 业务资源

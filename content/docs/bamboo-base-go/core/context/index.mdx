@@ -12,7 +12,7 @@ Bamboo Base 提供了完整的上下文管理机制，基于标准 `context.Cont
 
 | 包 | 别名 | 说明 |
 |-----|------|------|
-| `.../context` | `xConsts` | 上下文键常量定义 |
+| `.../context` | `xCtx` | 上下文键常量定义 |
 | `.../utility/ctxutil` | `xCtxUtil` | 上下文工具函数 |
 | `.../helper` | `xHelper` | 上下文中间件 |
 | `.../register/node` | `xRegNode` | 节点化注册系统 |
@@ -73,7 +73,7 @@ xHelper.RequestContext()
 
 ```go
 import (
-    xCtxUtil "github.com/bamboo-services/bamboo-base-go/utility/ctxutil"
+    xCtxUtil "github.com/bamboo-services/bamboo-base-go/common/utility/context"
 )
 
 func MyHandler(c *gin.Context) {
@@ -108,7 +108,7 @@ func MyHandler(c *gin.Context) {
 `ContextNode` 用于在初始化阶段保存上下文中的资源条目，配合 `ContextNodeList` 形成有序的键值链式列表。
 
 ```go
-import xCtx "github.com/bamboo-services/bamboo-base-go/context"
+import xCtx "github.com/bamboo-services/bamboo-base-go/defined/context"
 ```
 
 ### ContextNode 结构
@@ -143,11 +143,11 @@ func (c *ContextNodeList) Append(key ContextKey, value any)
 
 ```go title="register.go"
 nodeList := xCtx.NewCtxNodeList()
-nodeList.Append(xConsts.DatabaseKey, initDatabase())
-nodeList.Append(xConsts.RedisClientKey, initRedis())
+nodeList.Append(xCtx.DatabaseKey, initDatabase())
+nodeList.Append(xCtx.RedisClientKey, initRedis())
 
 reg := xReg.Register(ctx, []xRegNode.RegNodeList{
-    {Key: xConsts.RegNodeKey, Node: func(ctx context.Context) (any, error) {
+    {Key: xCtx.RegNodeKey, Node: func(ctx context.Context) (any, error) {
         return nodeList, nil
     }},
 })
@@ -163,16 +163,16 @@ reg := xReg.Register(ctx, []xRegNode.RegNodeList{
 ```go title="main.go"
 import (
     "context"
-    xConsts "github.com/bamboo-services/bamboo-base-go/context"
-    xReg "github.com/bamboo-services/bamboo-base-go/register"
-    xRegNode "github.com/bamboo-services/bamboo-base-go/register/node"
+    xCtx "github.com/bamboo-services/bamboo-base-go/defined/context"
+    xReg "github.com/bamboo-services/bamboo-base-go/major/register"
+    xRegNode "github.com/bamboo-services/bamboo-base-go/major/register/node"
 )
 
 func main() {
     // [!code highlight:6]
     reg := xReg.Register(context.Background(), []xRegNode.RegNodeList{
-        {Key: xConsts.DatabaseKey, Node: initDatabase},
-        {Key: xConsts.RedisClientKey, Node: initRedis},
+        {Key: xCtx.DatabaseKey, Node: initDatabase},
+        {Key: xCtx.RedisClientKey, Node: initRedis},
     })
 
     reg.Serve.Run(":8080")

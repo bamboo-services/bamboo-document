@@ -11,7 +11,7 @@ import { TypeTable } from '@/components/type-table';
 `xCtxUtil` 包提供便捷的上下文操作函数，使用标准 `context.Context` 实现**框架解耦**。
 
 ```go
-import xCtxUtil "github.com/bamboo-services/bamboo-base-go/utility/ctxutil"
+import xCtxUtil "github.com/bamboo-services/bamboo-base-go/common/utility/context"
 ```
 
 ## 设计理念
@@ -106,7 +106,7 @@ func GetErrorMessage(ctx context.Context) string
 当需要读取自定义注入的组件时，可使用泛型的 `MustGet` / `Get`：
 
 ```go
-import xConsts "github.com/bamboo-services/bamboo-base-go/context"
+import xCtx "github.com/bamboo-services/bamboo-base-go/defined/context"
 ```
 
 ### MustGet
@@ -115,7 +115,7 @@ import xConsts "github.com/bamboo-services/bamboo-base-go/context"
 
 ```go title="custom.go"
 // [!code highlight]
-func MustGet[T any](ctx context.Context, key xConsts.ContextKey) T
+func MustGet[T any](ctx context.Context, key xCtx.ContextKey) T
 ```
 
 **读取优先级：**
@@ -131,12 +131,12 @@ func MustGet[T any](ctx context.Context, key xConsts.ContextKey) T
 ```go
 // [!code highlight:3]
 // 直接从 Gin 上下文获取
-cache := xCtxUtil.MustGet[*xCache.Cache](c, xConsts.CacheKey)
+cache := xCtxUtil.MustGet[*xCache.Cache](c, xCtx.CacheKey)
 
 // [!code highlight:3]
 // 或者先获取标准 context
 ctx := c.Request.Context()
-cache := xCtxUtil.MustGet[*xCache.Cache](ctx, xConsts.CacheKey)
+cache := xCtxUtil.MustGet[*xCache.Cache](ctx, xCtx.CacheKey)
 ```
 
 ### Get
@@ -145,13 +145,13 @@ cache := xCtxUtil.MustGet[*xCache.Cache](ctx, xConsts.CacheKey)
 
 ```go title="custom.go"
 // [!code highlight]
-func Get[T any](ctx context.Context, key xConsts.ContextKey) (T, *xError.Error)
+func Get[T any](ctx context.Context, key xCtx.ContextKey) (T, *xError.Error)
 ```
 
 **示例：**
 
 ```go
-cache, err := xCtxUtil.Get[*xCache.Cache](ctx, xConsts.CacheKey)
+cache, err := xCtxUtil.Get[*xCache.Cache](ctx, xCtx.CacheKey)
 if err != nil {
     return nil, err
 }
@@ -434,9 +434,9 @@ package logic
 import (
     "context"
 
-    xError "github.com/bamboo-services/bamboo-base-go/error"
-    xSnowflake "github.com/bamboo-services/bamboo-base-go/snowflake"
-    xCtxUtil "github.com/bamboo-services/bamboo-base-go/utility/ctxutil"
+    xError "github.com/bamboo-services/bamboo-base-go/common/error"
+    xSnowflake "github.com/bamboo-services/bamboo-base-go/common/snowflake"
+    xCtxUtil "github.com/bamboo-services/bamboo-base-go/common/utility/context"
     "github.com/gin-gonic/gin"
 )
 

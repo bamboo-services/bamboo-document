@@ -11,8 +11,8 @@ import { TypeTable } from '@/components/type-table';
 `xReg` 包是 Bamboo Base 的核心注册模块，采用**节点化模式**实现灵活的组件初始化和依赖注入。
 
 ```go
-import xReg "github.com/bamboo-services/bamboo-base-go/register"
-import xRegNode "github.com/bamboo-services/bamboo-base-go/register/node"
+import xReg "github.com/bamboo-services/bamboo-base-go/major/register"
+import xRegNode "github.com/bamboo-services/bamboo-base-go/major/register/node"
 ```
 
 ## Reg 结构体
@@ -90,11 +90,11 @@ package main
 import (
     "context"
 
-    xConsts "github.com/bamboo-services/bamboo-base-go/context"
-    xLog "github.com/bamboo-services/bamboo-base-go/log"
-    xMain "github.com/bamboo-services/bamboo-base-go/main"
-    xReg "github.com/bamboo-services/bamboo-base-go/register"
-    xRegNode "github.com/bamboo-services/bamboo-base-go/register/node"
+    xCtx "github.com/bamboo-services/bamboo-base-go/defined/context"
+    xLog "github.com/bamboo-services/bamboo-base-go/common/log"
+    xMain "github.com/bamboo-services/bamboo-base-go/major/main"
+    xReg "github.com/bamboo-services/bamboo-base-go/major/register"
+    xRegNode "github.com/bamboo-services/bamboo-base-go/major/register/node"
     "github.com/gin-gonic/gin"
 )
 
@@ -103,7 +103,7 @@ func main() {
     // 初始化，传入自定义节点
     reg := xReg.Register(context.Background(), []xRegNode.RegNodeList{
         {
-            Key:  xConsts.DatabaseKey,
+            Key:  xCtx.DatabaseKey,
             Node: initDatabase,  // 自定义数据库初始化
         },
     })
@@ -138,7 +138,7 @@ type Node func(ctx context.Context) (any, error)
 // [!code highlight:2]
 // RegNodeList 存储节点信息
 type RegNodeList struct {
-    Key  xConsts.ContextKey  // 上下文键
+    Key  xCtx.ContextKey  // 上下文键
     Node Node                // 初始化函数
 }
 
@@ -155,7 +155,7 @@ type RegNode struct {
 ```go title="register/node/node.go"
 // [!code highlight:2]
 // Use 注册初始化节点
-func (rn *RegNode) Use(ctxKey xConsts.ContextKey, registerFunc Node)
+func (rn *RegNode) Use(ctxKey xCtx.ContextKey, registerFunc Node)
 
 // [!code highlight:2]
 // Exec 按顺序执行所有节点
@@ -206,7 +206,7 @@ func (rn *RegNode) Exec() {
 
 ```go title="register.go"
 // [!code highlight]
-reg.Init.Use(xConsts.SnowflakeNodeKey, xInit.SnowflakeInit)
+reg.Init.Use(xCtx.SnowflakeNodeKey, xInit.SnowflakeInit)
 ```
 
 详见：[雪花算法初始化](/docs/bamboo-base-go/core/init/snowflake)
@@ -263,10 +263,10 @@ package main
 import (
     "context"
 
-    xConsts "github.com/bamboo-services/bamboo-base-go/context"
-    xReg "github.com/bamboo-services/bamboo-base-go/register"
-    xRegNode "github.com/bamboo-services/bamboo-base-go/register/node"
-    xResult "github.com/bamboo-services/bamboo-base-go/result"
+    xCtx "github.com/bamboo-services/bamboo-base-go/defined/context"
+    xReg "github.com/bamboo-services/bamboo-base-go/major/register"
+    xRegNode "github.com/bamboo-services/bamboo-base-go/major/register/node"
+    xResult "github.com/bamboo-services/bamboo-base-go/major/result"
     "github.com/gin-gonic/gin"
 )
 
@@ -274,8 +274,8 @@ func main() {
     // [!code highlight:9]
     // 初始化，注册自定义节点
     reg := xReg.Register(context.Background(), []xRegNode.RegNodeList{
-        {Key: xConsts.DatabaseKey, Node: initDatabase},
-        {Key: xConsts.RedisClientKey, Node: initRedis},
+        {Key: xCtx.DatabaseKey, Node: initDatabase},
+        {Key: xCtx.RedisClientKey, Node: initRedis},
     })
 
     // 注册路由

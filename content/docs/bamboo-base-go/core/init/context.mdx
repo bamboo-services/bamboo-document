@@ -17,16 +17,16 @@ icon: Layers
 ```go title="main.go"
 import (
     "context"
-    xConsts "github.com/bamboo-services/bamboo-base-go/context"
-    xReg "github.com/bamboo-services/bamboo-base-go/register"
-    xRegNode "github.com/bamboo-services/bamboo-base-go/register/node"
+    xCtx "github.com/bamboo-services/bamboo-base-go/defined/context"
+    xReg "github.com/bamboo-services/bamboo-base-go/major/register"
+    xRegNode "github.com/bamboo-services/bamboo-base-go/major/register/node"
 )
 
 func main() {
     // [!code highlight:6]
     reg := xReg.Register(context.Background(), []xRegNode.RegNodeList{
-        {Key: xConsts.DatabaseKey, Node: initDatabase},
-        {Key: xConsts.RedisClientKey, Node: initRedis},
+        {Key: xCtx.DatabaseKey, Node: initDatabase},
+        {Key: xCtx.RedisClientKey, Node: initRedis},
     })
 
     reg.Serve.Run(":8080")
@@ -50,8 +50,8 @@ func RequestContext() gin.HandlerFunc {
 
         // 注入到上下文
         ctx := c.Request.Context()
-        ctx = context.WithValue(ctx, xConsts.RequestKey, requestID)
-        ctx = context.WithValue(ctx, xConsts.UserStartTimeKey, startTime)
+        ctx = context.WithValue(ctx, xCtx.RequestKey, requestID)
+        ctx = context.WithValue(ctx, xCtx.UserStartTimeKey, startTime)
         c.Request = c.Request.WithContext(ctx)
 
         c.Next()
@@ -89,7 +89,7 @@ func injectContext(ctx context.Context) func(c *gin.Context) {
 使用 `xCtxUtil` 包从上下文获取注入的资源：
 
 ```go
-import xCtxUtil "github.com/bamboo-services/bamboo-base-go/utility/ctxutil"
+import xCtxUtil "github.com/bamboo-services/bamboo-base-go/common/utility/context"
 
 func CreateOrder(c *gin.Context) {
     // [!code highlight:2]
@@ -120,7 +120,7 @@ func CreateOrder(c *gin.Context) {
 ```go title="init_database.go"
 import (
     "context"
-    xLog "github.com/bamboo-services/bamboo-base-go/log"
+    xLog "github.com/bamboo-services/bamboo-base-go/common/log"
 )
 
 // [!code highlight:2]
@@ -159,7 +159,7 @@ func GetRequestID(c *gin.Context) string {
 ```
 
 请求 ID 会：
-- 存储在上下文中，通过 `xConsts.RequestKey` 访问
+- 存储在上下文中，通过 `xCtx.RequestKey` 访问
 - 添加到响应头 `X-Request-ID`
 - 用于日志追踪和问题排查
 

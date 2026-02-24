@@ -1,6 +1,6 @@
 ---
 title: 上下文键
-description: xConsts 包定义的上下文键常量
+description: xCtx 包定义的上下文键常量
 icon: Key
 ---
 
@@ -8,10 +8,10 @@ import { TypeTable } from '@/components/type-table';
 
 # 上下文键
 
-`xConsts` 包定义了用于在上下文中存储和获取数据的键常量。
+`xCtx` 包定义了用于在上下文中存储和获取数据的键常量。
 
 ```go
-import xConsts "github.com/bamboo-services/bamboo-base-go/context"
+import xCtx "github.com/bamboo-services/bamboo-base-go/defined/context"
 ```
 
 ## ContextKey 类型
@@ -103,16 +103,16 @@ const (
 ```go
 import (
     "context"
-    xConsts "github.com/bamboo-services/bamboo-base-go/context"
-    xReg "github.com/bamboo-services/bamboo-base-go/register"
-    xRegNode "github.com/bamboo-services/bamboo-base-go/register/node"
+    xCtx "github.com/bamboo-services/bamboo-base-go/defined/context"
+    xReg "github.com/bamboo-services/bamboo-base-go/major/register"
+    xRegNode "github.com/bamboo-services/bamboo-base-go/major/register/node"
 )
 
 // [!code highlight:8]
 // 注册时注入数据库和 Redis
 reg := xReg.Register(context.Background(), []xRegNode.RegNodeList{
-    {Key: xConsts.DatabaseKey, Node: initDatabase},
-    {Key: xConsts.RedisClientKey, Node: initRedis},
+    {Key: xCtx.DatabaseKey, Node: initDatabase},
+    {Key: xCtx.RedisClientKey, Node: initRedis},
 })
 
 // [!code highlight:2]
@@ -128,7 +128,7 @@ func initDatabase(ctx context.Context) (any, error) {
 使用 `xCtxUtil` 工具函数获取注入的资源：
 
 ```go
-import xCtxUtil "github.com/bamboo-services/bamboo-base-go/utility/ctxutil"
+import xCtxUtil "github.com/bamboo-services/bamboo-base-go/common/utility/context"
 
 func MyHandler(c *gin.Context) {
     // [!code highlight:2]
@@ -154,14 +154,14 @@ func MyHandler(c *gin.Context) {
 也可以直接使用 `context.Value` 获取：
 
 ```go
-import xConsts "github.com/bamboo-services/bamboo-base-go/context"
+import xCtx "github.com/bamboo-services/bamboo-base-go/defined/context"
 
 func MyHandler(c *gin.Context) {
     ctx := c.Request.Context()
 
     // [!code highlight:3]
     // 直接获取并类型断言
-    if value := ctx.Value(xConsts.DatabaseKey); value != nil {
+    if value := ctx.Value(xCtx.DatabaseKey); value != nil {
         db := value.(*gorm.DB)
     }
 }

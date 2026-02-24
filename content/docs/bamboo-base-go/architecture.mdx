@@ -20,120 +20,173 @@ import { TypeTable } from '@/components/type-table';
 
 ```
 github.com/bamboo-services/bamboo-base-go/
-├── base_response.go        # 根包：统一响应结构体 (xBase)
 │
-├── context/                # 上下文常量 (xConsts)
-├── env/                    # 环境变量管理 (xEnv)
-├── error/                  # 错误码和错误处理 (xError)
-├── helper/                 # 核心中间件 (xHelper)
-├── hook/                   # 钩子函数 (xHook)
-├── http/                   # HTTP 常量 (xHttp)
-├── log/                    # 日志系统 (xLog)
-├── main/                   # 服务运行时 (xMain)
-├── middleware/             # 业务中间件 (xMiddle)
-├── models/                 # 数据模型基类 (xModels)
-├── register/               # 应用注册和初始化 (xReg)
-├── result/                 # 响应结果处理 (xResult)
-├── route/                  # 路由处理 (xRoute)
-├── snowflake/              # 雪花算法 ID 生成 (xSnowflake)
-├── utility/                # 工具函数 (xUtil)
-│   └── ctxutil/            # 上下文工具 (xCtxUtil)
-└── validator/              # 验证器 (xVaild)
+├── defined/                    # 🏷️ 定义层 — 零依赖的常量与类型
+│   ├── context/                #   上下文键常量 (xCtx)
+│   └── env/                    #   环境变量常量 (xEnv)
+│
+├── common/                     # 🧱 公共层 — 可独立使用的基础设施
+│   ├── base_response.go        #   统一响应结构体 (xBase)
+│   ├── error/                  #   错误码和错误处理 (xError)
+│   ├── log/                    #   日志系统 (xLog)
+│   ├── snowflake/              #   雪花算法 ID 生成 (xSnowflake)
+│   ├── utility/                #   工具函数 (xUtil)
+│   │   └── context/            #   上下文工具 (xCtxUtil)
+│   └── validator/              #   验证器 (xVaild)
+│
+├── major/                      # 🚀 主框架层 — 依赖 Gin 的核心组件
+│   ├── cache/                  #   缓存抽象 (xCache)
+│   ├── helper/                 #   核心中间件 (xHelper)
+│   ├── hook/                   #   钩子函数 (xHook)
+│   ├── http/                   #   HTTP 常量 (xHttp)
+│   ├── main/                   #   服务运行时 (xMain)
+│   ├── middleware/             #   业务中间件 (xMiddle)
+│   ├── models/                 #   数据模型基类 (xModels)
+│   ├── register/               #   应用注册和初始化 (xReg)
+│   ├── result/                 #   响应结果处理 (xResult)
+│   └── route/                  #   路由处理 (xRoute)
+│
+└── plugins/                    # 🔌 插件层 — 可选扩展
+    └── grpc/                   #   gRPC 支持
+        ├── constant/           #     gRPC 常量
+        ├── generate/           #     Proto 生成辅助
+        ├── interceptor/        #     拦截器
+        ├── middleware/         #     gRPC 中间件
+        ├── result/             #     gRPC 响应处理
+        └── runner/             #     gRPC 运行时
 ```
 
 ## 包导入别名
 
+### defined 层（零依赖）
+
 <TypeTable
   type={{
-    'xBase': {
-      description: '根包，统一响应结构体 BaseResponse',
-      type: 'github.com/bamboo-services/bamboo-base-go',
-      required: true,
-    },
-    'xConsts': {
+    'xCtx': {
       description: '上下文键常量定义',
-      type: '.../context',
+      type: '.../defined/context',
       required: true,
     },
     'xEnv': {
       description: '环境变量管理，类型安全的读取函数',
-      type: '.../env',
+      type: '.../defined/env',
+      required: true,
+    },
+  }}
+/>
+
+### common 层（基础设施）
+
+<TypeTable
+  type={{
+    'xBase': {
+      description: '公共层根包，统一响应结构体 BaseResponse',
+      type: '.../common',
       required: true,
     },
     'xError': {
       description: '错误码定义和错误处理',
-      type: '.../error',
-      required: true,
-    },
-    'xHelper': {
-      description: '核心中间件（请求上下文、Panic 恢复、HTTP 日志）',
-      type: '.../helper',
-      required: true,
-    },
-    'xHook': {
-      description: 'Redis 钩子，自动添加键前缀',
-      type: '.../hook',
-      required: true,
-    },
-    'xHttp': {
-      description: 'HTTP 相关常量（请求头等）',
-      type: '.../http',
+      type: '.../common/error',
       required: true,
     },
     'xLog': {
       description: '日志系统，支持彩色控制台和 JSON 文件输出',
-      type: '.../log',
-      required: true,
-    },
-    'xMiddle': {
-      description: '业务中间件（CORS、响应处理等）',
-      type: '.../middleware',
-      required: true,
-    },
-    'xMain': {
-      description: '服务运行时（统一启动、信号监听、优雅关闭）',
-      type: '.../main',
-      required: true,
-    },
-    'xModels': {
-      description: 'GORM 实体基类，自动生成雪花 ID',
-      type: '.../models',
-      required: true,
-    },
-    'xReg': {
-      description: '应用注册和初始化',
-      type: '.../register',
-      required: true,
-    },
-    'xResult': {
-      description: '响应结果处理函数',
-      type: '.../result',
-      required: true,
-    },
-    'xRoute': {
-      description: '路由处理（404、405）',
-      type: '.../route',
+      type: '.../common/log',
       required: true,
     },
     'xSnowflake': {
       description: '雪花算法 ID 生成，支持业务基因',
-      type: '.../snowflake',
+      type: '.../common/snowflake',
       required: true,
     },
     'xUtil': {
       description: '通用工具函数',
-      type: '.../utility',
+      type: '.../common/utility',
       required: true,
     },
     'xCtxUtil': {
       description: '上下文工具函数',
-      type: '.../utility/ctxutil',
+      type: '.../common/utility/context',
       required: true,
     },
     'xVaild': {
       description: '验证器扩展，自定义规则和中文翻译',
-      type: '.../validator',
+      type: '.../common/validator',
       required: true,
+    },
+  }}
+/>
+
+### major 层（主框架）
+
+<TypeTable
+  type={{
+    'xReg': {
+      description: '应用注册和初始化',
+      type: '.../major/register',
+      required: true,
+    },
+    'xMain': {
+      description: '服务运行时（统一启动、信号监听、优雅关闭）',
+      type: '.../major/main',
+      required: true,
+    },
+    'xHelper': {
+      description: '核心中间件（请求上下文、Panic 恢复、HTTP 日志）',
+      type: '.../major/helper',
+      required: true,
+    },
+    'xMiddle': {
+      description: '业务中间件（CORS、响应处理等）',
+      type: '.../major/middleware',
+      required: true,
+    },
+    'xResult': {
+      description: '响应结果处理函数',
+      type: '.../major/result',
+      required: true,
+    },
+    'xRoute': {
+      description: '路由处理（404、405）',
+      type: '.../major/route',
+      required: true,
+    },
+    'xModels': {
+      description: 'GORM 实体基类，自动生成雪花 ID',
+      type: '.../major/models',
+      required: true,
+    },
+    'xCache': {
+      description: '缓存抽象',
+      type: '.../major/cache',
+      required: true,
+    },
+    'xHook': {
+      description: 'Redis 钩子，自动添加键前缀',
+      type: '.../major/hook',
+      required: true,
+    },
+    'xHttp': {
+      description: 'HTTP 相关常量（请求头等）',
+      type: '.../major/http',
+      required: true,
+    },
+  }}
+/>
+
+### plugins 层（可选扩展）
+
+<TypeTable
+  type={{
+    'xGrpcRunner': {
+      description: 'gRPC 运行时',
+      type: '.../plugins/grpc/runner',
+      required: false,
+    },
+    'xGrpcInterface': {
+      description: 'gRPC 拦截器',
+      type: '.../plugins/grpc/interceptor',
+      required: false,
     },
   }}
 />
@@ -143,21 +196,47 @@ github.com/bamboo-services/bamboo-base-go/
 <Mermaid
   chart="
 graph TD
-    xBase[xBase<br/>BaseResponse] --> xError[xError<br/>错误处理]
+    subgraph defined[defined 层]
+        xCtx[xCtx<br/>上下文常量]
+        xEnv[xEnv<br/>环境变量]
+    end
 
-    xReg[xReg<br/>注册中心] --> xLog[xLog<br/>日志系统]
-    xReg --> xSnowflake[xSnowflake<br/>雪花算法]
-    xReg --> xHelper[xHelper<br/>核心中间件]
-    xReg --> xVaild[xVaild<br/>验证器]
+    subgraph common[common 层]
+        xBase[xBase<br/>BaseResponse]
+        xError[xError<br/>错误处理]
+        xLog[xLog<br/>日志系统]
+        xSnowflake[xSnowflake<br/>雪花算法]
+        xCtxUtil[xCtxUtil<br/>上下文工具]
+        xVaild[xVaild<br/>验证器]
+    end
 
-    xResult[xResult<br/>响应处理] --> xBase
+    subgraph major[major 层]
+        xReg[xReg<br/>注册中心]
+        xResult[xResult<br/>响应处理]
+        xModels[xModels<br/>数据模型]
+        xHelper[xHelper<br/>核心中间件]
+        xMain[xMain<br/>运行时]
+    end
+
+    subgraph plugins[plugins 层]
+        xGrpc[xGrpc<br/>gRPC 扩展]
+    end
+
+    xBase --> xError
+    xCtxUtil --> xCtx
+    xCtxUtil --> xSnowflake
+
+    xReg --> xLog
+    xReg --> xSnowflake
+    xReg --> xHelper
+    xReg --> xVaild
+    xResult --> xBase
     xResult --> xError
-    xResult --> xLog
+    xModels --> xSnowflake
+    xMain --> xReg
 
-    xModels[xModels<br/>数据模型] --> xSnowflake
-
-    xCtxUtil[xCtxUtil<br/>上下文工具] --> xConsts[xConsts<br/>上下文常量]
-    xCtxUtil --> xSnowflake"
+    xGrpc --> xLog
+    xGrpc --> xError"
 />
 
 ## 初始化流程
@@ -179,7 +258,7 @@ package main
 import (
     "context"
 
-    xReg "github.com/bamboo-services/bamboo-base-go/register"
+    xReg "github.com/bamboo-services/bamboo-base-go/major/register"
 )
 
 func main() {
@@ -206,10 +285,11 @@ func main() {
 
 ## 设计原则
 
-1. **单一职责** - 每个包只负责特定的功能领域
-2. **统一命名** - 所有包使用 `x` 前缀别名，便于识别
-3. **约定优于配置** - 提供合理的默认值，减少配置负担
-4. **链路追踪** - 请求 ID 贯穿整个请求生命周期
+1. **分层解耦** - 四层架构（defined → common → major → plugins），按需引入
+2. **单一职责** - 每个包只负责特定的功能领域
+3. **统一命名** - 所有包使用 `x` 前缀别名，便于识别
+4. **约定优于配置** - 提供合理的默认值，减少配置负担
+5. **链路追踪** - 请求 ID 贯穿整个请求生命周期
 
 ## 下一步
 

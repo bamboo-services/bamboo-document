@@ -11,7 +11,7 @@ import { TypeTable } from '@/components/type-table';
 `xGrpcRunner` 提供 gRPC 服务的启动与优雅退出能力，可直接作为 `xMain.Runner` 的附加协程使用。
 
 ```go
-import xGrpcRunner "github.com/bamboo-services/bamboo-base-go/grpc/runner"
+import xGrpcRunner "github.com/bamboo-services/bamboo-base-go/plugins/grpc/runner"
 ```
 
 ## 核心入口
@@ -67,12 +67,12 @@ import (
     "context"
     "time"
 
-    xLog "github.com/bamboo-services/bamboo-base-go/log"
-    xMain "github.com/bamboo-services/bamboo-base-go/main"
-    xReg "github.com/bamboo-services/bamboo-base-go/register"
+    xLog "github.com/bamboo-services/bamboo-base-go/common/log"
+    xMain "github.com/bamboo-services/bamboo-base-go/major/main"
+    xReg "github.com/bamboo-services/bamboo-base-go/major/register"
 
-    xGrpcIUnary "github.com/bamboo-services/bamboo-base-go/grpc/interceptor/unary"
-    xGrpcRunner "github.com/bamboo-services/bamboo-base-go/grpc/runner"
+    xGrpcIUnary "github.com/bamboo-services/bamboo-base-go/plugins/grpc/interceptor/unary"
+    xGrpcRunner "github.com/bamboo-services/bamboo-base-go/plugins/grpc/runner"
     "google.golang.org/grpc"
 )
 
@@ -134,7 +134,7 @@ xGrpcRunner.WithUnaryInterceptors(
 如需使用流式 RPC，可通过 `WithStreamInterceptors` 追加流式拦截器：
 
 ```go
-import xGrpcIStream "github.com/bamboo-services/bamboo-base-go/grpc/interceptor/stream"
+import xGrpcIStream "github.com/bamboo-services/bamboo-base-go/plugins/grpc/interceptor/stream"
 
 xGrpcRunner.WithStreamInterceptors(
     xGrpcIStream.InitContext(reg.Init.Ctx),
@@ -158,6 +158,6 @@ xGrpcRunner.WithStreamInterceptors(
   <Card title="内置拦截器" href="/docs/bamboo-base-go/grpc/interceptors" />
   <Card title="gRPC 常量" href="/docs/bamboo-base-go/grpc/constants" />
   <Card title="内置 Proto" href="/docs/bamboo-base-go/grpc/proto" />
-  <Card title="gRPC 结果处理" href="/docs/bamboo-base-go/grpc/result" />
+  <Card title="gRPC 结果处理" href="/docs/bamboo-base-go/plugins/grpc/result" />
   <Card title="快速开始" href="/docs/bamboo-base-go/quick-start" />
 </Cards>

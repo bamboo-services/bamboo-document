@@ -10,10 +10,10 @@ icon: ShieldCheck
 
 ```go
 // 一元拦截器
-import xGrpcIUnary "github.com/bamboo-services/bamboo-base-go/grpc/interceptor/unary"
+import xGrpcIUnary "github.com/bamboo-services/bamboo-base-go/plugins/grpc/interceptor/unary"
 
 // 流式拦截器
-import xGrpcIStream "github.com/bamboo-services/bamboo-base-go/grpc/interceptor/stream"
+import xGrpcIStream "github.com/bamboo-services/bamboo-base-go/plugins/grpc/interceptor/stream"
 ```
 
 ## 一元拦截器（Unary）
@@ -27,8 +27,8 @@ func Trace() grpc.UnaryServerInterceptor
 作用：
 
 - 从 incoming metadata 读取 `x_request_uuid`；若不存在则自动生成 UUID。
-- 将请求 ID 写入 `context`（`xConsts.RequestKey`）。
-- 记录请求开始时间（`xConsts.UserStartTimeKey`）。
+- 将请求 ID 写入 `context`（`xCtx.RequestKey`）。
+- 记录请求开始时间（`xCtx.UserStartTimeKey`）。
 - 将 `x_request_uuid` 写入 gRPC **Trailer**，便于全链路追踪。
 
 > `xGrpcRunner.New(...)` 默认会把 `Trace()` 放到拦截器链首位。
@@ -53,7 +53,7 @@ func InitContext(mainCtx context.Context) grpc.UnaryServerInterceptor
 
 作用：
 
-- 从主上下文提取 `xConsts.RegNodeKey`（节点初始化结果集合）。
+- 从主上下文提取 `xCtx.RegNodeKey`（节点初始化结果集合）。
 - 注入到每个 gRPC 请求上下文，便于业务逻辑复用已注册组件（如数据库、Redis 等）。
 
 ### 4) ResponseBuilder（可选挂载）
@@ -153,7 +153,7 @@ func Middleware() grpc.StreamServerInterceptor
 `xGrpcMiddle` 包提供**按服务注册中间件**的能力，支持将中间件精确绑定到特定 gRPC 服务。
 
 ```go
-import xGrpcMiddle "github.com/bamboo-services/bamboo-base-go/grpc/middleware"
+import xGrpcMiddle "github.com/bamboo-services/bamboo-base-go/plugins/grpc/middleware"
 ```
 
 ### 注册函数
@@ -277,7 +277,7 @@ xGrpcRunner.WithUnaryInterceptors(
 
 <Cards>
   <Card title="gRPC 常量" href="/docs/bamboo-base-go/grpc/constants" />
-  <Card title="gRPC 运行时" href="/docs/bamboo-base-go/grpc/runner" />
-  <Card title="gRPC 结果处理" href="/docs/bamboo-base-go/grpc/result" />
+  <Card title="gRPC 运行时" href="/docs/bamboo-base-go/plugins/grpc/runner" />
+  <Card title="gRPC 结果处理" href="/docs/bamboo-base-go/plugins/grpc/result" />
   <Card title="内置 Proto" href="/docs/bamboo-base-go/grpc/proto" />
 </Cards>

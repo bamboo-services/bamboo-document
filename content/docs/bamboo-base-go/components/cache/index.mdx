@@ -11,7 +11,7 @@ import { TypeTable } from '@/components/type-table';
 `xCache` 基于 Redis 提供了四种常用数据结构的缓存接口，支持泛型操作，适用于各种缓存场景。
 
 ```go
-import xCache "github.com/bamboo-services/bamboo-base-go/cache"
+import xCache "github.com/bamboo-services/bamboo-base-go/major/cache"
 ```
 
 ## 核心结构
@@ -70,7 +70,7 @@ type Cache struct {
 import (
     "time"
     "github.com/redis/go-redis/v9"
-    xCache "github.com/bamboo-services/bamboo-base-go/cache"
+    xCache "github.com/bamboo-services/bamboo-base-go/major/cache"
 )
 
 func main() {

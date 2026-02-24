@@ -24,8 +24,8 @@ func PanicRecovery() gin.HandlerFunc {
     return gin.RecoveryWithWriter(io.Discard, func(c *gin.Context, recovered interface{}) {
         // [!code highlight:2]
         // 1. 从上下文提取错误码
-        value, exists := c.Get(xConsts.ErrorCodeKey.String())
-        getErrMessage, msgExist := c.Get(xConsts.ErrorMessageKey.String())
+        value, exists := c.Get(xCtx.ErrorCodeKey.String())
+        getErrMessage, msgExist := c.Get(xCtx.ErrorMessageKey.String())
 
         // [!code highlight:2]
         // 2. 默认错误码: ServerInternalError (50000)
@@ -163,8 +163,8 @@ func TestPanic(ctx *gin.Context) {
 func GetUser(ctx *gin.Context) {
     // [!code highlight:3]
     // 设置错误码后再 Panic
-    ctx.Set(xConsts.ErrorCodeKey.String(), xError.NotFound)
-    ctx.Set(xConsts.ErrorMessageKey.String(), "用户不存在")
+    ctx.Set(xCtx.ErrorCodeKey.String(), xError.NotFound)
+    ctx.Set(xCtx.ErrorMessageKey.String(), "用户不存在")
     panic("user not found")
 }
 ```

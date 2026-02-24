@@ -11,7 +11,7 @@ import { TypeTable } from '@/components/type-table';
 `xModels` 包提供与 GORM 深度集成的基础实体类型与分页模型，自动处理主键生成、时间戳管理和分页响应构建。
 
 ```go
-import xModels "github.com/bamboo-services/bamboo-base-go/models"
+import xModels "github.com/bamboo-services/bamboo-base-go/major/models"
 ```
 
 ## BaseEntity
@@ -65,8 +65,8 @@ type BaseEntity struct {
 package entity
 
 import (
-    xModels "github.com/bamboo-services/bamboo-base-go/models"
-    xSnowflake "github.com/bamboo-services/bamboo-base-go/snowflake"
+    xModels "github.com/bamboo-services/bamboo-base-go/major/models"
+    xSnowflake "github.com/bamboo-services/bamboo-base-go/common/snowflake"
 )
 
 // [!code highlight:5]
