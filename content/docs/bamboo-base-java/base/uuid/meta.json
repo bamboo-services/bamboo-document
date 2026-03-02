@@ -1,0 +1,8 @@
+{
+  "title": "UUID 生成",
+  "icon": "FingerprintPattern",
+  "pages": [
+    "uuid-util",
+    "uuid-v7-generator"
+  ]
+}

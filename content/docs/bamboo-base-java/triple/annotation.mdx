@@ -17,7 +17,7 @@ bamboo-triple 提供两个核心注解，分别用于声明式的上下文传播
 ### 定义
 
 ```java title="DubboPersistentContext.java"
-package com.xlf.utility.triple;
+package com.xlf.utility.triple.annotations;
 
 import java.lang.annotation.*;
 
@@ -99,18 +99,19 @@ public class OrderTripleServiceImpl implements OrderTripleService {
 ### 定义
 
 ```java title="TripleRequestCheck.java"
-package com.xlf.utility.triple;
+package com.xlf.utility.triple.annotations;
 
+import com.xlf.utility.ErrorCode;
 import java.lang.annotation.*;
 
 // [!code highlight:3]
-// 仅可标注于方法上
-@Target(ElementType.METHOD)
+// 可标注于方法或类上
+@Target({ElementType.METHOD, ElementType.TYPE})
 @Retention(RetentionPolicy.RUNTIME)
 @Documented
 public @interface TripleRequestCheck {
-    String message() default "请求参数校验失败";
-    String errorCode() default "VALIDATION_ERROR";
+    String message() default "";
+    ErrorCode errorCode() default ErrorCode.PARAMETER_INVALID;
 }
 ```
 
@@ -119,14 +120,14 @@ public @interface TripleRequestCheck {
 <TypeTable
   type={{
     message: {
-      description: '校验失败时的错误提示信息。将作为 BusinessException 的消息内容。',
+      description: '校验失败时的错误提示信息。为空时使用默认格式。将作为 BusinessException 的消息内容。',
       type: 'String',
-      default: '"请求参数校验失败"',
+      default: '""（空字符串，使用默认消息）',
     },
     errorCode: {
-      description: '校验失败时的错误码。将作为 BusinessException 的错误码，便于调用方识别具体的校验错误类型。',
-      type: 'String',
-      default: '"VALIDATION_ERROR"',
+      description: '校验失败时的错误码枚举。将作为 BusinessException 的错误码，便于调用方识别具体的校验错误类型。',
+      type: 'ErrorCode',
+      default: 'ErrorCode.PARAMETER_INVALID',
     },
   }}
 />
@@ -152,7 +153,7 @@ public TripleResponse<UserDTO> queryUser(UserQueryRequest request) {
 @DubboPersistentContext
 // [!code highlight:2]
 // 自定义校验失败的错误消息与错误码
-@TripleRequestCheck(message = "订单创建参数无效", errorCode = "ORDER_CREATE_INVALID")
+@TripleRequestCheck(message = "订单创建参数无效", errorCode = ErrorCode.PARAMETER_INVALID)
 @Override
 public TripleResponse<OrderDTO> createOrder(OrderCreateRequest request) {
     OrderDTO order = orderService.create(request);
@@ -177,7 +178,7 @@ TripleRequestCheckAspect 拦截
     │       ├── true  → 放行，执行目标方法
     │       │
     │       └── false → 抛出 BusinessException
-    │                    ├── message = @TripleRequestCheck.message()
+    │                    ├── message = @TripleRequestCheck.message()（为空则使用默认消息）
     │                    └── errorCode = @TripleRequestCheck.errorCode()
     │
     ▼
@@ -195,12 +196,12 @@ public class ProductTripleServiceImpl implements ProductTripleService {
     // [!code highlight:3]
     // 组合使用：先传播上下文，再校验请求参数
     @DubboPersistentContext
-    @TripleRequestCheck(message = "商品查询参数无效", errorCode = "PRODUCT_QUERY_INVALID")
+    @TripleRequestCheck(message = "商品查询参数无效", errorCode = ErrorCode.PARAMETER_INVALID)
     @Override
     public TripleResponse<ProductDTO> queryProduct(ProductQueryRequest request) {
         ProductDTO product = productService.getById(request.getProductId());
         if (product == null) {
-            return TripleResult.error(ErrorCode.REQUEST_RESOURCE_NOT_FOUND, "商品不存在");
+            return TripleResult.error(ErrorCode.RESOURCE_NOT_FOUND, "商品不存在");
         }
         return TripleResult.success(product, "查询成功");
     }

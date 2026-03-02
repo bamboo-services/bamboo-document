@@ -18,7 +18,7 @@ import { TypeTable } from '@/components/type-table';
 <dependency>
     <groupId>com.x-lf.utility</groupId>
     <artifactId>bamboo-mvc</artifactId>
-    <version>2.0.0-beta2</version>
+    <version>2.0.0-beta3</version>
 </dependency>
 ```
 
@@ -37,15 +37,15 @@ import { TypeTable } from '@/components/type-table';
 
 ## 自动配置
 
-`BaseSdkAutoConfiguration` 通过 `@Configuration` 和 `@ComponentScan` 自动扫描并注册所有组件：
+`BaseSdkAutoConfiguration` 使用 Spring Boot 自动配置机制注册核心组件：
 
 ```java title="BaseSdkAutoConfiguration.java"
-// [!code highlight:3]
-@Configuration
+// [!code highlight:4]
+@AutoConfiguration(before = ErrorMvcAutoConfiguration.class)
 @EnableAspectJAutoProxy
-@ComponentScan
+@EnableConfigurationProperties(ContextProperties.class)
 public class BaseSdkAutoConfiguration {
-    // 自动注册所有过滤器、异常处理器、AOP 切面
+    // 注册 ContextFilter / LogAspect / DebugAspect / GlobalErrorController / SystemExceptionHandler
 }
 ```
 
@@ -55,7 +55,7 @@ public class BaseSdkAutoConfiguration {
 - `LogAspectHandler` — Controller / Service / Repository 日志切面
 - `DebugAspectHandler` — 调试模式控制切面
 - 全部异常处理器链（Java 基础 → 公共业务 → Spring MVC → 数据库）
-- `MybatisPlusConfiguration` — MyBatis-Plus 分页插件（按需激活）
+- `MybatisPlusConfigHandler` — MyBatis-Plus 分页插件（按需激活）
 
 ## 配置属性
 
@@ -81,6 +81,8 @@ bamboo:
     },
   }}
 />
+
+> 说明：`ContextProperties` 实际绑定前缀为 `bamboo.context`。
 
 ## 模块架构
 

@@ -1,6 +1,6 @@
 {
   "title": "过滤器",
-  "icon": "Filter",
+  "icon": "Funnel",
   "pages": [
     "index",
     "cors",

@@ -6,7 +6,7 @@ icon: Factory
 
 # TripleResult
 
-`TripleResult` 是 `TripleResponse<T>` 的静态工厂类，提供一组便捷方法用于快速构建标准化的成功与错误响应。该类自动从 MVC `ContextHolder` 获取链路追踪 ID 与请求耗时，无需手动填充上下文信息。
+`TripleResult` 是 `TripleResponse<T>` 的静态工厂类，提供一组便捷方法用于快速构建标准化的成功与错误响应。该类自动从 MVC `ContextHolder` 获取链路追踪 ID 与请求耗时，无需手动填充上下文信息。成功响应固定为 `success=true`、`code="200"`；失败响应会映射 `ErrorCode.getCode()`（如 `"40403"`、`"50001"`）。
 
 ## 成功响应
 
@@ -94,13 +94,13 @@ try {
 
 | 方法签名 | 返回类型 | 说明 |
 |----------|---------|------|
-| `success()` | `TripleResponse<Void>` | 无数据成功响应 |
+| `success()` | `TripleResponse<T>` | 无数据成功响应（通常以 `T=Void` 使用） |
 | `success(T data)` | `TripleResponse<T>` | 携带数据的成功响应 |
 | `success(T data, String message)` | `TripleResponse<T>` | 携带数据与消息的成功响应 |
-| `error(ErrorCode)` | `TripleResponse<Void>` | 基于错误码的失败响应 |
-| `error(ErrorCode, String)` | `TripleResponse<Void>` | 基于错误码与消息的失败响应 |
+| `error(ErrorCode)` | `TripleResponse<T>` | 基于错误码的失败响应 |
+| `error(ErrorCode, String)` | `TripleResponse<T>` | 基于错误码与消息的失败响应 |
 | `error(ErrorCode, String, T)` | `TripleResponse<T>` | 携带错误详情的失败响应 |
-| `error(Exception)` | `TripleResponse<Void>` | 基于异常的失败响应 |
+| `error(Exception)` | `TripleResponse<T>` | 基于异常的失败响应（通常以 `T=Void` 使用） |
 
 ## 上下文自动填充
 
@@ -124,7 +124,7 @@ import org.apache.dubbo.config.annotation.DubboService;
 public class OrderTripleServiceImpl implements OrderTripleService {
 
     @DubboPersistentContext
-    @TripleRequestCheck(message = "订单查询参数无效", errorCode = "ORDER_QUERY_INVALID")
+    @TripleRequestCheck(message = "订单查询参数无效", errorCode = ErrorCode.PARAMETER_INVALID)
     @Override
     public TripleResponse<OrderDTO> queryOrder(OrderQueryRequest request) {
         OrderDTO order = orderRepository.findById(request.getOrderId());
@@ -132,7 +132,7 @@ public class OrderTripleServiceImpl implements OrderTripleService {
             // [!code highlight:3]
             // 业务错误：订单不存在
             return TripleResult.error(
-                    ErrorCode.REQUEST_RESOURCE_NOT_FOUND, "订单不存在");
+                    ErrorCode.RESOURCE_NOT_FOUND, "订单不存在");
         }
         return TripleResult.success(order, "查询成功");
     }

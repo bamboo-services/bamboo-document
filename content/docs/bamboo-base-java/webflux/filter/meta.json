@@ -1,6 +1,6 @@
 {
   "title": "WebFilter",
-  "icon": "Filter",
+  "icon": "Funnel",
   "pages": [
     "index",
     "cors",

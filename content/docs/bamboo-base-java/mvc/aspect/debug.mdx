@@ -23,7 +23,7 @@ public class DebugAspectHandler {
         if (!isDebugMode()) {
             // [!code highlight:2]
             // 非调试模式下抛出未授权异常
-            throw new BusinessException(ErrorCode.UNAUTHORIZED, "调试接口不可用");
+            throw new BusinessException("调试接口不可用", ErrorCode.UNAUTHORIZED);
         }
     }
 }
@@ -34,7 +34,7 @@ public class DebugAspectHandler {
 <TypeTable
   type={{
     checkDebugController: {
-      description: '检查当前应用是否运行在调试模式。若非调试模式，抛出 BusinessException(UNAUTHORIZED) 阻止接口访问',
+      description: '检查当前应用是否运行在调试模式。若非调试模式，抛出 BusinessException("调试接口不可用", UNAUTHORIZED) 阻止接口访问',
       type: 'void',
       required: true,
     },
@@ -84,9 +84,9 @@ public class DebugController {
 {
   "context": "550e8400-e29b-41d4-a716-446655440000",
   "output": "UNAUTHORIZED",
-  "code": 40100,
+  "code": 40101,
   "message": null,
-  "error_message": "调试接口不可用",
+  "errorMessage": "调试接口不可用",
   "duration": 1,
   "data": null
 }

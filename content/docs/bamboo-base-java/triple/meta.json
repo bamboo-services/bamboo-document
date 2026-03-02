@@ -6,7 +6,10 @@
     "request",
     "response",
     "result",
+    "---切面与注解---",
     "aspect",
-    "annotation"
+    "annotation",
+    "---异常处理---",
+    "exception"
   ]
 }

@@ -52,11 +52,11 @@ private record RequestContext(String contextId, long startTime) {}
 ```java title="ContextHolder.java"
 // [!code highlight:2]
 // 自动生成 UUID 作为上下文标识
-public static void initContext()
+public static String initContext()
 
 // [!code highlight:2]
 // 使用指定的上下文标识（适用于外部传入场景）
-public static void initContext(String contextId)
+public static String initContext(String contextId)
 ```
 
 ### 读取方法
@@ -68,11 +68,11 @@ public static String getContextId()
 
 // [!code highlight:2]
 // 获取请求开始时间（毫秒时间戳）
-public static long getStartTime()
+public static Long getStartTime()
 
 // [!code highlight:2]
 // 获取从初始化到当前时刻的耗时（毫秒）
-public static long getDuration()
+public static Long getDuration()
 
 // [!code highlight:2]
 // 判断当前线程是否已初始化上下文
@@ -93,12 +93,12 @@ public static void clear()
   type={{
     'initContext()': {
       description: '初始化上下文，自动生成 UUID 并记录当前时间戳',
-      type: 'void',
+      type: 'String',
       required: true,
     },
     'initContext(contextId)': {
       description: '使用指定的上下文标识符初始化上下文。适用于从请求头中提取已有 UUID 的场景',
-      type: 'void',
+      type: 'String',
       required: true,
     },
     'getContextId()': {
@@ -107,13 +107,13 @@ public static void clear()
       required: true,
     },
     'getStartTime()': {
-      description: '获取上下文初始化时的毫秒时间戳',
-      type: 'long',
+      description: '获取上下文初始化时的毫秒时间戳。若未初始化返回 null',
+      type: 'Long',
       required: true,
     },
     'getDuration()': {
-      description: '计算从上下文初始化到调用时刻的耗时（毫秒）',
-      type: 'long',
+      description: '计算从上下文初始化到调用时刻的耗时（毫秒）。若未初始化返回 null',
+      type: 'Long',
       required: true,
     },
     'hasContext()': {
@@ -148,7 +148,7 @@ try {
 
     // [!code highlight:2]
     // 获取请求耗时
-    long duration = ContextHolder.getDuration();
+    Long duration = ContextHolder.getDuration();
     log.info("请求处理耗时: {}ms", duration);
 } finally {
     // [!code highlight:2]
@@ -189,6 +189,7 @@ if (ContextHolder.hasContext()) {
 - **资源清理**：必须在请求结束时调用 `clear()` 方法。`ContextFilter` 已在内部处理此逻辑，无需手动调用
 - **异步场景**：若业务代码使用 `@Async` 或线程池，上下文不会自动传播至新线程。需在新线程中手动初始化
 - **与 ResultUtil 的协作**：`ResultUtil` 内部自动调用 `ContextHolder` 的方法注入响应字段，无需额外操作
+- **空值场景**：`getContextId/getStartTime/getDuration` 在未初始化上下文时均可能返回 `null`
 
 ## 下一步
 

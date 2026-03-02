@@ -15,6 +15,7 @@
     "---工具类---",
     "...util",
     "---配置---",
-    "mybatis-plus"
+    "mybatis-plus",
+    "global-error"
   ]
 }

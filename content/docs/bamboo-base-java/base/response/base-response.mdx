@@ -1,36 +1,42 @@
 ---
 title: BaseResponse
-description: BaseResponse<E> 泛型响应体，标准化所有 API 输出格式
-icon: FileJson
+description: BaseResponse<E> 统一响应模型，包含 context、状态码、错误信息与数据载体
+icon: FileBraces
 ---
 
 import { TypeTable } from '@/components/type-table';
 
 # BaseResponse
 
-`BaseResponse<E>` 是筱工具(Java) 的统一 API 响应结构，采用泛型设计，适用于所有接口的标准化输出。该类位于 `com.xlf.utility` 包下，是整个框架的响应基石。
+`BaseResponse<E>` 位于 `com.xlf.utility`，用于统一接口返回结构。  
+该类使用 `@JsonInclude(JsonInclude.Include.NON_NULL)`，字段值为 `null` 时默认不输出到 JSON。
 
 ## 类定义
 
 ```java title="BaseResponse.java"
 package com.xlf.utility;
 
-public class BaseResponse<E> {
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+@JsonInclude(JsonInclude.Include.NON_NULL)
+public class BaseResponse<E> implements Serializable {
     private String context;
+    @NotNull
     private String output;
+    @NotNull
     private Integer code;
+    @NotNull
     private String message;
     private String errorMessage;
     private Long duration;
     private E data;
 
-    // [!code highlight:3]
-    // 主构造方法：通过 ErrorCode 与消息构造
-    public BaseResponse(ErrorCode errorCode, String message) { ... }
-
-    // 全参构造方法
-    public BaseResponse(String context, String output, Integer code,
-                        String message, String errorMessage, Long duration, E data) { ... }
+    // 兼容旧版本的五参构造
+    public BaseResponse(String output, Integer code, String message, String errorMessage, E data) {
+        this(null, output, code, message, errorMessage, null, data);
+    }
 }
 ```
 
@@ -39,37 +45,37 @@ public class BaseResponse<E> {
 <TypeTable
   type={{
     context: {
-      description: '链路追踪标识，UUID 格式。由框架自动生成，用于全链路日志追踪与问题排查。',
+      description: '请求上下文 ID（通常为 UUID），用于链路追踪。可为空。',
       type: 'String',
-      required: true,
+      required: false,
     },
     output: {
-      description: '英文状态标识，来源于 ErrorCode 枚举的 output 字段。例如 "SUCCESS"、"PARAMETER_ERROR"。',
+      description: '状态输出标识，如 "Success"、"ParameterMissing"。',
       type: 'String',
       required: true,
     },
     code: {
-      description: '5 位数字响应码，来源于 ErrorCode 枚举的 code 字段。前三位对应 HTTP 状态码，后两位为业务细分。',
+      description: '业务响应码。错误时通常来自 ErrorCode.code；成功时常用 200。',
       type: 'Integer',
       required: true,
     },
     message: {
-      description: '中文消息描述，向客户端展示的可读信息。',
+      description: '对客户端展示的概要消息。',
       type: 'String',
       required: true,
     },
     errorMessage: {
-      description: '错误详细信息，仅在请求失败时填充，成功时为 null。',
+      description: '错误详细信息，失败时可选填。',
       type: 'String',
       required: false,
     },
     duration: {
-      description: '请求耗时，单位为毫秒。由框架层自动计算填充。',
+      description: '耗时（毫秒），由调用方决定是否填充。',
       type: 'Long',
       required: false,
     },
     data: {
-      description: '泛型数据载体，承载业务响应数据。成功时携带具体数据，失败时通常为 null。',
+      description: '业务数据载体，泛型类型 E。',
       type: 'E',
       required: false,
     },
@@ -78,63 +84,62 @@ public class BaseResponse<E> {
 
 ## 构造方式
 
-### ErrorCode 构造
+### 全参构造（推荐在工具层使用）
 
-最常用的构造方式，通过 `ErrorCode` 枚举与自定义消息创建响应：
-
-```java title="BaseResponse.java"
-// [!code highlight:2]
-// 自动从 ErrorCode 中提取 output 与 code
-BaseResponse<String> response = new BaseResponse<>(ErrorCode.SUCCESS, "操作成功");
-```
-
-### 全参构造
-
-适用于需要完全控制响应内容的场景：
-
-```java title="BaseResponse.java"
+```java title="Example.java"
 BaseResponse<UserDTO> response = new BaseResponse<>(
-    "550e8400-e29b-41d4-a716-446655440000",  // context
-    "SUCCESS",                                 // output
-    20000,                                     // code
-    "获取成功",                                 // message
-    null,                                      // errorMessage
-    15L,                                       // duration
-    userDTO                                    // data
+    "550e8400-e29b-41d4-a716-446655440000", // context
+    "Success",                               // output
+    200,                                     // code
+    "获取成功",                               // message
+    null,                                    // errorMessage
+    12L,                                     // duration
+    userDTO                                  // data
 );
 ```
 
+### 兼容构造（旧风格）
+
+```java title="Example.java"
+BaseResponse<UserDTO> response = new BaseResponse<>(
+    "Success",
+    200,
+    "获取成功",
+    null,
+    userDTO
+);
+```
+
+### Builder 构造（复杂场景推荐）
+
+```java title="Example.java"
+BaseResponse<UserDTO> response = BaseResponse.<UserDTO>builder()
+    .context("550e8400-e29b-41d4-a716-446655440000")
+    .output("Success")
+    .code(200)
+    .message("获取成功")
+    .duration(12L)
+    .data(userDTO)
+    .build();
+```
+
+> 当前实现中**没有** `BaseResponse(ErrorCode, ...)` 形式的构造函数。
+
 ## 响应示例
 
-### 成功响应（携带数据）
+### 成功响应
 
 ```json title="response.json"
 {
   "context": "550e8400-e29b-41d4-a716-446655440000",
-  "output": "SUCCESS",
-  "code": 20000,
-  "message": "获取用户成功",
-  "error_message": null,
-  "duration": 15,
+  "output": "Success",
+  "code": 200,
+  "message": "获取成功",
+  "duration": 12,
   "data": {
     "id": 1,
-    "username": "xiao_lfeng",
-    "email": "test@example.com"
+    "username": "xiao_lfeng"
   }
-}
-```
-
-### 成功响应（无数据）
-
-```json title="response.json"
-{
-  "context": "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
-  "output": "SUCCESS",
-  "code": 20000,
-  "message": "操作成功",
-  "error_message": null,
-  "duration": 8,
-  "data": null
 }
 ```
 
@@ -143,61 +148,23 @@ BaseResponse<UserDTO> response = new BaseResponse<>(
 ```json title="response.json"
 {
   "context": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
-  "output": "PARAMETER_ERROR",
-  "code": 40024,
-  "message": "参数错误",
-  "error_message": "用户名不能为空",
-  "duration": 3,
-  "data": null
+  "output": "ParameterMissing",
+  "code": 40003,
+  "message": "参数缺失",
+  "errorMessage": "用户 ID 不能为空",
+  "duration": 3
 }
 ```
 
-## 使用示例
+## 使用建议
 
-### 在 Controller 中使用
-
-```java title="UserController.java"
-import com.xlf.utility.BaseResponse;
-import com.xlf.utility.ErrorCode;
-import org.springframework.web.bind.annotation.*;
-
-@RestController
-@RequestMapping("/api/v1/user")
-public class UserController {
-
-    @GetMapping("/{id}")
-    public BaseResponse<UserDTO> getUser(@PathVariable Long id) {
-        UserDTO user = userService.getUserById(id);
-        // [!code highlight:2]
-        // 直接返回 BaseResponse，框架会自动序列化为标准 JSON
-        return new BaseResponse<>(ErrorCode.SUCCESS, "获取成功");
-    }
-}
-```
-
-### 配合 ResultUtil 使用
-
-在引入 `bamboo-mvc` 或 `bamboo-webflux` 模块后，推荐使用 `ResultUtil` 工具类构建响应：
-
-```java title="UserController.java"
-import com.xlf.utility.mvc.ResultUtil;
-
-@GetMapping("/{id}")
-public ResponseEntity<BaseResponse<UserDTO>> getUser(@PathVariable Long id) {
-    UserDTO user = userService.getUserById(id);
-    // [!code highlight:2]
-    // ResultUtil 会自动设置正确的 HTTP 状态码
-    return ResultUtil.success("获取成功", user);
-}
-```
-
-## 序列化说明
-
-`BaseResponse` 使用 Jackson 进行 JSON 序列化，字段命名策略为 `snake_case`。Java 字段名 `errorMessage` 在 JSON 中序列化为 `error_message`。
+- 在 `bamboo-mvc` 或 `bamboo-webflux` 中，优先使用各模块 `ResultUtil` 统一构造响应。  
+- 成功响应建议 `output="Success"`、`code=200`。  
+- 错误响应建议从 `ErrorCode` 读取 `output` 与 `code`，避免硬编码。
 
 ## 下一步
 
 <Cards>
   <Card title="ErrorCode 错误码" href="/docs/bamboo-base-java/base/response/error-code" />
-  <Card title="雪花算法" href="/docs/bamboo-base-java/base/snowflake" />
+  <Card title="BusinessException" href="/docs/bamboo-base-java/base/exception/business" />
 </Cards>

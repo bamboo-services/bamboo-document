@@ -1,0 +1,92 @@
+---
+title: GeneSnowflakeInfoDTO
+description: 基因雪花 ID 的解析结果对象
+icon: FileCode
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# GeneSnowflakeInfoDTO
+
+`GeneSnowflakeInfoDTO` 位于 `com.xlf.utility.models.dto`，由 `GeneSnowflakeUtil.parseInfo(long id)` 返回。  
+用于展示带业务基因的雪花 ID 解析结果。
+
+## 类定义
+
+```java title="GeneSnowflakeInfoDTO.java"
+package com.xlf.utility.models.dto;
+
+public class GeneSnowflakeInfoDTO {
+    private Long id;
+    private Long timestamp;
+    private Long machineId;
+    private Integer gene;
+    private Long datacenterId;
+    private Long sequence;
+    private LocalDateTime generatedTime;
+}
+```
+
+## 字段说明
+
+<TypeTable
+  type={{
+    id: {
+      description: '原始基因雪花 ID。',
+      type: 'Long',
+      required: true,
+    },
+    timestamp: {
+      description: '相对 epoch 的时间偏移（毫秒）。',
+      type: 'Long',
+      required: true,
+    },
+    machineId: {
+      description: '机器 ID，范围 0~15（4 位）。',
+      type: 'Long',
+      required: true,
+    },
+    gene: {
+      description: '业务基因值，范围 0~255（CRC8）。',
+      type: 'Integer',
+      required: true,
+    },
+    datacenterId: {
+      description: '数据中心 ID，范围 0~7（3 位）。',
+      type: 'Long',
+      required: true,
+    },
+    sequence: {
+      description: '序列号，范围 0~255（8 位）。',
+      type: 'Long',
+      required: true,
+    },
+    generatedTime: {
+      description: '解析后的本地时间。',
+      type: 'LocalDateTime',
+      required: false,
+    },
+  }}
+/>
+
+## 使用示例
+
+```java title="Example.java"
+import com.xlf.utility.models.dto.GeneSnowflakeInfoDTO;
+import com.xlf.utility.utility.GeneSnowflakeUtil;
+
+long id = GeneSnowflakeUtil.generateId("order");
+GeneSnowflakeInfoDTO info = GeneSnowflakeUtil.parseInfo(id);
+
+System.out.println(info.getGene());
+System.out.println(info.getDatacenterId());
+System.out.println(info.getMachineId());
+System.out.println(info.getGeneratedTime());
+```
+
+## 下一步
+
+<Cards>
+  <Card title="GeneSnowflakeUtil" href="/docs/bamboo-base-java/base/snowflake/gene-util" />
+  <Card title="SnowflakeInfoDTO" href="/docs/bamboo-base-java/base/snowflake/info-dto" />
+</Cards>

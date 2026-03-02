@@ -1,0 +1,184 @@
+---
+title: UuidUtil
+description: UUID 工具类，提供 UUID 生成与转换能力
+icon: FingerprintPattern
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# UuidUtil
+
+`UuidUtil` 是筱工具(Java) 的 UUID 工具类，位于 `com.xlf.utility.utility` 包下。提供 UUID 生成、转换与格式化等静态方法。
+
+## 类定义
+
+```java title="UuidUtil.java"
+package com.xlf.utility.utility;
+
+import java.util.UUID;
+
+public class UuidUtil {
+    // 静态方法，无需实例化
+}
+```
+
+## 方法列表
+
+### 生成方法
+
+<TypeTable
+  type={{
+    generateStringUuid: {
+      description: '生成标准 UUID 字符串，格式为带横杠的 36 位字符串。',
+      type: '() String',
+      returns: '例如 "550e8400-e29b-41d4-a716-446655440000"',
+    },
+    generateUuid: {
+      description: '生成 UUID 对象，返回 java.util.UUID 实例。',
+      type: '() UUID',
+      returns: 'UUID 对象',
+    },
+    generateUuidNoDash: {
+      description: '生成无横杠的 UUID 字符串，32 位十六进制字符串。',
+      type: '() String',
+      returns: '例如 "550e8400e29b41d4a716446655440000"',
+    },
+  }}
+/>
+
+### 转换方法
+
+<TypeTable
+  type={{
+    convertToUuid: {
+      description: '将 UUID 字符串转换为 UUID 对象。',
+      type: '(String uuid) UUID',
+      parameters: [
+        { name: 'uuid', description: 'UUID 字符串' },
+      ],
+      returns: 'UUID 对象',
+    },
+  }}
+/>
+
+### 从字符串生成
+
+<TypeTable
+  type={{
+    makeUuidFromString: {
+      description: '根据任意字符串生成 UUID（确定性）。相同字符串始终生成相同 UUID。',
+      type: '(String getString) UUID',
+      parameters: [
+        { name: 'getString', description: '源字符串' },
+      ],
+      returns: '基于字符串生成的 UUID 对象',
+    },
+    makeStringUuidFromString: {
+      description: '根据字符串生成 UUID 字符串（带横杠）。',
+      type: '(String getString) String',
+      parameters: [
+        { name: 'getString', description: '源字符串' },
+      ],
+      returns: '36 位 UUID 字符串',
+    },
+    makeUuidFromStringNoDash: {
+      description: '根据字符串生成 UUID 字符串（无横杠）。',
+      type: '(String getString) String',
+      parameters: [
+        { name: 'getString', description: '源字符串' },
+      ],
+      returns: '32 位 UUID 字符串',
+    },
+  }}
+/>
+
+## 使用示例
+
+### 生成随机 UUID
+
+```java title="Example.java"
+import com.xlf.utility.utility.UuidUtil;
+
+// [!code highlight:2]
+// 生成标准 UUID（带横杠）
+String uuid = UuidUtil.generateStringUuid();
+// 输出: "550e8400-e29b-41d4-a716-446655440000"
+
+// [!code highlight:2]
+// 生成无横杠 UUID
+String uuidNoDash = UuidUtil.generateUuidNoDash();
+// 输出: "550e8400e29b41d4a716446655440000"
+
+// [!code highlight:2]
+// 生成 UUID 对象
+UUID uuidObj = UuidUtil.generateUuid();
+```
+
+### 生成链路追踪 ID
+
+```java title="TraceService.java"
+import com.xlf.utility.utility.UuidUtil;
+
+public class TraceService {
+
+    public String generateTraceId() {
+        // [!code highlight:2]
+        // 使用无横杠 UUID 作为链路追踪 ID
+        return UuidUtil.generateUuidNoDash();
+    }
+}
+```
+
+### 从字符串生成确定性 UUID
+
+```java title="GravatarService.java"
+import com.xlf.utility.utility.UuidUtil;
+
+public class GravatarService {
+
+    public String getGravatarUrl(String email) {
+        // [!code highlight:2]
+        // 根据邮箱生成确定性 UUID（相同邮箱始终生成相同结果）
+        String hash = UuidUtil.makeUuidFromStringNoDash(email.toLowerCase());
+        return "https://www.gravatar.com/avatar/" + hash;
+    }
+}
+```
+
+### UUID 转换
+
+```java title="Example.java"
+import com.xlf.utility.utility.UuidUtil;
+import java.util.UUID;
+
+// [!code highlight:2]
+// 字符串转 UUID 对象
+UUID uuid = UuidUtil.convertToUuid("550e8400-e29b-41d4-a716-446655440000");
+```
+
+## UUID 格式说明
+
+```
+标准格式（36 位）:
+550e8400-e29b-41d4-a716-446655440000
+└─8位─┘ └─4位┘ └─4位┘ └─4位┘ └───12位───┘
+
+无横杠格式（32 位）:
+550e8400e29b41d4a716446655440000
+```
+
+## 与 UUID v7 的区别
+
+| 特性 | UUID v4 (UuidUtil) | UUID v7 (UuidV7Generator) |
+|------|-------------------|--------------------------|
+| 排序性 | 随机，无序 | 时间有序 |
+| 碰撞概率 | 理论上存在 | 极低 |
+| 适用场景 | 链路追踪、临时 ID | 数据库主键、分布式 ID |
+| 性能 | 高 | 略低（需获取时间戳） |
+
+## 下一步
+
+<Cards>
+  <Card title="UuidV7Generator" href="/docs/bamboo-base-java/base/uuid/uuid-v7-generator" />
+  <Card title="雪花算法" href="/docs/bamboo-base-java/base/snowflake" />
+</Cards>

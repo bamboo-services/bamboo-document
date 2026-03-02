@@ -1,0 +1,188 @@
+---
+title: UuidV7Generator
+description: UUID v7 生成器，实现 MyBatis-Plus IdentifierGenerator 接口
+icon: Clock
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# UuidV7Generator
+
+`UuidV7Generator` 是筱工具(Java) 的 UUID v7 生成器，位于 `com.xlf.utility.incrementer` 包下。  
+它实现了 MyBatis-Plus 的 `IdentifierGenerator` 接口：
+
+- `nextUUID(...)`：生成 UUID v7 字符串（推荐用于字符串主键）
+- `nextId(...)`：返回 6 位随机整数（用于数值主键场景的兜底）
+
+## 类定义
+
+```java title="UuidV7Generator.java"
+package com.xlf.utility.incrementer;
+
+import com.baomidou.mybatisplus.core.incrementer.IdentifierGenerator;
+import com.github.f4b6a3.uuid.UuidCreator;
+
+public class UuidV7Generator implements IdentifierGenerator {
+
+    @Override
+    public Number nextId(Object entity) {
+        return Integer.parseInt(RandomUtil.createRandomInt(6));
+    }
+
+    @Override
+    public String nextUUID(Object entity) {
+        // [!code highlight:2]
+        return UuidCreator.getTimeOrderedEpoch().toString();
+    }
+}
+```
+
+## 方法行为说明
+
+| 方法 | 返回值 | 说明 |
+|------|--------|------|
+| `nextUUID(Object entity)` | `String` | 基于 `UuidCreator.getTimeOrderedEpoch()` 生成 UUID v7 |
+| `nextId(Object entity)` | `Number` | 返回 6 位随机整数（`RandomUtil.createRandomInt(6)`） |
+
+## UUID v7 特性
+
+UUID v7 是一种时间有序的 UUID 格式，相较于传统的 UUID v4 具有以下优势：
+
+| 特性 | UUID v4 | UUID v7 |
+|------|---------|---------|
+| **排序性** | 完全随机，无序 | 按时间顺序递增 |
+| **数据库友好** | 索引效率低 | 索引效率高（近似有序） |
+| **碰撞概率** | 理论存在 | 极低（时间戳 + 随机位） |
+| **可追溯** | 无法获取生成时间 | 可提取生成时间戳 |
+
+### UUID v7 结构
+
+```
+┌──────────────┬────────────┬──────────────┬──────────────────┐
+│   时间戳      │  版本位     │   序列位      │    随机位         │
+│  (48 bits)   │  (4 bits)  │  (12 bits)   │    (62 bits)     │
+│  毫秒级时间戳  │   固定为 7  │  同毫秒内自增  │    随机数         │
+└──────────────┴────────────┴──────────────┴──────────────────┘
+```
+
+## 在 MyBatis-Plus 中使用
+
+### 配置生成器
+
+```java title="MybatisPlusConfig.java"
+import com.baomidou.mybatisplus.annotation.DbType;
+import com.baomidou.mybatisplus.extension.plugins.MybatisPlusInterceptor;
+import com.baomidou.mybatisplus.extension.plugins.inner.PaginationInnerInterceptor;
+import com.xlf.utility.incrementer.UuidV7Generator;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+public class MybatisPlusConfig {
+
+    @Bean
+    public UuidV7Generator uuidV7Generator() {
+        // [!code highlight:2]
+        return new UuidV7Generator();
+    }
+}
+```
+
+### 实体类配置
+
+```java title="UserDO.java"
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableName;
+import lombok.Data;
+
+@Data
+@TableName("t_user")
+public class UserDO {
+
+    // [!code highlight:3]
+    // 使用 ASSIGN_UUID 策略，MyBatis-Plus 会调用 UuidV7Generator.nextUUID()
+    @TableId(type = IdType.ASSIGN_UUID)
+    private String id;
+
+    private String username;
+    private String email;
+    private LocalDateTime createdAt;
+}
+```
+
+### 插入时自动生成
+
+```java title="UserService.java"
+import org.springframework.stereotype.Service;
+
+@Service
+public class UserService {
+
+    public void createUser(UserDTO dto) {
+        UserDO user = new UserDO();
+        user.setUsername(dto.getUsername());
+        user.setEmail(dto.getEmail());
+        user.setCreatedAt(LocalDateTime.now());
+        // id 字段无需手动设置
+
+        // [!code highlight:2]
+        // 插入时 MyBatis-Plus 自动调用 UuidV7Generator 生成 UUID v7
+        userMapper.insert(user);
+
+        // 此时 user.getId() 已被赋值
+        System.out.println("生成的 ID: " + user.getId());
+    }
+}
+```
+
+## 依赖说明
+
+`UuidV7Generator` 依赖 `uuid-creator` 库：
+
+```xml title="pom.xml"
+<dependency>
+    <groupId>com.github.f4b6a3</groupId>
+    <artifactId>uuid-creator</artifactId>
+    <version>6.1.1</version>
+</dependency>
+```
+
+## 生成的 UUID 示例
+
+```java title="Example.java"
+import com.xlf.utility.incrementer.UuidV7Generator;
+
+UuidV7Generator generator = new UuidV7Generator();
+
+// [!code highlight:4]
+// 连续生成多个 UUID v7（时间有序）
+String id1 = generator.nextUUID(null);  // 018f3b7a-1c2d-7d3e-8f4a-5b6c7d8e9f0a
+String id2 = generator.nextUUID(null);  // 018f3b7a-1c2d-7d3e-8f4a-5b6c7d8e9f0b
+String id3 = generator.nextUUID(null);  // 018f3b7a-1c2d-7d3e-8f4a-5b6c7d8e9f0c
+
+// UUID v7 通常按时间趋势有序，适合索引插入场景
+```
+
+## 与雪花算法的对比
+
+| 特性 | UUID v7 | 雪花算法 |
+|------|---------|---------|
+| **长度** | 36 字符字符串 | 19 位数字 |
+| **存储空间** | 36 字节（字符串）或 16 字节（二进制） | 8 字节 |
+| **排序性** | 时间有序 | 时间有序 |
+| **数据中心/机器 ID** | 无 | 支持 |
+| **基因位** | 无 | 支持 |
+| **适用场景** | 需要字符串 ID、跨系统兼容 | 高性能、短 ID、分库分表 |
+
+## 选择建议
+
+- **使用 UUID v7**：需要字符串格式 ID、跨系统集成、对 ID 长度不敏感
+- **使用雪花算法**：高性能要求、需要短数字 ID、分库分表场景
+
+## 下一步
+
+<Cards>
+  <Card title="UuidUtil" href="/docs/bamboo-base-java/base/uuid/uuid-util" />
+  <Card title="雪花算法" href="/docs/bamboo-base-java/base/snowflake" />
+</Cards>

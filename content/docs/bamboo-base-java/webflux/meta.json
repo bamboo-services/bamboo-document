@@ -15,6 +15,7 @@
     "---工具类---",
     "...util",
     "---配置---",
-    "auto-configuration"
+    "auto-configuration",
+    "global-error"
   ]
 }

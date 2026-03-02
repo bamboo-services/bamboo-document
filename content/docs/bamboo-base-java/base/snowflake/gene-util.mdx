@@ -1,0 +1,133 @@
+---
+title: GeneSnowflakeUtil
+description: 基因雪花 ID 工具类，支持业务基因嵌入、解析与校验
+icon: Dna
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# GeneSnowflakeUtil
+
+`GeneSnowflakeUtil` 位于 `com.xlf.utility.utility`。  
+它基于标准雪花 ID 重组位布局，嵌入 8 位业务基因（CRC8），让 ID 自带业务语义。
+
+## 位结构
+
+```
+[1-bit sign][41-bit timestamp][4-bit machine][8-bit gene][3-bit datacenter][8-bit sequence]
+```
+
+> 说明：机器位与数据中心位、序列位是从标准雪花结构压缩后得到，吞吐量相较标准模式更低（同毫秒最多 256）。
+
+## 方法概览
+
+### 生成方法
+
+<TypeTable
+  type={{
+    generateId: {
+      description: '根据业务标识生成基因雪花 ID。',
+      type: '(String businessIdentifier) long',
+      returns: '64 位 ID',
+    },
+    generateIdString: {
+      description: '生成字符串形式的基因雪花 ID。',
+      type: '(String businessIdentifier) String',
+      returns: '数字字符串',
+    },
+  }}
+/>
+
+### 解析方法
+
+<TypeTable
+  type={{
+    parseGene: {
+      description: '解析 gene（0~255）。',
+      type: '(long id) int',
+      returns: '业务基因值',
+    },
+    parseTimestamp: {
+      description: '解析绝对时间戳（毫秒）。',
+      type: '(long id) long',
+      returns: 'Unix 毫秒时间戳',
+    },
+    parseMachineId: {
+      description: '解析机器 ID（0~15）。',
+      type: '(long id) long',
+      returns: '机器 ID',
+    },
+    parseDatacenterId: {
+      description: '解析数据中心 ID（0~7）。',
+      type: '(long id) long',
+      returns: '数据中心 ID',
+    },
+    parseSequence: {
+      description: '解析序列号（0~255）。',
+      type: '(long id) long',
+      returns: '序列号',
+    },
+    parseInfo: {
+      description: '解析为 GeneSnowflakeInfoDTO。',
+      type: '(long id) GeneSnowflakeInfoDTO',
+      returns: '完整解析结果',
+    },
+  }}
+/>
+
+### 基因与校验方法
+
+<TypeTable
+  type={{
+    calculateGene: {
+      description: '仅计算业务标识对应的 CRC8 基因值。',
+      type: '(String businessIdentifier) int',
+      returns: '0~255',
+    },
+    verifyGene: {
+      description: '校验 ID 是否匹配业务标识。',
+      type: '(long id, String businessIdentifier) boolean',
+      returns: '匹配返回 true',
+    },
+    isValid: {
+      description: '校验 ID 合法性（参数类型 Long，可传 null）。',
+      type: '(Long id) boolean',
+      returns: '合法返回 true',
+    },
+    getConfigInfo: {
+      description: '返回继承自 SnowflakeUtil 的当前配置摘要。',
+      type: '() String',
+      returns: '配置字符串',
+    },
+    getBitStructure: {
+      description: '返回位结构说明字符串。',
+      type: '() String',
+      returns: '结构描述',
+    },
+  }}
+/>
+
+## 使用示例
+
+```java title="Example.java"
+import com.xlf.utility.utility.GeneSnowflakeUtil;
+
+long userId = GeneSnowflakeUtil.generateId("user");
+long orderId = GeneSnowflakeUtil.generateId("order");
+
+int userGene = GeneSnowflakeUtil.parseGene(userId);
+boolean ok = GeneSnowflakeUtil.verifyGene(orderId, "order");
+```
+
+## 注意事项
+
+- CRC8 基因位存在碰撞概率，不能替代严格业务字段。  
+- 适合做“快速路由/粗粒度分类”，不适合做强一致主业务键判定。  
+- 基因模式吞吐上限低于标准雪花（序列号仅 8 位）。
+
+## 下一步
+
+<Cards>
+  <Card title="GeneSnowflakeInfoDTO" href="/docs/bamboo-base-java/base/snowflake/gene-info-dto" />
+  <Card title="SnowflakeUtil" href="/docs/bamboo-base-java/base/snowflake/util" />
+</Cards>

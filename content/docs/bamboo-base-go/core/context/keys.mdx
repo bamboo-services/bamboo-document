@@ -29,9 +29,10 @@ func (s ContextKey) String() string {
 
 ```go title="context.go"
 const (
-    // [!code highlight:9]
+    // [!code highlight:10]
     Nil              ContextKey = ""                        // 空值
     Exec             ContextKey = "special_execution"       // 特殊执行
+    RegNodeKey       ContextKey = "context_reg_node"        // 注册节点
     RequestKey       ContextKey = "context_request_key"     // 请求唯一标识
     ErrorCodeKey     ContextKey = "context_error_code"      // 错误码
     ErrorMessageKey  ContextKey = "context_error_message"   // 错误描述
@@ -54,6 +55,11 @@ const (
     Exec: {
       description: '特殊执行标记，用于标识特殊执行流程',
       type: 'string',
+      required: false,
+    },
+    RegNodeKey: {
+      description: '注册节点键，用于存储初始化节点管理器',
+      type: '*xRegNode.RegNode',
       required: false,
     },
     RequestKey: {

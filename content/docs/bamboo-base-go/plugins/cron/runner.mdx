@@ -1,0 +1,164 @@
+---
+title: Cron 运行时
+description: Cron 定时任务的启动器配置
+icon: Play
+---
+
+# Cron 运行时
+
+`xCronRunner.New` 函数用于创建并启动 Cron 定时任务服务。它与 `xMain.Runner` 集成，可以统一管理 HTTP 服务和定时任务的信号处理与优雅关闭。
+
+## 函数签名
+
+```go
+// New 创建 Cron 运行时函数
+func New(options ...Option) func(ctx context.Context, option ...any)
+
+// Option 配置函数
+func WithGracefulStopTimeout(timeout time.Duration) Option
+func WithLogger(logger *xLog.LogNamedLogger) Option
+func WithRegister(jobs ...xCron.Job) Option
+func WithSeconds() Option
+func WithLocation(loc *time.Location) Option
+```
+
+## Config 结构
+
+```go
+// Config Cron 运行时配置
+type Config struct {
+    GracefulStopTimeout time.Duration   // 优雅关闭超时
+    Logger              *xLog.LogNamedLogger // 日志记录器
+    Jobs                []xCron.Job        // 任务列表
+    WithSeconds         bool              // 是否启用秒级精度
+    Location            *time.Location     // 时区设置
+}
+```
+
+## 配置选项
+
+### WithGracefulStopTimeout
+设置优雅关闭超时时间，默认 30 秒。
+
+```go
+runner := xCronRunner.New(
+    xCronRunner.WithGracefulStopTimeout(60 * time.Second),
+)
+```
+
+### WithLogger
+设置日志记录器，使用 `xLog.WithName(xLog.NamedCRON)` 创建。
+
+```go
+runner := xCronRunner.New(
+    xCronRunner.WithLogger(xLog.WithName(xLog.NamedCRON)),
+)
+```
+
+### WithRegister
+注册任务列表，可以注册多个任务。
+
+```go
+runner := xCronRunner.New(
+    xCronRunner.WithRegister(job1, job2, job3),
+)
+```
+
+### WithSeconds
+启用秒级精度，默认 Cron 表达式为 5 位（分钟级）。启用后支持 6 位（秒级）。
+
+```go
+runner := xCronRunner.New(
+    xCronRunner.WithSeconds(), // 支持 "*/1 * * * * *" 格式
+)
+```
+
+### WithLocation
+设置时区，默认使用本地时区。
+
+```go
+runner := xCronRunner.New(
+    xCronRunner.WithLocation(time.UTC),
+)
+```
+
+## 与 xMain.Runner 集成
+
+Cron 运行时通过 `xMain.Runner` 的 `goroutineFunc` 参数启动，实现与 HTTP 服务共享信号处理。
+
+### 基本集成
+
+```go
+package main
+
+import (
+    xCron      "github.com/xiaolfeng/bamboo-base/plugins/cron"
+    xCronRunner "github.com/xiaolfeng/bamboo-base/plugins/cron/runner"
+    xLog       "github.com/xiaolfeng/bamboo-base/common/log"
+    xMain      "github.com/xiaolfeng/bamboo-base/major/main"
+    xReg       "github.com/xiaolfeng/bamboo-base/major/register"
+)
+
+func main() {
+    ctx := context.Background()
+
+    // 创建注册中心
+    reg := xReg.Register(ctx, nil)
+
+    // 创建日志
+    log := xLog.WithName(xLog.NamedMAIN, "cron-example")
+
+    // 创建任务
+    jobs := []xCron.Job{
+        xCron.NewJob("@every 1m", func() {
+            log.Info(ctx, "每分钟任务执行")
+        }),
+    }
+
+    // 创建 Cron 运行时
+    cronTask := xCronRunner.New(
+        xCronRunner.WithLogger(xLog.WithName(xLog.NamedCRON)),
+        xCronRunner.WithRegister(jobs...),
+    )
+
+    // 启动服务（HTTP + Cron）
+    xMain.Runner(reg, log, registerRoute, cronTask)
+}
+
+func registerRoute(reg *xReg.Reg) {
+    // 注册 HTTP 路由
+}
+```
+
+### 多任务集成
+
+```go
+// 创建多个任务
+jobs := []xCron.Job{
+    xCron.NewJob("@every 1m", cleanupTask),
+    xCron.NewJob("@every 5m", refreshCacheTask),
+    xCron.NewJob("0 0 * * *", dailyReportTask),  // 每天凌晨执行
+}
+
+// 创建 Cron 运行时
+cronTask := xCronRunner.New(
+    xCronRunner.WithLogger(xLog.WithName(xLog.NamedCRON)),
+    xCronRunner.WithSeconds(),  // 启用秒级精度
+    xCronRunner.WithRegister(jobs...),
+)
+```
+
+## 优雅关闭
+
+当收到 `SIGINT` 或 `SIGTERM` 信号时：
+
+1. Cron 调度器停止接受新任务
+2. 等待当前执行的任务完成
+3. 超时后强制关闭（默认 30 秒）
+
+## 注意事项
+
+- **时区设置**: 确保服务器时区与 Cron 时区一致，避免任务执行时间偏差。
+- **任务幂等性**: 定时任务应该设计为幂等的，避免重复执行导致数据问题。
+- **错误处理**: 任务中的 panic 会被日志记录，但不会导致整个服务崩溃。
+- **资源清理**: 在任务执行完毕后，及时释放资源（如数据库连接、文件句柄）。

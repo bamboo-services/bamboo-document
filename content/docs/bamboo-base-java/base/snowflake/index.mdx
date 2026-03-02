@@ -1,96 +1,76 @@
 ---
 title: 雪花算法
-description: 分布式唯一 ID 生成方案，支持基因位模式与标准模式
+description: 标准雪花 ID 与基因雪花 ID 的生成、解析与验证能力
 icon: Snowflake
 ---
 
 # 雪花算法
 
-筱工具(Java) 内置了改进版的雪花算法（Snowflake），提供高性能、线程安全的分布式唯一 ID 生成能力。相较于标准 Twitter Snowflake 实现，增加了 **基因位（gene）** 的支持，可在 ID 中嵌入额外的业务语义。
+`bamboo-base` 提供两套 ID 能力：
 
-## 64 位 ID 结构
+- **标准雪花 ID**：`SnowflakeIdGenerator` + `SnowflakeUtil`
+- **基因雪花 ID**：`GeneSnowflakeUtil`（在标准雪花基础上嵌入 8 位业务基因）
+
+## 标准雪花结构（64 位）
 
 ```
-┌──────────┬─────────────────┬──────────────┬─────────────┬──────────┬──────────────┐
-│  1 bit   │    41 bits      │   3 bits     │   4 bits    │  3 bits  │   12 bits    │
-│  符号位   │    时间戳        │  数据中心 ID  │   机器 ID    │  基因位   │    序列号     │
-│  (固定 0) │  (毫秒级偏移)    │   (0~7)      │   (0~15)    │  (0~7)   │   (0~4095)   │
-└──────────┴─────────────────┴──────────────┴─────────────┴──────────┴──────────────┘
+[1-bit sign][41-bit timestamp][5-bit datacenter][5-bit machine][12-bit sequence]
 ```
-
-### 各段说明
 
 | 段 | 位数 | 范围 | 说明 |
 |----|------|------|------|
-| 符号位 | 1 bit | 固定为 0 | 保证 ID 为正数 |
-| 时间戳 | 41 bits | 约 69.7 年 | 相对于 epoch 的毫秒偏移量 |
-| 数据中心 ID | 3 bits | 0 ~ 7 | 最多支持 8 个数据中心 |
-| 机器 ID | 4 bits | 0 ~ 15 | 每个数据中心最多 16 台机器 |
-| 基因位 | 3 bits | 0 ~ 7 | 业务基因标识，用于分库分表路由 |
-| 序列号 | 12 bits | 0 ~ 4095 | 同一毫秒内的自增序号 |
+| sign | 1 | 固定 0 | 保证正数 |
+| timestamp | 41 | 约 69 年 | 相对 epoch 的时间偏移 |
+| datacenter | 5 | 0~31 | 数据中心 |
+| machine | 5 | 0~31 | 机器编号 |
+| sequence | 12 | 0~4095 | 同毫秒内序号 |
 
-### 标准模式与基因模式
+## 基因雪花结构（64 位）
 
-**标准模式** 调用 `SnowflakeUtil.generate()` 时，基因位固定为 0，行为等同于经典雪花算法。
+`GeneSnowflakeUtil` 会把标准雪花重组为：
 
-**基因模式** 调用 `SnowflakeUtil.generateWithGene(int gene)` 时，基因位嵌入指定值。该值可用于分库分表场景，使同一基因值的 ID 路由至同一分片，避免跨分片查询。
+```
+[1-bit sign][41-bit timestamp][4-bit machine][8-bit gene][3-bit datacenter][8-bit sequence]
+```
+
+这让 ID 自带业务基因（CRC8 计算），可用于业务分片路由与快速归类。  
+注意：8 位基因存在碰撞概率（理论约 `1/256`）。
 
 ## Spring Boot 配置
 
-雪花算法通过 `bamboo.base.snowflake` 配置项初始化：
+雪花算法通过 `bamboo.base.snowflake` 初始化：
 
 ```yaml title="application.yml"
 bamboo:
   base:
     snowflake:
-      datacenter-id: 1       # 数据中心 ID（0~7）
-      machine-id: 1          # 机器 ID（0~15）
-      epoch: 1690214400000   # 起始时间戳（默认 2023-07-25 00:00:00 UTC）
+      datacenter-id: 1
+      machine-id: 1
+      epoch: 1690214400000
 ```
 
-| 配置项 | 类型 | 默认值 | 说明 |
-|--------|------|--------|------|
-| `datacenter-id` | Long | 1 | 数据中心标识，范围 0~7 |
-| `machine-id` | Long | 1 | 机器标识，范围 0~15 |
-| `epoch` | Long | 1690214400000 | 起始纪元时间戳（2023-07-25 00:00:00 UTC） |
+| 配置项 | 默认值 | 说明 |
+|--------|--------|------|
+| `datacenter-id` | `1` | 数据中心 ID |
+| `machine-id` | `1` | 机器 ID |
+| `epoch` | `1690214400000` | 起始纪元（毫秒） |
 
 ## 自动初始化
 
-框架通过 Spring 组件 `SnowflakeUtilInitializer` 在应用启动时自动完成初始化。该组件读取上述配置项，创建 `SnowflakeIdGenerator` 实例并注入 `SnowflakeUtil`，无需手动调用。
-
-```java title="SnowflakeUtilInitializer.java"
-@Component
-public class SnowflakeUtilInitializer {
-
-    public SnowflakeUtilInitializer(SnowflakeProperties properties) {
-        // [!code highlight:3]
-        // 自动读取配置并初始化雪花算法生成器
-        SnowflakeIdGenerator generator = new SnowflakeIdGenerator(
-            properties.getDatacenterId(),
-            properties.getMachineId(),
-            properties.getEpoch()
-        );
-        SnowflakeUtil.initialize(generator);
-    }
-}
-```
+在 Spring 环境下，`SnowflakeUtilInitializer` 会在启动时读取配置并调用 `SnowflakeUtil.initialize(...)`。  
+在非 Spring 环境下，`SnowflakeUtil` 会按默认值懒初始化生成器。
 
 ## 快速使用
 
 ```java title="Example.java"
 import com.xlf.utility.utility.SnowflakeUtil;
+import com.xlf.utility.utility.GeneSnowflakeUtil;
 
-// [!code highlight:2]
-// 生成标准雪花 ID
-long id = SnowflakeUtil.generate();
+long id = SnowflakeUtil.generateId();
+String idStr = SnowflakeUtil.generateIdString();
 
-// [!code highlight:2]
-// 生成携带基因位的雪花 ID（基因值为 3）
-long geneId = SnowflakeUtil.generateWithGene(3);
-
-// [!code highlight:2]
-// 解析已有 ID
-SnowflakeInfoDTO info = SnowflakeUtil.parse(id);
+long orderId = GeneSnowflakeUtil.generateId("order");
+boolean isOrder = GeneSnowflakeUtil.verifyGene(orderId, "order");
 ```
 
 ## 下一步
@@ -99,4 +79,6 @@ SnowflakeInfoDTO info = SnowflakeUtil.parse(id);
   <Card title="SnowflakeIdGenerator" href="/docs/bamboo-base-java/base/snowflake/generator" />
   <Card title="SnowflakeUtil" href="/docs/bamboo-base-java/base/snowflake/util" />
   <Card title="SnowflakeInfoDTO" href="/docs/bamboo-base-java/base/snowflake/info-dto" />
+  <Card title="GeneSnowflakeUtil" href="/docs/bamboo-base-java/base/snowflake/gene-util" />
+  <Card title="GeneSnowflakeInfoDTO" href="/docs/bamboo-base-java/base/snowflake/gene-info-dto" />
 </Cards>

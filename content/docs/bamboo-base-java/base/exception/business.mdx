@@ -1,0 +1,221 @@
+---
+title: BusinessException
+description: 业务异常基类，用于表示业务逻辑相关的异常情况
+icon: CircleAlert
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# BusinessException
+
+`BusinessException` 是筱工具(Java) 的自定义业务异常类，位于 `com.xlf.utility.exception.library` 包下。继承自 `RuntimeException`，用于在程序运行期间抛出非受检异常，主要描述特定业务场景中的错误。
+
+## 类定义
+
+```java title="BusinessException.java"
+package com.xlf.utility.exception.library;
+
+import com.xlf.utility.ErrorCode;
+import lombok.Getter;
+
+@Getter
+public class BusinessException extends RuntimeException {
+
+    // [!code highlight:4]
+    private final String errorMessage;    // 错误消息
+    private final ErrorCode errorCode;    // 错误代码
+    private final Object data;            // 附加数据
+    private final boolean errorOutput;    // 是否输出详细错误
+
+    // 构造方法...
+}
+```
+
+## 字段说明
+
+<TypeTable
+  type={{
+    errorMessage: {
+      description: '错误消息，描述异常的详细信息。会同时传递给父类 RuntimeException。',
+      type: 'String',
+      required: true,
+    },
+    errorCode: {
+      description: '错误代码枚举，指示具体的错误类型。全局异常处理器会根据此值构造 BaseResponse。',
+      type: 'ErrorCode',
+      required: true,
+    },
+    data: {
+      description: '附加数据，用于携带与错误相关的额外信息。例如验证失败时可携带具体的字段错误列表。',
+      type: 'Object',
+      required: false,
+    },
+    errorOutput: {
+      description: '错误输出标识。为 true 时，全局异常处理器会将 errorMessage 填充到 BaseResponse.errorMessage 字段。',
+      type: 'boolean',
+      required: false,
+      default: 'false',
+    },
+  }}
+/>
+
+## 构造方法
+
+### 主构造方法
+
+```java title="BusinessException.java"
+public BusinessException(
+    String errorMessage,
+    ErrorCode errorCode,
+    Object data,
+    boolean errorOutput
+)
+```
+
+创建完整的业务异常，指定所有属性。构造时会自动打印警告日志。
+
+### 常用构造方法
+
+```java title="BusinessException.java"
+// [!code highlight:2]
+// 仅指定消息和错误码（最常用）
+public BusinessException(String message, ErrorCode errorCode)
+
+// [!code highlight:2]
+// 携带附加数据
+public BusinessException(String message, ErrorCode errorCode, Object data)
+
+// [!code highlight:2]
+// 指定是否输出错误详情
+public BusinessException(String message, ErrorCode errorCode, boolean errorOutput)
+```
+
+## 使用示例
+
+### 基本用法
+
+```java title="UserService.java"
+import com.xlf.utility.ErrorCode;
+import com.xlf.utility.exception.library.BusinessException;
+
+public UserDTO getUserById(Long id) {
+    if (id == null) {
+        // [!code highlight:2]
+        // 抛出简单的业务异常
+        throw new BusinessException("用户 ID 不能为空", ErrorCode.PARAMETER_MISSING);
+    }
+
+    UserDTO user = userMapper.selectById(id);
+    if (user == null) {
+        // [!code highlight:2]
+        throw new BusinessException("用户不存在", ErrorCode.NOT_FOUND);
+    }
+
+    return user;
+}
+```
+
+### 携带附加数据
+
+```java title="ValidateService.java"
+import com.xlf.utility.ErrorCode;
+import com.xlf.utility.exception.library.BusinessException;
+import java.util.Map;
+
+public void validateUser(UserDTO dto) {
+    Map<String, String> errors = new HashMap<>();
+
+    if (dto.getUsername() == null) {
+        errors.put("username", "用户名不能为空");
+    }
+    if (dto.getEmail() == null) {
+        errors.put("email", "邮箱不能为空");
+    }
+
+    if (!errors.isEmpty()) {
+        // [!code highlight:2]
+        // 携带验证错误详情
+        throw new BusinessException("参数验证失败", ErrorCode.PARAMETER_INVALID, errors);
+    }
+}
+```
+
+### 输出错误详情
+
+```java title="AuthService.java"
+import com.xlf.utility.ErrorCode;
+import com.xlf.utility.exception.library.BusinessException;
+
+public void login(LoginDTO dto) {
+    User user = userMapper.selectByUsername(dto.getUsername());
+
+    if (user == null) {
+        // [!code highlight:2]
+        // errorOutput = true，将详细错误信息返回给客户端
+        throw new BusinessException(
+            "用户名 [" + dto.getUsername() + "] 不存在",
+            ErrorCode.LOGIN_FAILED,
+            true
+        );
+    }
+
+    if (!passwordMatch(dto.getPassword(), user.getPassword())) {
+        // [!code highlight:2]
+        throw new BusinessException("密码错误", ErrorCode.LOGIN_FAILED, true);
+    }
+}
+```
+
+## 异常处理流程
+
+```
+┌──────────────────┐
+│  Service 层抛出   │
+│  BusinessException │
+└────────┬─────────┘
+         │
+         ▼
+┌──────────────────┐
+│  全局异常处理器   │
+│  @ControllerAdvice │
+└────────┬─────────┘
+         │
+         ▼
+┌──────────────────┐
+│  构造 BaseResponse │
+│  - errorCode.code │
+│  - errorCode.output│
+│  - message        │
+│  - errorOutput ?  │
+│    errorMessage   │
+└────────┬─────────┘
+         │
+         ▼
+┌──────────────────┐
+│   返回 JSON 响应  │
+└──────────────────┘
+```
+
+## 日志输出
+
+BusinessException 在构造时会自动打印 WARN 级别日志：
+
+```
+业务异常 | 错误代码: PARAMETER_INVALID, 错误消息: 参数验证失败, 附加数据: {username=用户名不能为空}, 错误输出标识: true
+```
+
+## 与其他异常的区别
+
+| 异常类 | 场景 | 特点 |
+|--------|------|------|
+| `BusinessException` | 通用业务异常 | 最常用，适用于大部分业务场景 |
+| `NoPermissionException` | 权限不足 | 专门用于权限校验失败 |
+| `RequestException` | 远程调用失败 | 用于微服务间 HTTP 调用错误 |
+| `DeveloperException` | 开发者错误 | 用于代码逻辑错误，生产环境不应出现 |
+
+## 下一步
+
+<Cards>
+  <Card title="ErrorCode 错误码" href="/docs/bamboo-base-java/base/response/error-code" />
+  <Card title="BaseResponse" href="/docs/bamboo-base-java/base/response/base-response" />
+</Cards>

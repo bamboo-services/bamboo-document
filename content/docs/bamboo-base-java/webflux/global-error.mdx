@@ -1,0 +1,205 @@
+---
+title: GlobalErrorController
+description: 响应式全局错误处理器，实现 ErrorWebExceptionHandler 统一处理未捕获异常
+icon: OctagonAlert
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# GlobalErrorController
+
+`GlobalErrorController` 实现 Spring WebFlux 的 `ErrorWebExceptionHandler` 接口，用于统一处理所有未被 `@ExceptionHandler` 捕获的异常和 HTTP 错误状态。该处理器具有较高的优先级，确保在默认错误处理器之前执行。
+
+## 与 MVC 版本的区别
+
+| 对比项 | MVC 版本 | WebFlux 版本 |
+|--------|---------|--------------|
+| 实现接口 | `ErrorController` | `ErrorWebExceptionHandler` |
+| 处理方法 | 返回 `ResponseEntity` | 返回 `Mono<Void>` |
+| 请求对象 | `HttpServletRequest` | `ServerWebExchange` |
+| 响应写入 | 框架自动处理 | 手动写入 `DataBuffer` |
+
+## 工作原理
+
+```
+HTTP 请求
+    │
+    ▼
+WebFilter Chain
+    │
+    ├── 正常处理 → Handler → 返回 Mono<Response>
+    │
+    └── 异常/错误（未匹配任何 @ExceptionHandler）
+            │
+            ▼
+        GlobalErrorController.handle()
+            │
+            ▼
+        构造 BaseResponse 并写入响应
+            │
+            ▼
+        Mono<Void> 完成
+```
+
+## 错误码映射
+
+| HTTP 状态码 | ErrorCode | 说明 |
+|------------|-----------|------|
+| 400 | `BAD_REQUEST` | 错误请求 |
+| 401 | `UNAUTHORIZED` | 未授权 |
+| 403 | `FORBIDDEN` | 禁止访问 |
+| 404 | `PAGE_NOT_FOUND` | 页面未找到 |
+| 405 | `METHOD_NOT_ALLOWED` | 方法不允许 |
+| 406 | `NOT_ACCEPTABLE` | 不可接受 |
+| 408 | `TIMEOUT` | 请求超时 |
+| 429 | `TOO_MANY_REQUESTS` | 请求过多 |
+| 500 | `SERVER_INTERNAL_ERROR` | 服务器内部错误 |
+| 502 | `GATEWAY_ERROR` | 网关错误 |
+| 503 | `SERVICE_UNAVAILABLE` | 服务不可用 |
+
+## 处理器结构
+
+```java title="GlobalErrorController.java"
+public class GlobalErrorController implements ErrorWebExceptionHandler {
+
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+
+    @Override
+    public @NotNull Mono<Void> handle(ServerWebExchange exchange, @NotNull Throwable ex) {
+        // [!code highlight:2]
+        // 确定状态码
+        HttpStatus status = this.determineHttpStatus(ex);
+        String requestPath = exchange.getRequest().getPath().value();
+
+        // [!code highlight:2]
+        // 映射状态码到 ErrorCode
+        ErrorCode errorCode = this.mapStatusCodeToErrorCode(status.value());
+
+        // [!code highlight:5]
+        // 构建错误详情
+        Map<String, Object> errorDetails = new HashMap<>();
+        errorDetails.put("path", requestPath);
+        errorDetails.put("status", status.value());
+
+        // 使用 ResultUtil 构造响应并写入
+        return ResultUtil.error(errorCode, errorMessage, errorDetails)
+                .flatMap(response -> this.writeResponse(exchange, response));
+    }
+}
+```
+
+## 响应格式
+
+```json title="response.json (404 示例)"
+{
+  "context": "550e8400-e29b-41d4-a716-446655440000",
+  "output": "PageNotFound",
+  "code": 40401,
+  "message": "页面未找到",
+  "errorMessage": "No handler found for GET /api/v1/unknown",
+  "duration": 5,
+  "data": {
+    "path": "/api/v1/unknown",
+    "status": 404
+  }
+}
+```
+
+## 特殊异常处理
+
+### ResponseStatusException
+
+WebFlux 中常见的 `ResponseStatusException` 会被正确处理：
+
+```java title="示例"
+// 在 Handler 中抛出
+throw new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found");
+
+// GlobalErrorController 会提取状态码 404，映射到 PAGE_NOT_FOUND
+```
+
+### IllegalArgumentException
+
+对于 `IllegalArgumentException`，返回 400 状态码：
+
+```java title="GlobalErrorController.java"
+private HttpStatus determineHttpStatus(Throwable ex) {
+    // [!code highlight:3]
+    if (ex instanceof ResponseStatusException rse) {
+        return HttpStatus.valueOf(rse.getStatusCode().value());
+    }
+    if (ex instanceof IllegalArgumentException) {
+        return HttpStatus.BAD_REQUEST;
+    }
+    return HttpStatus.INTERNAL_SERVER_ERROR;
+}
+```
+
+## 响应写入机制
+
+WebFlux 版本需要手动将响应写入 `ServerHttpResponse`：
+
+```java title="GlobalErrorController.java"
+private Mono<Void> writeResponse(
+        ServerWebExchange exchange,
+        ResponseEntity<BaseResponse<Map<String, Object>>> response
+) {
+    ServerHttpResponse serverResponse = exchange.getResponse();
+
+    // [!code highlight:2]
+    // 设置状态码
+    serverResponse.setStatusCode(response.getStatusCode());
+
+    // [!code highlight:2]
+    // 设置内容类型
+    serverResponse.getHeaders().setContentType(MediaType.APPLICATION_JSON);
+
+    // [!code highlight:4]
+    // 序列化响应体
+    try {
+        String jsonBody = OBJECT_MAPPER.writeValueAsString(response.getBody());
+        DataBuffer buffer = serverResponse.bufferFactory()
+                .wrap(jsonBody.getBytes(StandardCharsets.UTF_8));
+        return serverResponse.writeWith(Mono.just(buffer));
+    } catch (JsonProcessingException e) {
+        // 序列化失败时的降级处理
+        String fallbackBody = "{\"output\":\"UnknownError\",\"code\":50999}";
+        DataBuffer buffer = serverResponse.bufferFactory()
+                .wrap(fallbackBody.getBytes(StandardCharsets.UTF_8));
+        return serverResponse.writeWith(Mono.just(buffer));
+    }
+}
+```
+
+## 与异常处理器的关系
+
+`GlobalErrorController` 是异常处理的最后一道防线：
+
+```
+异常抛出
+    │
+    ▼
+@ExceptionHandler 匹配？
+    │
+    ├── 是 → 对应的 ExceptionHandler 处理
+    │
+    └── 否 → WebFlux 传播至 ErrorWebExceptionHandler
+                │
+                ▼
+            GlobalErrorController.handle() 处理
+```
+
+## 注意事项
+
+- `GlobalErrorController` 由 `WebFluxSdkAutoConfiguration` 自动注册，无需手动声明
+- 该处理器仅处理未被 `@ExceptionHandler` 捕获的错误
+- 响应格式与 `ResultUtil.error()` 保持一致，确保前端处理逻辑统一
+- 序列化失败时会返回降级响应，避免级联错误
+
+## 下一步
+
+<Cards>
+  <Card title="异常处理概览" href="/docs/bamboo-base-java/webflux/exception" />
+  <Card title="响应式 ResultUtil" href="/docs/bamboo-base-java/webflux/result-util" />
+  <Card title="自动配置" href="/docs/bamboo-base-java/webflux/auto-configuration" />
+</Cards>

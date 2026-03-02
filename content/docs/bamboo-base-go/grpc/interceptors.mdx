@@ -198,8 +198,8 @@ func UnaryAppVerify(mainCtx context.Context) grpc.UnaryServerInterceptor {
 
     return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
         // 从 metadata 提取认证信息
-        appIDStr, xErr := xUtil.ExtractMetadata(ctx, xGrpcConst.MetadataAppAccessID)
-        secretKey, xErr := xUtil.ExtractMetadata(ctx, xGrpcConst.MetadataAppSecretKey)
+        appIDStr, xErr := xGrpcUtil.ExtractMetadata(ctx, xGrpcConst.MetadataAppAccessID)
+        secretKey, xErr := xGrpcUtil.ExtractMetadata(ctx, xGrpcConst.MetadataAppSecretKey)
         if xErr != nil {
             return nil, xErr
         }

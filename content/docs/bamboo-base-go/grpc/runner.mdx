@@ -147,6 +147,7 @@ xGrpcRunner.WithStreamInterceptors(
 
 ## 错误处理
 
+
 `xGrpcRunner` 配合 `ResponseBuilder` 拦截器与 `xError` 使用。业务 handler 直接返回 `*xError.Error`，`ResponseBuilder` 自动将其映射为标准 gRPC status 返回给客户端。
 
 详见 [内置拦截器](/docs/bamboo-base-go/grpc/interceptors) 中的 ResponseBuilder 章节。

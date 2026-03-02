@@ -5,6 +5,8 @@
     "index",
     "generator",
     "util",
-    "info-dto"
+    "info-dto",
+    "gene-util",
+    "gene-info-dto"
   ]
 }

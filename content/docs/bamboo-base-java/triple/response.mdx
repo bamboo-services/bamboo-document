@@ -47,7 +47,7 @@ public class TripleResponse<T> implements Serializable {
       required: true,
     },
     code: {
-      description: '状态码。来源于 ErrorCode 枚举，用于标识具体的响应类型。',
+      description: '状态码字符串。成功固定为 `"200"`；错误时通常为 ErrorCode 数值码（如 `"40403"`、`"50001"`）。',
       type: 'String',
       required: true,
     },
@@ -82,7 +82,7 @@ public class TripleResponse<T> implements Serializable {
 {
   "context": "550e8400-e29b-41d4-a716-446655440000",
   "success": true,
-  "code": "SUCCESS",
+  "code": "200",
   "message": "查询成功",
   "data": {
     "userId": 10001,
@@ -100,8 +100,8 @@ public class TripleResponse<T> implements Serializable {
 {
   "context": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
   "success": false,
-  "code": "PARAMETER_ERROR",
-  "message": "用户 ID 不能为空",
+  "code": "40004",
+  "message": "参数无效: 用户 ID 不能为空",
   "data": null,
   "duration": 2,
   "timestamp": 1772620800000
@@ -114,8 +114,8 @@ public class TripleResponse<T> implements Serializable {
 {
   "context": "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
   "success": false,
-  "code": "SERVER_INTERNAL_ERROR",
-  "message": "服务内部异常",
+  "code": "500",
+  "message": "系统异常: NullPointerException",
   "data": null,
   "duration": 156,
   "timestamp": 1772620800000
@@ -127,7 +127,7 @@ public class TripleResponse<T> implements Serializable {
 | 维度 | `BaseResponse<E>` | `TripleResponse<T>` |
 |------|-------------------|---------------------|
 | 适用场景 | HTTP REST API | Dubbo Triple RPC |
-| 状态码类型 | `Integer`（5 位数字码） | `String`（枚举名称） |
+| 状态码类型 | `Integer`（5 位数字码） | `String`（数字码字符串） |
 | 序列化 | Jackson JSON | Dubbo 序列化（Protobuf / Hessian2） |
 | 上下文来源 | MVC ContextHolder | Dubbo ContextHolder |
 | 成功标志 | 依据 code 判断 | 显式 `success` 布尔值 |
@@ -145,7 +145,7 @@ TripleResponse<UserDTO> response = TripleResult.success(userDTO, "查询成功")
 TripleResponse<UserDTO> response = TripleResponse.<UserDTO>builder()
         .context(ContextHolder.getContextId())
         .success(true)
-        .code("SUCCESS")
+        .code("200")
         .message("查询成功")
         .data(userDTO)
         .duration(ContextHolder.getDuration())

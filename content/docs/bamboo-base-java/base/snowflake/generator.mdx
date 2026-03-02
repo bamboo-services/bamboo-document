@@ -1,6 +1,6 @@
 ---
 title: SnowflakeIdGenerator
-description: 雪花算法核心生成器，基于位运算实现线程安全的分布式 ID 生成
+description: 标准雪花算法生成器，实现 MyBatis-Plus IdentifierGenerator
 icon: Cog
 ---
 
@@ -8,131 +8,91 @@ import { TypeTable } from '@/components/type-table';
 
 # SnowflakeIdGenerator
 
-`SnowflakeIdGenerator` 是雪花算法的核心实现类，位于 `com.xlf.utility.incrementer` 包下。该类通过位运算与同步机制，保证在分布式环境中生成全局唯一、趋势递增的 64 位长整型 ID。
+`SnowflakeIdGenerator` 位于 `com.xlf.utility.incrementer`，是标准雪花算法核心实现。  
+它实现了 MyBatis-Plus 的 `IdentifierGenerator` 接口，核心生成方法为 `nextId(Object entity)`。
 
 ## 类定义
 
 ```java title="SnowflakeIdGenerator.java"
 package com.xlf.utility.incrementer;
 
-public class SnowflakeIdGenerator {
+public class SnowflakeIdGenerator implements IdentifierGenerator {
 
-    // [!code highlight:4]
-    // 构造方法：指定数据中心 ID、机器 ID 与起始纪元
-    public SnowflakeIdGenerator(long datacenterId, long machineId, long epoch) {
-        // 参数校验与初始化
+    public SnowflakeIdGenerator() {}
+
+    public SnowflakeIdGenerator(long datacenterId, long machineId) {
+        configure(datacenterId, machineId);
     }
 
-    // [!code highlight:2]
-    // 线程安全的 ID 生成方法
-    public synchronized long nextId() { ... }
+    public SnowflakeIdGenerator(long datacenterId, long machineId, long epoch) {
+        this.epoch = epoch;
+        configure(datacenterId, machineId);
+    }
+
+    public void configure(long datacenterId, long machineId) { ... }
+
+    @Override
+    public Number nextId(Object entity) { ... }
+
+    @Override
+    public String nextUUID(Object entity) { ... }
 }
 ```
 
-## 构造参数
+## 参数与范围
 
 <TypeTable
   type={{
     datacenterId: {
-      description: '数据中心标识。与机器 ID 共同确定生成器在集群中的唯一位置。',
+      description: '数据中心 ID，范围 0~31。',
       type: 'long',
       required: true,
-      default: '1',
     },
     machineId: {
-      description: '机器标识。同一数据中心内的不同实例须分配不同的机器 ID。',
+      description: '机器 ID，范围 0~31。',
       type: 'long',
       required: true,
-      default: '1',
     },
     epoch: {
-      description: '起始纪元时间戳（毫秒）。所有生成的 ID 中的时间戳均为相对于此值的偏移量。',
+      description: '纪元起点（毫秒时间戳）。',
       type: 'long',
-      required: true,
-      default: '1690214400000 (2023-07-25)',
+      required: false,
+      default: '1729440000000',
     },
   }}
 />
 
-## 位布局常量
+## 关键行为
 
-生成器内部定义了以下位布局常量，决定 64 位 ID 中各段的位置与容量：
-
-| 常量 | 值 | 说明 |
-|------|------|------|
-| `TIMESTAMP_BITS` | 41 | 时间戳占用位数 |
-| `DATACENTER_BITS` | 3 | 数据中心 ID 占用位数 |
-| `MACHINE_BITS` | 4 | 机器 ID 占用位数 |
-| `GENE_BITS` | 3 | 基因位占用位数 |
-| `SEQUENCE_BITS` | 12 | 序列号占用位数 |
-| `MAX_DATACENTER_ID` | 7 | 数据中心 ID 最大值 (2^3 - 1) |
-| `MAX_MACHINE_ID` | 15 | 机器 ID 最大值 (2^4 - 1) |
-| `MAX_SEQUENCE` | 4095 | 序列号最大值 (2^12 - 1) |
-
-## ID 生成流程
-
-`nextId()` 方法使用 `synchronized` 关键字保证线程安全，其核心流程如下：
-
-```java title="SnowflakeIdGenerator.java"
-public synchronized long nextId() {
-    long currentTimestamp = System.currentTimeMillis();
-
-    // [!code highlight:4]
-    // 时钟回拨检测
-    if (currentTimestamp < lastTimestamp) {
-        throw new RuntimeException("时钟回拨，拒绝生成 ID");
-    }
-
-    // [!code highlight:5]
-    // 同一毫秒内序列号自增
-    if (currentTimestamp == lastTimestamp) {
-        sequence = (sequence + 1) & MAX_SEQUENCE;
-        if (sequence == 0) {
-            // 序列号溢出，等待下一毫秒
-            currentTimestamp = waitNextMillis(lastTimestamp);
-        }
-    } else {
-        sequence = 0;
-    }
-
-    lastTimestamp = currentTimestamp;
-
-    // [!code highlight:6]
-    // 位运算组装 64 位 ID
-    return ((currentTimestamp - epoch) << (DATACENTER_BITS + MACHINE_BITS + GENE_BITS + SEQUENCE_BITS))
-         | (datacenterId << (MACHINE_BITS + GENE_BITS + SEQUENCE_BITS))
-         | (machineId << (GENE_BITS + SEQUENCE_BITS))
-         | (gene << SEQUENCE_BITS)
-         | sequence;
-}
-```
-
-### 流程说明
-
-1. **获取当前时间戳** - 取系统当前毫秒时间
-2. **时钟回拨检测** - 若当前时间早于上次生成时间，抛出异常拒绝生成，防止 ID 重复
-3. **序列号管理** - 同一毫秒内序列号自增；若溢出（超过 4095），阻塞等待下一毫秒
-4. **位运算组装** - 将时间戳、数据中心 ID、机器 ID、基因位、序列号按位拼接为 64 位长整型
-
-## 时钟回拨处理
-
-当检测到系统时钟回拨时，生成器将直接抛出 `RuntimeException`。这是一种保守策略，确保在任何情况下都不会生成重复 ID。在生产环境中，建议通过 NTP 服务保证时钟同步。
+- 生成方法使用内部 `lock` 同步，保证并发安全。  
+- 同毫秒内序列号自增，溢出后自旋等待下一毫秒。  
+- 检测到时钟回拨时，会抛出 `BusinessException`（`SERVER_INTERNAL_ERROR`）。  
+- 未调用 `configure(...)` 就生成 ID，也会抛 `BusinessException`。
 
 ## 使用示例
 
-通常不需要直接使用 `SnowflakeIdGenerator`，而是通过 `SnowflakeUtil` 的静态方法调用。若需手动创建生成器：
+### 手动创建并生成
 
 ```java title="Example.java"
 import com.xlf.utility.incrementer.SnowflakeIdGenerator;
 
-// [!code highlight:2]
-// 手动创建生成器实例
 SnowflakeIdGenerator generator = new SnowflakeIdGenerator(1, 1, 1690214400000L);
-
-// [!code highlight:2]
-// 生成 ID
-long id = generator.nextId();
+Long id = (Long) generator.nextId(null);
+String idString = generator.nextUUID(null);
 ```
+
+### 默认构造 + configure
+
+```java title="Example.java"
+SnowflakeIdGenerator generator = new SnowflakeIdGenerator();
+generator.configure(2, 10);
+Long id = (Long) generator.nextId(null);
+```
+
+## 与 `SnowflakeUtil` 的关系
+
+`SnowflakeUtil` 是该生成器的静态门面。  
+业务层通常直接用 `SnowflakeUtil.generateId()`；只有自定义初始化流程时才直接操作生成器。
 
 ## 下一步
 

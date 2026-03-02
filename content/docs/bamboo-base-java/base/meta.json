@@ -4,6 +4,10 @@
   "pages": [
     "index",
     "response",
-    "snowflake"
+    "exception",
+    "dto",
+    "---ID 生成---",
+    "snowflake",
+    "uuid"
   ]
 }

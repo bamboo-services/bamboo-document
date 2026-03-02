@@ -1,7 +1,7 @@
 ---
 title: 公共业务异常
 description: PublicExceptionHandler 处理框架定义的业务级异常，覆盖认证、权限、参数校验等场景
-icon: AlertTriangle
+icon: TriangleAlert
 ---
 
 import { TypeTable } from '@/components/type-table';
@@ -104,7 +104,7 @@ public class UserService {
             // [!code highlight:3]
             // 抛出业务异常，指定错误码和错误消息
             throw new BusinessException(
-                ErrorCode.PAGE_NOT_FOUND, "用户不存在"
+                "用户不存在", ErrorCode.PAGE_NOT_FOUND
             );
         }
         return convertToVO(user);
@@ -114,7 +114,7 @@ public class UserService {
         if (!isValidEmail(email)) {
             // [!code highlight:2]
             throw new BusinessException(
-                ErrorCode.PARAMETER_ERROR, "邮箱格式不正确"
+                "邮箱格式不正确", ErrorCode.PARAMETER_ERROR
             );
         }
         // 业务逻辑...
@@ -149,28 +149,28 @@ public class PublicExceptionHandler extends JavaBaseExceptionHandler {
 
 ## 响应示例
 
-抛出 `BusinessException(ErrorCode.PAGE_NOT_FOUND, "用户不存在")` 时：
+抛出 `BusinessException("用户不存在", ErrorCode.PAGE_NOT_FOUND)` 时：
 
 ```json title="response.json"
 {
   "context": "550e8400-e29b-41d4-a716-446655440000",
   "output": "PAGE_NOT_FOUND",
-  "code": 40400,
+  "code": 40403,
   "message": null,
-  "error_message": "用户不存在",
+  "errorMessage": "用户不存在",
   "duration": 8,
   "data": null
 }
 ```
 
-HTTP 状态码为 `404`（40400 / 100）。
+HTTP 状态码为 `404`（40403 / 100）。
 
 ## 异常选择指南
 
 | 场景 | 推荐异常 |
 |------|---------|
 | 通用业务错误 | `BusinessException` |
-| 资源不存在 | `PageNotFoundedException` 或 `BusinessException(PAGE_NOT_FOUND, ...)` |
+| 资源不存在 | `PageNotFoundedException` 或 `BusinessException("...", PAGE_NOT_FOUND)` |
 | 参数校验失败 | `CheckFailureException` |
 | 用户未登录/令牌过期 | `UserAuthenticationException` |
 | 权限不足 | `NoPermissionException` |

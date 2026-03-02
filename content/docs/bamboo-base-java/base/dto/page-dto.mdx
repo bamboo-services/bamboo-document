@@ -1,0 +1,238 @@
+---
+title: PageDTO
+description: 分页数据传输对象，用于标准化分页查询结果
+icon: Layers
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# PageDTO
+
+`PageDTO<T>` 是筱工具(Java) 的分页数据传输对象，位于 `com.xlf.utility.models.dto` 包下。用于标准化分页查询的响应格式，支持泛型以适配任意类型的数据记录。
+
+## 类定义
+
+```java title="PageDTO.java"
+package com.xlf.utility.models.dto;
+
+import lombok.Data;
+import lombok.AllArgsConstructor;
+import lombok.experimental.Accessors;
+import java.util.List;
+
+// [!code highlight:2]
+@Data
+@Accessors(chain = true)  // 支持链式调用
+@AllArgsConstructor
+public class PageDTO<T> {
+    private List<T> records;  // 数据记录列表
+    private Long total;       // 总记录数
+    private Long size;        // 每页大小
+    private Long current;     // 当前页码
+}
+```
+
+## 字段说明
+
+<TypeTable
+  type={{
+    records: {
+      description: '当前页的数据记录列表。泛型 T 支持任意类型的实体或 DTO。',
+      type: 'List<T>',
+      required: true,
+    },
+    total: {
+      description: '总记录数，用于前端计算总页数和分页导航。',
+      type: 'Long',
+      required: true,
+    },
+    size: {
+      description: '每页大小，即当前分页的容量。',
+      type: 'Long',
+      required: true,
+    },
+    current: {
+      description: '当前页码。通常从 1 开始计数（由业务层约束）。',
+      type: 'Long',
+      required: true,
+    },
+  }}
+/>
+
+## 构造方法
+
+### 空构造方法
+
+```java title="PageDTO.java"
+public PageDTO() {
+    this.total = 0L;
+    this.size = 0L;
+    this.current = 0L;
+    this.records = new ArrayList<>();
+}
+```
+
+创建空的分页对象，所有字段初始化为默认值。
+
+### 指定总数和大小
+
+```java title="PageDTO.java"
+public PageDTO(long total, long size) {
+    this.total = total;
+    this.size = size;
+    this.records = new ArrayList<>();
+}
+```
+
+创建指定总数和每页大小的分页对象，记录列表初始化为空。
+
+### 全参构造
+
+```java title="PageDTO.java"
+public PageDTO(List<T> records, Long total, Long size, Long current)
+```
+
+通过 Lombok `@AllArgsConstructor` 生成，指定所有字段值。
+
+## 使用示例
+
+### 在 Service 中构建
+
+```java title="UserService.java"
+import com.xlf.utility.models.dto.PageDTO;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+
+@Service
+public class UserService {
+
+    public PageDTO<UserDTO> getUserList(int pageNum, int pageSize) {
+        // [!code highlight:5]
+        // 使用 MyBatis-Plus 分页查询
+        Page<UserDO> page = userMapper.selectPage(
+            new Page<>(pageNum, pageSize),
+            new LambdaQueryWrapper<UserDO>()
+                .eq(UserDO::getStatus, 1)
+                .orderByDesc(UserDO::getCreatedAt)
+        );
+
+        // 转换为 PageDTO
+        PageDTO<UserDTO> result = new PageDTO<>();
+        result.setRecords(convertToDTO(page.getRecords()));
+        result.setTotal(page.getTotal());
+        result.setSize(page.getSize());
+        result.setCurrent(page.getCurrent());
+
+        return result;
+    }
+}
+```
+
+### 链式调用
+
+```java title="UserService.java"
+import com.xlf.utility.models.dto.PageDTO;
+
+public PageDTO<UserDTO> getUserList(int pageNum, int pageSize) {
+    List<UserDTO> users = userMapper.selectList(pageNum, pageSize);
+    long total = userMapper.selectCount();
+
+    // [!code highlight:6]
+    // 使用链式调用
+    return new PageDTO<UserDTO>()
+        .setRecords(users)
+        .setTotal(total)
+        .setSize((long) pageSize)
+        .setCurrent((long) pageNum);
+}
+```
+
+### 在 Controller 中返回
+
+```java title="UserController.java"
+import com.xlf.utility.BaseResponse;
+import com.xlf.utility.models.dto.PageDTO;
+
+@RestController
+@RequestMapping("/api/v1/user")
+public class UserController {
+
+    @GetMapping("/list")
+    public BaseResponse<PageDTO<UserDTO>> getUserList(
+        @RequestParam(defaultValue = "1") int pageNum,
+        @RequestParam(defaultValue = "10") int pageSize
+    ) {
+        PageDTO<UserDTO> pageData = userService.getUserList(pageNum, pageSize);
+
+        return new BaseResponse<>(
+            null,
+            "Success",
+            200,
+            "获取成功",
+            null,
+            null,
+            pageData
+        );
+    }
+}
+```
+
+### JSON 响应示例
+
+```json title="response.json"
+{
+  "context": "550e8400-e29b-41d4-a716-446655440000",
+  "output": "Success",
+  "code": 200,
+  "message": "获取成功",
+  "duration": 25,
+  "data": {
+    "records": [
+      { "id": 1, "username": "user1", "email": "user1@example.com" },
+      { "id": 2, "username": "user2", "email": "user2@example.com" }
+    ],
+    "total": 100,
+    "size": 10,
+    "current": 1
+  }
+}
+```
+
+### 从 JSON 设置记录
+
+```java title="Example.java"
+import com.xlf.utility.models.dto.PageDTO;
+
+// [!code highlight:2]
+// 从 JSON 字符串设置记录（依赖 hutool-json）
+String jsonRecords = "[{\"id\":1,\"name\":\"test\"}]";
+PageDTO<UserDTO> page = new PageDTO<>(100L, 10L);
+page.setRecords(jsonRecords, UserDTO.class);
+```
+
+## 前端分页计算
+
+前端可根据 PageDTO 的字段计算分页信息：
+
+```javascript title="pagination.js"
+// 总页数
+const totalPages = Math.ceil(pageData.total / pageData.size);
+
+// 是否有上一页
+const hasPrevious = pageData.current > 1;
+
+// 是否有下一页
+const hasNext = pageData.current < totalPages;
+
+// 起始记录号
+const startRecord = (pageData.current - 1) * pageData.size + 1;
+
+// 结束记录号
+const endRecord = Math.min(pageData.current * pageData.size, pageData.total);
+```
+
+## 下一步
+
+<Cards>
+  <Card title="BaseResponse" href="/docs/bamboo-base-java/base/response/base-response" />
+  <Card title="BusinessException" href="/docs/bamboo-base-java/base/exception/business" />
+</Cards>

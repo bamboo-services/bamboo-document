@@ -45,7 +45,7 @@ public Mono<UserDTO> getUserById(Long id) {
             .switchIfEmpty(Mono.error(
                     // [!code highlight:2]
                     // 抛出业务异常，会被 PublicExceptionHandler 捕获
-                    new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "用户不存在")
+                    new BusinessException("用户不存在", ErrorCode.RESOURCE_NOT_FOUND)
             ));
 }
 ```
@@ -150,9 +150,9 @@ public Mono<UserDTO> authenticate(ServerWebExchange exchange) {
 {
   "context": "550e8400-e29b-41d4-a716-446655440000",
   "output": "RESOURCE_NOT_FOUND",
-  "code": 40400,
+  "code": 40403,
   "message": "资源不存在",
-  "error_message": "用户不存在",
+  "errorMessage": "用户不存在",
   "duration": 5,
   "data": null
 }
@@ -164,9 +164,9 @@ public Mono<UserDTO> authenticate(ServerWebExchange exchange) {
 {
   "context": "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
   "output": "USER_NOT_LOGIN",
-  "code": 40100,
+  "code": 40101,
   "message": "用户未登录",
-  "error_message": "请先登录后再操作",
+  "errorMessage": "请先登录后再操作",
   "duration": 2,
   "data": null
 }

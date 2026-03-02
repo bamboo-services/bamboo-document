@@ -1,0 +1,80 @@
+---
+title: Cron 定时任务（可选）
+description: Bamboo Base 的可选 Cron 定时任务能力
+icon: Timer
+---
+
+# Cron 定时任务（可选）
+
+`bamboo-base-go` 的核心是 HTTP + 节点化初始化；Cron 属于**可选扩展能力**，按需接入。
+
+适用场景：
+
+- 需要定时执行后台任务（如数据清理、报表生成、缓存刷新）。
+- 希望与 `xMain.Runner` 共享同一套信号处理与优雅关闭流程。
+- 需要统一的日志记录与错误处理。
+
+## 快速入口
+
+<Cards>
+  <Card title="Job 定义" href="/docs/bamboo-base-go/plugins/cron/job" />
+  <Card title="Cron 运行时" href="/docs/bamboo-base-go/plugins/cron/runner" />
+  <Card title="快速开始" href="/docs/bamboo-base-go/quick-start" />
+</Cards>
+
+## 功能特性
+
+- **多种 Cron 表达式**: 支持标准 5 位表达式和 `@every` 语法
+- **灵活的函数签名**: 支持 `func()` 和 `func(context.Context)` 两种签名
+- **优雅关闭**: 与主程序共享信号处理，支持优雅关闭
+- **可选秒级精度**: 支持秒级 Cron 表达式
+- **时区支持**: 可配置自定义时区
+- **日志集成**: 与 `xLog` 深度集成，统一日志格式
+
+## 模块导入
+
+```go
+import (
+    xCron      "github.com/xiaolfeng/bamboo-base/plugins/cron"
+    xCronRunner "github.com/xiaolfeng/bamboo-base/plugins/cron/runner"
+)
+```
+
+## 快速示例
+
+```go
+package main
+
+import (
+    xCron      "github.com/xiaolfeng/bamboo-base/plugins/cron"
+    xCronRunner "github.com/xiaolfeng/bamboo-base/plugins/cron/runner"
+    xLog       "github.com/xiaolfeng/bamboo-base/common/log"
+    xMain      "github.com/xiaolfeng/bamboo-base/major/main"
+    xReg       "github.com/xiaolfeng/bamboo-base/major/register"
+)
+
+func main() {
+    // 创建注册中心
+    reg := xReg.Register(ctx, nil)
+    log := xLog.WithName(xLog.NamedMAIN)
+
+    // 定义定时任务
+    jobs := []xCron.Job{
+        xCron.NewJob("@every 1m", func() {
+            log.Info(ctx, "每分钟执行一次的任务")
+        }),
+        xCron.NewJob("0 0 * * *", func(ctx context.Context) {
+            log.Info(ctx, "每天凌晨执行的任务")
+        }),
+    }
+
+    // 创建 Cron 运行时
+    cronTask := xCronRunner.New(
+        xCronRunner.WithLogger(xLog.WithName(xLog.NamedCRON)),
+        xCronRunner.WithRegister(jobs...),
+    )
+
+    // 启动服务（HTTP + Cron）
+    xMain.Runner(reg, log, registerRoute, cronTask)
+}
+```

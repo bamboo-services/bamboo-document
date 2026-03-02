@@ -118,12 +118,12 @@ public void recordUserAction(HttpServletRequest request, String action) {
 public void validateReferer(HttpServletRequest request) {
     // [!code highlight:2]
     if (!HeaderUtil.hasReferer(request)) {
-        throw new BusinessException(ErrorCode.FORBIDDEN, "缺少 Referer");
+        throw new BusinessException("缺少 Referer", ErrorCode.FORBIDDEN);
     }
 
     String referer = HeaderUtil.getReferer(request);
     if (!isAllowedReferer(referer)) {
-        throw new BusinessException(ErrorCode.FORBIDDEN, "非法来源");
+        throw new BusinessException("非法来源", ErrorCode.FORBIDDEN);
     }
 }
 ```

@@ -1,126 +1,164 @@
 ---
-title: JavaBaseExceptionHandler
-description: Java 标准库异常的响应式处理器
+title: Java 基础异常
+description: JavaBaseExceptionHandler 处理 Java 标准库中的常见运行时异常与受检异常（响应式版本）
 icon: Bug
 ---
 
+import { TypeTable } from '@/components/type-table';
+
 # JavaBaseExceptionHandler
 
-`JavaBaseExceptionHandler` 是异常处理器链的最底层，负责捕获 Java 标准库中的常见异常，并将其转换为标准化的 `Mono<ResponseEntity<BaseResponse<Void>>>` 响应。
+`JavaBaseExceptionHandler` 是异常处理链的最底层，负责捕获 Java 标准库中的常见异常。该处理器标注 `@RestControllerAdvice`，所有异常均转换为标准化的 `Mono<ResponseEntity<BaseResponse<T>>>` 响应。
 
-## 类定义
+## 与 MVC 版本的区别
 
-```java title="JavaBaseExceptionHandler.java"
-// [!code highlight:3]
-// 异常处理器链的基础层，处理 Java 标准库异常
-@RestControllerAdvice
-public class JavaBaseExceptionHandler {
-    // ...
-}
+WebFlux 版本的异常处理器返回 `Mono` 包装的响应式响应，其余逻辑与 MVC 版本完全一致：
+
+```java title="对比"
+// MVC 版本
+public ResponseEntity<BaseResponse<Void>> handleException(Exception e)
+
+// WebFlux 版本
+public Mono<ResponseEntity<BaseResponse<Void>>> handleException(Exception e)
 ```
 
 ## 处理的异常类型
 
+### 客户端错误（4xx）
+
+<TypeTable
+  type={{
+    IllegalArgumentException: {
+      description: '非法参数异常，方法接收到不合法的参数值',
+      type: 'ErrorCode.PARAMETER_ERROR (40002)',
+    },
+    FileNotFoundException: {
+      description: '文件未找到异常',
+      type: 'ErrorCode.NOT_EXIST (40000)',
+    },
+    SecurityException: {
+      description: '安全异常，违反安全策略',
+      type: 'ErrorCode.UNAUTHORIZED (40101)',
+    },
+    TimeoutException: {
+      description: '超时异常，操作在规定时间内未完成',
+      type: 'ErrorCode.TIMEOUT (40801)',
+    },
+  }}
+/>
+
+### 服务端错误（5xx）
+
+<TypeTable
+  type={{
+    IOException: {
+      description: 'I/O 操作异常，如文件读写失败、网络连接中断',
+      type: 'ErrorCode.OPERATION_FAILED (40018)',
+    },
+    NullPointerException: {
+      description: '空指针异常，访问 null 引用的成员',
+      type: 'ErrorCode.SERVER_INTERNAL_ERROR (50001)',
+    },
+    ClassCastException: {
+      description: '类型转换异常，对象无法转换为目标类型',
+      type: 'ErrorCode.SERVER_INTERNAL_ERROR (50001)',
+    },
+    ArrayIndexOutOfBoundsException: {
+      description: '数组下标越界异常',
+      type: 'ErrorCode.SERVER_INTERNAL_ERROR (50001)',
+    },
+    ArithmeticException: {
+      description: '算术异常，如除以零',
+      type: 'ErrorCode.SERVER_INTERNAL_ERROR (50001)',
+    },
+    UnsupportedOperationException: {
+      description: '不支持的操作异常，调用了未实现的方法',
+      type: 'ErrorCode.OPERATION_FAILED (40018)',
+    },
+    ConcurrentModificationException: {
+      description: '并发修改异常，在迭代过程中修改集合',
+      type: 'ErrorCode.SERVER_INTERNAL_ERROR (50001)',
+    },
+    IllegalStateException: {
+      description: '非法状态异常，对象处于不适当的状态',
+      type: 'ErrorCode.OPERATION_FAILED (40018)',
+    },
+    Exception: {
+      description: '兜底处理器，捕获所有未被其他处理器匹配的异常',
+      type: 'ErrorCode.SERVER_INTERNAL_ERROR (50001)',
+    },
+  }}
+/>
+
+## 处理器结构
+
+```java title="JavaBaseExceptionHandler.java"
+@RestControllerAdvice
+class JavaBaseExceptionHandler implements IJavaException {
+
+    protected static final Logger log = LoggerFactory.getLogger(JavaBaseExceptionHandler.class);
+
+    // [!code highlight:5]
+    @ExceptionHandler(NullPointerException.class)
+    public Mono<ResponseEntity<BaseResponse<Object>>> handleNullPointerException(NullPointerException e) {
+        log.error("空指针异常 | {}", e.getMessage(), e);
+        Map<String, String> errorData = Map.of(
+            "message", e.getMessage() != null ? e.getMessage() : "null pointer"
+        );
+        return ResultUtil.error(ErrorCode.SERVER_INTERNAL_ERROR, "空指针异常", errorData);
+    }
+
+    // [!code highlight:3]
+    @ExceptionHandler(IllegalArgumentException.class)
+    public Mono<ResponseEntity<BaseResponse<IllegalArgumentException>>> handleIllegalArgumentException(IllegalArgumentException e) {
+        log.warn("非法参数 | {}", e.getMessage());
+        return ResultUtil.error(ErrorCode.PARAMETER_ERROR, "非法参数: " + e.getMessage(), null);
+    }
+
+    // [!code highlight:3]
+    @ExceptionHandler(TimeoutException.class)
+    public Mono<ResponseEntity<BaseResponse<TimeoutException>>> handleTimeoutException(TimeoutException e) {
+        log.warn("操作超时异常 | {}", e.getMessage());
+        return ResultUtil.error(ErrorCode.TIMEOUT, "操作超时: " + e.getMessage(), null);
+    }
+
+    // ... 其他异常处理方法
+}
+```
+
+## 响应示例
+
 ### NullPointerException
-
-空指针异常，通常由未初始化的对象引用触发。
-
-```java title="JavaBaseExceptionHandler.java"
-@ExceptionHandler(NullPointerException.class)
-public Mono<ResponseEntity<BaseResponse<Void>>> handleNullPointer(NullPointerException e) {
-    // [!code highlight:2]
-    // 返回 500 状态码，包含空指针异常的详细信息
-    return ResultUtil.error(ErrorCode.SERVER_INTERNAL_ERROR, e.getMessage(), null);
-}
-```
-
-### IllegalArgumentException
-
-非法参数异常，由方法参数校验失败触发。
-
-```java title="JavaBaseExceptionHandler.java"
-@ExceptionHandler(IllegalArgumentException.class)
-public Mono<ResponseEntity<BaseResponse<Void>>> handleIllegalArgument(IllegalArgumentException e) {
-    return ResultUtil.error(ErrorCode.PARAMETER_ERROR, e.getMessage(), null);
-}
-```
-
-### IllegalStateException
-
-非法状态异常，由对象处于不正确状态时触发。
-
-```java title="JavaBaseExceptionHandler.java"
-@ExceptionHandler(IllegalStateException.class)
-public Mono<ResponseEntity<BaseResponse<Void>>> handleIllegalState(IllegalStateException e) {
-    return ResultUtil.error(ErrorCode.SERVER_INTERNAL_ERROR, e.getMessage(), null);
-}
-```
-
-### ClassCastException
-
-类型转换异常，由不兼容类型之间的强制转换触发。
-
-```java title="JavaBaseExceptionHandler.java"
-@ExceptionHandler(ClassCastException.class)
-public Mono<ResponseEntity<BaseResponse<Void>>> handleClassCast(ClassCastException e) {
-    return ResultUtil.error(ErrorCode.SERVER_INTERNAL_ERROR, e.getMessage(), null);
-}
-```
-
-### UnsupportedOperationException
-
-不支持的操作异常，由调用未实现的方法触发。
-
-```java title="JavaBaseExceptionHandler.java"
-@ExceptionHandler(UnsupportedOperationException.class)
-public Mono<ResponseEntity<BaseResponse<Void>>> handleUnsupportedOperation(
-        UnsupportedOperationException e) {
-    return ResultUtil.error(ErrorCode.SERVER_INTERNAL_ERROR, e.getMessage(), null);
-}
-```
-
-### ArithmeticException
-
-算术异常，由除零等非法算术运算触发。
-
-```java title="JavaBaseExceptionHandler.java"
-@ExceptionHandler(ArithmeticException.class)
-public Mono<ResponseEntity<BaseResponse<Void>>> handleArithmetic(ArithmeticException e) {
-    return ResultUtil.error(ErrorCode.SERVER_INTERNAL_ERROR, e.getMessage(), null);
-}
-```
-
-### ArrayIndexOutOfBoundsException
-
-数组越界异常。
-
-```java title="JavaBaseExceptionHandler.java"
-@ExceptionHandler(ArrayIndexOutOfBoundsException.class)
-public Mono<ResponseEntity<BaseResponse<Void>>> handleArrayIndexOutOfBounds(
-        ArrayIndexOutOfBoundsException e) {
-    return ResultUtil.error(ErrorCode.SERVER_INTERNAL_ERROR, e.getMessage(), null);
-}
-```
-
-## 响应格式
-
-所有 Java 基础异常均被映射为 `SERVER_INTERNAL_ERROR` 或 `PARAMETER_ERROR` 错误码，响应示例：
 
 ```json title="response.json"
 {
   "context": "550e8400-e29b-41d4-a716-446655440000",
-  "output": "SERVER_INTERNAL_ERROR",
-  "code": 50000,
+  "output": "ServerInternalError",
+  "code": 50001,
   "message": "服务器内部错误",
-  "error_message": "具体异常信息",
+  "errorMessage": "空指针异常",
   "duration": 3,
+  "data": {
+    "message": "Cannot invoke method on null reference"
+  }
+}
+```
+
+### TimeoutException
+
+```json title="response.json"
+{
+  "context": "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+  "output": "Timeout",
+  "code": 40801,
+  "message": "请求超时",
+  "errorMessage": "操作超时: Connection timed out",
+  "duration": 30000,
   "data": null
 }
 ```
 
 ## 继承关系
-
-`JavaBaseExceptionHandler` 是处理器链的最底层，`PublicExceptionHandler` 继承自它：
 
 ```
 JavaBaseExceptionHandler        ← Java 标准库异常
@@ -131,7 +169,7 @@ JavaBaseExceptionHandler        ← Java 标准库异常
 ## 下一步
 
 <Cards>
-  <Card title="业务异常处理" href="/docs/bamboo-base-java/webflux/exception/public" />
+  <Card title="公共业务异常" href="/docs/bamboo-base-java/webflux/exception/public" />
   <Card title="Spring WebFlux 异常" href="/docs/bamboo-base-java/webflux/exception/spring-boot" />
   <Card title="异常处理概览" href="/docs/bamboo-base-java/webflux/exception" />
 </Cards>

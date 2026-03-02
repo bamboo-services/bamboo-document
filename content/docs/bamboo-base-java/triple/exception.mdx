@@ -1,0 +1,194 @@
+---
+title: 异常处理
+description: DubboException 与 CustomExecutionException 处理 Dubbo RPC 调用中的异常
+icon: TriangleAlert
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# 异常处理
+
+bamboo-triple 提供两个异常处理器，用于统一处理 Dubbo RPC 调用过程中产生的异常。这些处理器将 RPC 异常转换为标准化的 `TripleResponse` 响应，确保调用方能够获得一致的错误信息。
+
+## 异常处理器概览
+
+| 处理器 | 处理的异常类型 | 说明 |
+|--------|---------------|------|
+| `DubboException` | `RpcException` | Dubbo RPC 调用直接抛出的异常 |
+| `CustomExecutionException` | `ExecutionException` | 异步调用包装的异常（内部含 `StatusRpcException`） |
+
+## DubboException
+
+`DubboException` 处理 Dubbo RPC 框架直接抛出的 `RpcException` 异常。
+
+### 类定义
+
+```java title="DubboException.java"
+package com.xlf.utility.triple.exception;
+
+import org.apache.dubbo.rpc.RpcException;
+
+@SuppressWarnings("unused")
+public class DubboException {
+    private static final Logger log = LoggerFactory.getLogger(DubboException.class);
+
+    public TripleResponse<Void> handleRpcException(RpcException exception) {
+        log.error("RPC 异常 | [{}]{} ", exception.getCode(), exception.getMessage(), exception);
+        return TripleResult.error(ErrorCode.SERVER_INTERNAL_ERROR, exception.getMessage(), null);
+    }
+}
+```
+
+### 处理的异常场景
+
+| RpcException 错误码 | 场景 | 说明 |
+|-------------------|------|------|
+| `0` | 未知异常 | 网络层面或框架内部异常 |
+| `1` | 网络异常 | 连接失败、超时等 |
+| `2` | 服务端异常 | 服务提供者返回异常 |
+| `3` | 客户端异常 | 服务消费者端异常 |
+| `4` | 线程池异常 | 线程池满、拒绝执行 |
+| `5` | 序列化异常 | 请求/响应序列化失败 |
+
+### 响应示例
+
+```json title="response.json"
+{
+  "context": "550e8400-e29b-41d4-a716-446655440000",
+  "success": false,
+  "code": "50001",
+  "message": "Failed to invoke the method queryUser in the service com.example.UserService...",
+  "data": null,
+  "duration": 2003,
+  "timestamp": 1772620800000
+}
+```
+
+## CustomExecutionException
+
+`CustomExecutionException` 处理异步调用场景下的 `ExecutionException`，该异常通常包装了 Dubbo 的 `StatusRpcException`。
+
+### 类定义
+
+```java title="CustomExecutionException.java"
+package com.xlf.utility.triple.exception;
+
+import org.apache.dubbo.rpc.StatusRpcException;
+import java.util.concurrent.ExecutionException;
+
+@SuppressWarnings("unused")
+public class CustomExecutionException {
+    private static final Logger log = LoggerFactory.getLogger(CustomExecutionException.class);
+
+    public TripleResponse<Void> handleRpcException(ExecutionException exception) {
+        if (exception.getCause() != null) {
+            // [!code highlight:3]
+            // 如果原因是 StatusRpcException，提取 RPC 异常信息
+            if (exception.getCause() instanceof StatusRpcException rpcException) {
+                log.error("RPC 异常 | [{}]{} ", rpcException.getCode(), rpcException.getMessage(), rpcException);
+                return TripleResult.error(ErrorCode.SERVER_INTERNAL_ERROR, rpcException.getMessage(), null);
+            }
+        }
+        // 其他类型的 ExecutionException
+        log.error("执行异常 | {} ", exception.getMessage(), exception);
+        return TripleResult.error(ErrorCode.SERVER_INTERNAL_ERROR, exception.getMessage(), null);
+    }
+}
+```
+
+### 处理流程
+
+```
+异步 Dubbo 调用
+    │
+    ▼
+CompletableFuture.get() 抛出 ExecutionException
+    │
+    ▼
+CustomExecutionException.handleRpcException()
+    │
+    ├── getCause() 是 StatusRpcException？
+    │       │
+    │       ├── 是 → 提取 RPC 异常信息，返回 TripleResponse
+    │       │
+    │       └── 否 → 使用 ExecutionException 消息，返回 TripleResponse
+    │
+    ▼
+TripleResponse 错误响应
+```
+
+## 自动配置
+
+这两个异常处理器由 `TripleAutoConfiguration` 自动注册：
+
+```java title="TripleAutoConfiguration.java"
+@Configuration
+public class TripleAutoConfiguration {
+
+    @Bean
+    @ConditionalOnClass(RpcException.class)
+    public DubboException dubboException() {
+        return new DubboException();
+    }
+
+    @Bean
+    @ConditionalOnClass(ExecutionException.class)
+    public CustomExecutionException customExecutionException() {
+        return new CustomExecutionException();
+    }
+}
+```
+
+## 使用场景
+
+### 同步调用异常
+
+```java title="SyncExample.java"
+@DubboReference
+private UserService userService;
+
+public TripleResponse<UserDTO> getUser(Long userId) {
+    try {
+        return userService.queryUser(request);
+    } catch (RpcException e) {
+        // [!code highlight:2]
+        // RpcException 由 DubboException 处理
+        throw e; // 或直接返回 dubboException.handleRpcException(e)
+    }
+}
+```
+
+### 异步调用异常
+
+```java title="AsyncExample.java"
+@DubboReference(async = true)
+private UserService userService;
+
+public CompletableFuture<TripleResponse<UserDTO>> getUserAsync(Long userId) {
+    return userService.queryUserAsync(request)
+            .thenApply(response -> response)
+            .exceptionally(ex -> {
+                // [!code highlight:3]
+                // ExecutionException 由 CustomExecutionException 处理
+                if (ex instanceof ExecutionException ee) {
+                    return customExecutionException.handleRpcException(ee);
+                }
+                return TripleResult.error(ErrorCode.SERVER_INTERNAL_ERROR, ex.getMessage(), null);
+            });
+}
+```
+
+## 注意事项
+
+1. **异常信息暴露**：异常处理器直接使用异常消息作为响应消息，生产环境可能需要脱敏处理
+2. **日志级别**：所有 RPC 异常均以 ERROR 级别记录，便于问题排查
+3. **错误码统一**：所有 RPC 异常统一映射为 `SERVER_INTERNAL_ERROR`（50001）
+4. **上下文传播**：异常发生时，上下文信息（`context` 和 `duration`）仍会被正确填充
+
+## 下一步
+
+<Cards>
+  <Card title="TripleResult 结果工厂" href="/docs/bamboo-base-java/triple/result" />
+  <Card title="AOP 切面" href="/docs/bamboo-base-java/triple/aspect" />
+  <Card title="Dubbo Triple 概述" href="/docs/bamboo-base-java/triple" />
+</Cards>
