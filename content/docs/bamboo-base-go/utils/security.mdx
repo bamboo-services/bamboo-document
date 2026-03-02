@@ -8,67 +8,84 @@ import { TypeTable } from '@/components/type-table';
 
 # 安全密钥
 
-`xUtil` 提供安全密钥的生成和验证函数，密钥以 `cs_` 为前缀。
+`xUtil.Security()` 提供安全密钥的生成和验证函数，密钥以 `cs_` 为前缀。
+
+```go
+import xUtil "github.com/xiaolfeng/bamboo-base-go/common/utility"
+```
+
+## 入口函数
+
+```go title="utility.go"
+// [!code highlight]
+func Security() *pack.Security
+```
 
 ## 密钥格式
 
 | 类型 | 格式 | 长度 |
 |------|------|------|
-| 长密钥 | `cs_` + 64 位十六进制 | 67 字符 |
-| 标准密钥 | `cs_` + 32 位十六进制 | 35 字符 |
+| **长密钥** | `cs_` + 64 位十六进制 | 67 字符 |
+| **标准密钥** | `cs_` + 32 位十六进制 | 35 字符 |
 
-## 生成密钥
+示例：
+```
+// 长密钥
+cs_a1b2c3d4e5f6789012345678901234567890123456789012345678901234
+// 标准密钥
+cs_a1b2c3d4e5f67890123456789012345678
+```
 
-### GenerateLongSecurityKey
+## GenerateLongKey
 
 生成长安全密钥（67 字符）：
 
-```go title="security.go"
+```go title="package/security.go"
 // [!code highlight]
-func GenerateLongSecurityKey() string
+func (s *Security) GenerateLongKey() string
 ```
 
 ```go
-key := xUtil.GenerateLongSecurityKey()
-// "cs_550e8400e29b41d4a716446655440000550e8400e29b41d4a716446655440000"
+// [!code highlight]
+key := xUtil.Security().GenerateLongKey()
+// "cs_a1b2c3d4e5f6789012345678901234567890123456789012345678901234"
 ```
 
-### GenerateSecurityKey
+## GenerateKey
 
 生成标准安全密钥（35 字符）：
 
-```go title="security.go"
+```go title="package/security.go"
 // [!code highlight]
-func GenerateSecurityKey() string
+func (s *Security) GenerateKey() string
 ```
 
 ```go
-key := xUtil.GenerateSecurityKey()
-// "cs_550e8400e29b41d4a716446655440000"
+// [!code highlight]
+key := xUtil.Security().GenerateKey()
+// "cs_a1b2c3d4e5f6789012345678901234"
 ```
 
-## 验证密钥
-
-### VerifySecurityKey
+## VerifyKey
 
 验证密钥格式是否正确：
 
-```go title="security.go"
+```go title="package/security.go"
 // [!code highlight]
-func VerifySecurityKey(input string) bool
+func (s *Security) VerifyKey(input string) bool
 ```
 
-```go
-// [!code highlight:2]
-// 有效密钥
-xUtil.VerifySecurityKey("cs_550e8400e29b41d4a716446655440000")  // true（35 字符）
-xUtil.VerifySecurityKey("cs_550e8400e29b41d4a716446655440000550e8400e29b41d4a716446655440000")  // true（67 字符）
+**验证规则：**
+1. 以 `cs_` 前缀开头
+2. 后面是 32 或 64 位十六进制字符
 
-// [!code highlight:2]
-// 无效密钥
-xUtil.VerifySecurityKey("550e8400e29b41d4a716446655440000")     // false（缺少 cs_ 前缀）
-xUtil.VerifySecurityKey("cs_invalid")                            // false（长度不对）
-xUtil.VerifySecurityKey("cs_GGGG8400e29b41d4a716446655440000")  // false（非十六进制）
+```go
+// [!code highlight:4]
+xUtil.Security().VerifyKey("cs_a1b2c3d4e5f6789012345678901234")     // true（32位）
+xUtil.Security().VerifyKey("cs_a1b2c3d4e5f678901234567890123456789012345678901234")  // true（64位）
+xUtil.Security().VerifyKey("550e8400e29b41d4a716446655440000")     // false（缺少 cs_ 前缀）
+xUtil.Security().VerifyKey("cs_invalid")                            // false（长度不对）
+xUtil.Security().VerifyKey("cs_GGGG8400e29b41d4a716446655440000")  // false（非十六进制）
 ```
 
 ## 使用场景
@@ -80,7 +97,7 @@ func (s *APIKeyService) Create(ctx context.Context, userID int64) (*entity.APIKe
     apiKey := &entity.APIKey{
         UserID: userID,
         // [!code highlight]
-        Key:    xUtil.GenerateLongSecurityKey(),
+        Key:    xUtil.Security().GenerateLongKey(),
         Status: 1,
     }
 
@@ -93,7 +110,7 @@ func (s *APIKeyService) Create(ctx context.Context, userID int64) (*entity.APIKe
 ```go title="service/token.go"
 func (s *TokenService) GenerateAccessToken(userID int64) string {
     // [!code highlight]
-    return xUtil.GenerateSecurityKey()
+    return xUtil.Security().GenerateKey()
 }
 ```
 
@@ -106,7 +123,7 @@ func APIKeyMiddleware() gin.HandlerFunc {
 
         // [!code highlight:4]
         // 验证密钥格式
-        if !xUtil.VerifySecurityKey(apiKey) {
+        if !xUtil.Security().VerifyKey(apiKey) {
             ctx.Error(xError.NewError(ctx.Request.Context(), xError.Unauthorized, "无效的 API 密钥", true))
             return
         }
@@ -117,8 +134,14 @@ func APIKeyMiddleware() gin.HandlerFunc {
 }
 ```
 
-## 下一步
+## 安全建议
 
+1. **使用长密钥**: 对于高安全性场景，建议使用 `GenerateLongKey()`
+2. **验证密钥**: 接收密钥时始终调用 `VerifyKey()` 验证格式
+3. **存储哈希**: 数据库中存储密钥的哈希值而非明文
+4. **定期轮换**: 建议定期轮换密钥
+
+## 下一步
 <Cards>
   <Card title="随机生成" href="/docs/bamboo-base-go/utils/generate" />
   <Card title="加密哈希" href="/docs/bamboo-base-go/utils/encryption" />

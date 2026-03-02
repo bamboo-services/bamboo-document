@@ -8,117 +8,126 @@ import { TypeTable } from '@/components/type-table';
 
 # 加密哈希
 
-`xUtil` 提供 SHA-256 和 MD5 哈希计算函数。
+`xUtil.Encryption()` 提供 SHA-256 和 MD5 哈希计算函数。
+
+```go
+import xUtil "github.com/xiaolfeng/bamboo-base-go/common/utility"
+```
+
+## 入口函数
+
+```go title="utility.go"
+// [!code highlight]
+func Encryption() *pack.Encryption
+```
 
 ## SHA-256 哈希
 
-### Hash
+### SHA256
 
 计算字符串的 SHA-256 哈希：
 
-```go title="encryption.go"
+```go title="package/encryption.go"
 // [!code highlight]
-func Hash(data string) string
+func (e *Encryption) SHA256(data string) string
 ```
 
-**返回：** 64 位小写十六进制字符串。
+**返回:** 64 位小写十六进制字符串。
 
 ```go
 // [!code highlight]
-hash := xUtil.Hash("password123")
+hash := xUtil.Encryption().SHA256("password123")
 // "ef92b778bafe771e89245b89ecbc08a44a4e166c06659911881f383d4473e94f"
 ```
 
-### HashBytes
+### SHA256Bytes
 
 计算字节切片的 SHA-256 哈希：
 
-```go title="encryption.go"
+```go title="package/encryption.go"
 // [!code highlight]
-func HashBytes(data []byte) string
+func (e *Encryption) SHA256Bytes(data []byte) string
 ```
 
 ```go
 data := []byte("password123")
 // [!code highlight]
-hash := xUtil.HashBytes(data)
+hash := xUtil.Encryption().SHA256Bytes(data)
 ```
 
 ## MD5 哈希
 
-### MD5Hash
+### MD5
 
 计算字符串的 MD5 哈希：
 
-```go title="encryption.go"
+```go title="package/encryption.go"
 // [!code highlight]
-func MD5Hash(str string) string
+func (e *Encryption) MD5(str string) string
 ```
 
-**返回：** 32 位小写十六进制字符串。
+**返回:** 32 位小写十六进制字符串。
 
 ```go
-// [!code highlight]
-hash := xUtil.MD5Hash("password123")
-// "482c811da5d5b4bc6d497ffa98491e38"
+// [!code highlight:2]
+xUtil.Encryption().MD5("password123")
+// "482c811da5d5b4bc632efdea819417a"
 ```
 
-### MD5HashBytes
+### MD5Bytes
 
 计算字节切片的 MD5 哈希：
 
-```go title="encryption.go"
+```go title="package/encryption.go"
 // [!code highlight]
-func MD5HashBytes(data []byte) string
+func (e *Encryption) MD5Bytes(data []byte) string
 ```
 
 ```go
 data := []byte("password123")
 // [!code highlight]
-hash := xUtil.MD5HashBytes(data)
+hash := xUtil.Encryption().MD5Bytes(data)
 ```
 
 ## 使用场景
 
-### 数据签名
+### 文件完整性校验
 
-```go
-func SignRequest(data string, secret string) string {
-    // [!code highlight:2]
-    // 使用 SHA-256 生成签名
-    return xUtil.Hash(data + secret)
+```go title="service/file.go"
+func (s *FileService) CheckIntegrity(filePath string) (bool, error) {
+    data, err := os.ReadFile(filePath)
+    if err != nil {
+        return false, err
+    }
+
+    // [!code highlight]
+    // 计算文件 SHA-256
+    actual := xUtil.Encryption().SHA256Bytes(data)
+
+    // 从数据库获取预期的哈希值...
+    expected := "ef92b778bafe771e89245b89ecbc08a44a4e166c06659911881f383d4473e94f"
+    return actual == expected, nil
 }
 ```
 
-### 文件校验
+### 密码存储（不推荐）
 
 ```go
-func ChecksumFile(content []byte) string {
-    // [!code highlight:2]
-    // 使用 MD5 生成文件校验和
-    return xUtil.MD5HashBytes(content)
-}
+// [!code warning]
+// 警告：MD5 不适合用于密码存储，请使用 xUtil.Password() 进行密码加密
+hash := xUtil.Encryption().MD5("password123")  // 仅用于演示
 ```
 
-### 缓存键生成
+## 安全说明
 
-```go
-func GenerateCacheKey(params map[string]string) string {
-    // [!code highlight:2]
-    // 使用 MD5 生成缓存键
-    data, _ := json.Marshal(params)
-    return "cache:" + xUtil.MD5HashBytes(data)
-}
-```
+| 算法 | 输出长度 | 用途 | 安全性 |
+|------|---------|------|--------|
+| **SHA-256** | 64 字符 | 数据签名、文件校验 | 高 |
+| **MD5** | 32 字符 | 非安全场景的快速校验 | 低（易碰撞） |
 
-## 注意事项
-
-- **MD5 不安全**：MD5 已被证明存在碰撞漏洞，不应用于密码存储或安全敏感场景
-- **密码存储**：请使用 `xUtil.EncryptPassword` 进行密码加密，它使用 bcrypt 算法
-- **SHA-256**：适用于数据签名、完整性校验等场景
+> **重要:** MD5 不适合用于密码存储或安全签名，请使用 `xUtil.Password()` 进行密码加密。
 
 ## 下一步
-
 <Cards>
   <Card title="密码处理" href="/docs/bamboo-base-go/utils/password" />
   <Card title="安全密钥" href="/docs/bamboo-base-go/utils/security" />

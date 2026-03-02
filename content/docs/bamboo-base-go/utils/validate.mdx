@@ -8,93 +8,109 @@ import { TypeTable } from '@/components/type-table';
 
 # 数据验证
 
-`xUtil` 提供各种数据格式的验证函数，用于快速校验用户输入。
+`xUtil.Valid()` 提供各种数据格式的验证函数，用于快速校验用户输入。
+
+```go
+import xUtil "github.com/xiaolfeng/bamboo-base-go/common/utility"
+```
+
+## 入口函数
+
+```go title="utility.go"
+// [!code highlight]
+func Valid() *pack.Valid
+```
 
 ## 手机号验证
 
-### IsValidPhone
+### IsPhone
 
 验证中国大陆手机号（1[3-9] 开头，11 位）：
 
-```go title="validate.go"
+```go title="package/validate.go"
 // [!code highlight]
-func IsValidPhone(phone string) bool
+func (v *Valid) IsPhone(phone string) bool
 ```
 
 ```go
-xUtil.IsValidPhone("13812345678")   // true
-xUtil.IsValidPhone("12345678901")   // false（第二位不是 3-9）
-xUtil.IsValidPhone("1381234567")    // false（不足 11 位）
+// [!code highlight:3]
+xUtil.Valid().IsPhone("13812345678")   // true
+xUtil.Valid().IsPhone("12345678901")   // false（第二位不是 3-9）
+xUtil.Valid().IsPhone("1381234567")    // false（不足 11 位）
 ```
 
 ## 身份证验证
 
-### IsValidIDCard
+### IsIDCard
 
 验证中国大陆身份证号（18 位）：
 
-```go title="validate.go"
+```go title="package/validate.go"
 // [!code highlight]
-func IsValidIDCard(idCard string) bool
+func (v *Valid) IsIDCard(idCard string) bool
 ```
 
 ```go
-xUtil.IsValidIDCard("110101199001011234")  // true
-xUtil.IsValidIDCard("11010119900101123X")  // true（X 结尾）
-xUtil.IsValidIDCard("123456789012345678")  // false
+// [!code highlight:3]
+xUtil.Valid().IsIDCard("110101199001011234")  // true
+xUtil.Valid().IsIDCard("11010119900101123X")  // true（X 结尾）
+xUtil.Valid().IsIDCard("123456789012345678")  // false
 ```
 
 ## URL 验证
 
-### IsValidURL
+### IsURI
 
 验证 URL 格式：
 
-```go title="validate.go"
+```go title="package/validate.go"
 // [!code highlight]
-func IsValidURL(url string) bool
+func (v *Valid) IsURI(url string) bool
 ```
 
 ```go
-xUtil.IsValidURL("https://example.com")        // true
-xUtil.IsValidURL("http://localhost:8080/path") // true
-xUtil.IsValidURL("ftp://example.com")          // false
-xUtil.IsValidURL("example.com")                // false
+// [!code highlight:4]
+xUtil.Valid().IsURI("https://example.com")        // true
+xUtil.Valid().IsURI("http://localhost:8080/path") // true
+xUtil.Valid().IsURI("ftp://example.com")          // false
+xUtil.Valid().IsURI("example.com")                // false
 ```
 
 ## IP 地址验证
 
-### IsValidIP
+### IsIP
 
 验证 IPv4 地址：
 
-```go title="validate.go"
+```go title="package/validate.go"
 // [!code highlight]
-func IsValidIP(ip string) bool
+func (v *Valid) IsIP(ip string) bool
 ```
 
 ```go
-xUtil.IsValidIP("192.168.1.1")     // true
-xUtil.IsValidIP("255.255.255.255") // true
-xUtil.IsValidIP("256.1.1.1")       // false
-xUtil.IsValidIP("192.168.1")       // false
+// [!code highlight:4]
+xUtil.Valid().IsIP("192.168.1.1")     // true
+xUtil.Valid().IsIP("255.255.255.255") // true
+xUtil.Valid().IsIP("256.1.1.1")       // false
+xUtil.Valid().IsIP("192.168.1")       // false
 ```
 
 ## UUID 验证
 
-### IsValidUUID
+### IsUUID
 
 验证 UUID 格式：
 
-```go title="validate.go"
+```go title="package/validate.go"
 // [!code highlight]
-func IsValidUUID(uuid string) bool
+func (v *Valid) IsUUID(uuid string) bool
 ```
 
 ```go
-xUtil.IsValidUUID("550e8400-e29b-41d4-a716-446655440000")  // true
-xUtil.IsValidUUID("550e8400e29b41d4a716446655440000")      // false（缺少连字符）
-xUtil.IsValidUUID("invalid-uuid")                          // false
+// [!code highlight:3]
+xUtil.Valid().IsUUID("550e8400-e29b-41d4-a716-446655440000")  // true
+xUtil.Valid().IsUUID("550e8400e29b41d4a716446655440000")      // false（缺少连字符）
+xUtil.Valid().IsUUID("invalid-uuid")                          // false
 ```
 
 ## 字符类型验证
@@ -103,63 +119,67 @@ xUtil.IsValidUUID("invalid-uuid")                          // false
 
 检查是否只包含数字：
 
-```go title="validate.go"
+```go title="package/validate.go"
 // [!code highlight]
-func IsNumeric(str string) bool
+func (v *Valid) IsNumeric(str string) bool
 ```
 
 ```go
-xUtil.IsNumeric("123456")    // true
-xUtil.IsNumeric("123abc")    // false
-xUtil.IsNumeric("")          // false
+// [!code highlight:3]
+xUtil.Valid().IsNumeric("123456")    // true
+xUtil.Valid().IsNumeric("123abc")    // false
+xUtil.Valid().IsNumeric("")          // false
 ```
 
 ### IsAlpha
 
 检查是否只包含字母：
 
-```go title="validate.go"
+```go title="package/validate.go"
 // [!code highlight]
-func IsAlpha(str string) bool
+func (v *Valid) IsAlpha(str string) bool
 ```
 
 ```go
-xUtil.IsAlpha("Hello")       // true
-xUtil.IsAlpha("Hello123")    // false
-xUtil.IsAlpha("")            // false
+// [!code highlight:3]
+xUtil.Valid().IsAlpha("Hello")       // true
+xUtil.Valid().IsAlpha("Hello123")    // false
+xUtil.Valid().IsAlpha("")            // false
 ```
 
 ### IsAlphaNumeric
 
 检查是否只包含字母和数字：
 
-```go title="validate.go"
+```go title="package/validate.go"
 // [!code highlight]
-func IsAlphaNumeric(str string) bool
+func (v *Valid) IsAlphaNumeric(str string) bool
 ```
 
 ```go
-xUtil.IsAlphaNumeric("Hello123")  // true
-xUtil.IsAlphaNumeric("Hello_123") // false（包含下划线）
-xUtil.IsAlphaNumeric("")          // false
+// [!code highlight:3]
+xUtil.Valid().IsAlphaNumeric("Hello123")  // true
+xUtil.Valid().IsAlphaNumeric("Hello_123") // false（包含下划线）
+xUtil.Valid().IsAlphaNumeric("")          // false
 ```
 
 ## 用户名验证
 
-### IsValidUsername
+### IsUsername
 
 验证用户名（4-20 位，字母开头，只能包含字母、数字、下划线）：
 
-```go title="validate.go"
+```go title="package/validate.go"
 // [!code highlight]
-func IsValidUsername(username string) bool
+func (v *Valid) IsUsername(username string) bool
 ```
 
 ```go
-xUtil.IsValidUsername("xiao_lfeng")   // true
-xUtil.IsValidUsername("user123")      // true
-xUtil.IsValidUsername("123user")      // false（数字开头）
-xUtil.IsValidUsername("ab")           // false（少于 4 位）
+// [!code highlight:4]
+xUtil.Valid().IsUsername("xiao_lfeng")   // true
+xUtil.Valid().IsUsername("user123")      // true
+xUtil.Valid().IsUsername("123user")      // false（数字开头）
+xUtil.Valid().IsUsername("ab")           // false（少于 4 位）
 ```
 
 ## 密码强度验证
@@ -168,12 +188,13 @@ xUtil.IsValidUsername("ab")           // false（少于 4 位）
 
 验证强密码（至少 8 位，包含大写、小写、数字、特殊字符）：
 
-```go title="validate.go"
+```go title="package/validate.go"
 // [!code highlight]
 func IsStrongPassword(password string) bool
 ```
 
 ```go
+// [!code highlight:4]
 xUtil.IsStrongPassword("Abc123!@#")   // true
 xUtil.IsStrongPassword("abc123!@#")   // false（缺少大写）
 xUtil.IsStrongPassword("Abc12345")    // false（缺少特殊字符）
@@ -186,48 +207,51 @@ xUtil.IsStrongPassword("Abc!@#")      // false（少于 8 位）
 
 检查数值是否在指定范围内：
 
-```go title="validate.go"
+```go title="package/validate.go"
 // [!code highlight]
-func InRange(value, min, max float64) bool
+func (v *Valid) InRange(value, min, max float64) bool
 ```
 
 ```go
-xUtil.InRange(5.5, 1.0, 10.0)   // true
-xUtil.InRange(0.5, 1.0, 10.0)   // false
-xUtil.InRange(10.5, 1.0, 10.0)  // false
+// [!code highlight:3]
+xUtil.Valid().InRange(5.5, 1.0, 10.0)   // true
+xUtil.Valid().InRange(0.5, 1.0, 10.0)   // false
+xUtil.Valid().InRange(10.5, 1.0, 10.0)  // false
 ```
 
-### IsValidLength
+### IsLength
 
 检查字符串长度是否在指定范围内：
 
-```go title="validate.go"
+```go title="package/validate.go"
 // [!code highlight]
-func IsValidLength(str string, minLen, maxLen int) bool
+func (v *Valid) IsLength(str string, minLen, maxLen int) bool
 ```
 
 ```go
-xUtil.IsValidLength("hello", 1, 10)   // true
-xUtil.IsValidLength("hi", 3, 10)      // false
-xUtil.IsValidLength("hello world", 1, 5)  // false
+// [!code highlight:3]
+xUtil.Valid().IsLength("hello", 1, 10)   // true
+xUtil.Valid().IsLength("hi", 3, 10)      // false
+xUtil.Valid().IsLength("hello world", 1, 5)  // false
 ```
 
 ## JSON 格式验证
 
-### IsValidJSON
+### IsJSON
 
 简单检查 JSON 格式：
 
-```go title="validate.go"
+```go title="package/validate.go"
 // [!code highlight]
-func IsValidJSON(jsonStr string) bool
+func (v *Valid) IsJSON(jsonStr string) bool
 ```
 
 ```go
-xUtil.IsValidJSON(`{"name":"test"}`)  // true
-xUtil.IsValidJSON(`[1, 2, 3]`)        // true
-xUtil.IsValidJSON(`invalid`)          // false
-xUtil.IsValidJSON(``)                 // false
+// [!code highlight:4]
+xUtil.Valid().IsJSON(`{"name":"test"}`)  // true
+xUtil.Valid().IsJSON(`[1, 2, 3]`)        // true
+xUtil.Valid().IsJSON(`invalid`)          // false
+xUtil.Valid().IsJSON(``)                 // false
 ```
 
 ## 下一步

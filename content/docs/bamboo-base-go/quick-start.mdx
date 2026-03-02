@@ -4,8 +4,6 @@ description: 5 分钟快速上手 Bamboo Base Go
 icon: Zap
 ---
 
-import { TypeTable } from '@/components/type-table';
-
 # 快速开始
 
 本指南将帮助你快速搭建一个基于 Bamboo Base Go 的 Web 服务。
@@ -13,12 +11,26 @@ import { TypeTable } from '@/components/type-table';
 ## 安装
 
 ```bash
-# 按需安装对应层级模块
-go get github.com/bamboo-services/bamboo-base-go/defined
-go get github.com/bamboo-services/bamboo-base-go/common
 go get github.com/bamboo-services/bamboo-base-go/major
+go get github.com/bamboo-services/bamboo-base-go/common
+go get github.com/bamboo-services/bamboo-base-go/defined
 go get github.com/bamboo-services/bamboo-base-go/plugins/grpc  # 可选
+go mod tidy
 ```
+
+## 工具链与命令（接入方 vs 维护方）
+
+`bamboo-base-go` 同时面向 **业务项目接入** 与 **基础库仓库维护**，两类场景的命令不同：
+
+| 场景 | 推荐命令 | 说明 |
+|------|---------|------|
+| 业务项目接入 | `go get ...` + `go mod tidy` | 只安装你实际 import 的模块 |
+| 本地启动业务服务 | `go run .` | 启动当前业务项目 |
+| 业务项目测试 | `go test ./...` | 运行当前业务项目测试 |
+| 维护 bamboo-base-go 仓库 | `make tidy` / `make test` / `make vet` | 统一执行依赖整理、测试和静态检查 |
+| 生成 gRPC 代码 | `make proto` | 封装 Buf 生成流程 |
+
+> `plugins/grpc` 目录包含 `buf.yaml` 与 `buf.gen.yaml`。若在仓库根目录执行 `make proto` 提示找不到 Buf 配置，请切到 `plugins/grpc` 后执行 `buf generate`。
 
 ## 项目结构
 
@@ -70,9 +82,11 @@ DATABASE_TIMEZONE=Asia/Shanghai
 # Redis 配置
 NOSQL_HOST=localhost
 NOSQL_PORT=6379
+NOSQL_USER=
 NOSQL_PASS=
 NOSQL_DATABASE=0
 NOSQL_POOL_SIZE=10
+NOSQL_PREFIX=
 
 # 雪花算法配置（可选，默认自动生成）
 SNOWFLAKE_DATACENTER_ID=1
@@ -353,7 +367,7 @@ func (h *UserHandler) Register(c *gin.Context) {
 
     // [!code highlight:4]
     // 1. 验证并绑定数据
-    req := xUtil.BindData(c, &apiUser.RegisterRequest{})
+    req := xUtil.Bind(c, &apiUser.RegisterRequest{}).Data()
     if req == nil {
         return
     }
@@ -376,7 +390,7 @@ func (h *UserHandler) Register(c *gin.Context) {
 func (h *UserHandler) Login(c *gin.Context) {
     h.log.Info(c, "开始处理用户登录请求")
 
-    req := xUtil.BindData(c, &apiUser.LoginRequest{})
+    req := xUtil.Bind(c, &apiUser.LoginRequest{}).Data()
     if req == nil {
         return
     }
@@ -444,7 +458,7 @@ func (l *UserLogic) CreateUser(c *gin.Context, username, email, password string)
     }
 
     // 加密密码
-    hashedPassword, err := xUtil.HashPassword(password)
+    hashedPassword, err := xUtil.Password().EncryptString(password)
     if err != nil {
         // [!code highlight]
         return nil, xError.NewInternalServerError(c.Request.Context(), "密码加密失败", err)
@@ -490,7 +504,7 @@ func (l *UserLogic) GetUserByUsername(c *gin.Context, username string) (*entity.
 
 // VerifyPassword 验证密码
 func (l *UserLogic) VerifyPassword(hashedPassword, password string) bool {
-    return xUtil.VerifyPassword(password, hashedPassword) == nil
+    return xUtil.Password().IsValid(password, hashedPassword)
 }
 ```
 
@@ -525,7 +539,7 @@ type UserResponse struct {
 
 ```bash
 # 启动服务
-go run main.go
+go run .
 ```
 
 启动成功后，你将看到类似输出：

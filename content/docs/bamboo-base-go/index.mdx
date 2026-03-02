@@ -37,12 +37,14 @@ icon: Package
 ## 快速开始
 
 ```bash
-# 按需安装对应层级模块
-go get github.com/bamboo-services/bamboo-base-go/defined
-go get github.com/bamboo-services/bamboo-base-go/common
 go get github.com/bamboo-services/bamboo-base-go/major
+go get github.com/bamboo-services/bamboo-base-go/common
+go get github.com/bamboo-services/bamboo-base-go/defined
 go get github.com/bamboo-services/bamboo-base-go/plugins/grpc  # 可选
+go mod tidy
 ```
+
+> 关于 `make test` / `make vet` / `make proto` 等维护命令，请查看 [快速开始](/docs/bamboo-base-go/quick-start) 的「工具链与命令」章节。
 
 ```go
 package main

@@ -1,12 +1,12 @@
 ---
 title: 请求绑定
-description: BindData / BindQuery / BindURI / BindHeader 的统一绑定与校验
+description: Bind(...).Data / Query / URI / Header 的统一绑定与校验
 icon: Braces
 ---
 
 # 请求绑定
 
-`xUtil` 提供 4 个泛型绑定函数，分别覆盖请求体、查询参数、路径参数与请求头。
+`xUtil` 通过统一入口 `Bind` 提供 4 种绑定方法，分别覆盖请求体、查询参数、路径参数与请求头。
 
 ```go
 import xUtil "github.com/bamboo-services/bamboo-base-go/common/utility"
@@ -14,24 +14,26 @@ import xUtil "github.com/bamboo-services/bamboo-base-go/common/utility"
 
 ## 统一行为
 
-四个函数都遵循同一套行为：
+四种绑定方法都遵循同一套行为：
 
 - 绑定成功：返回传入的 `data` 指针。
 - 绑定失败：调用 `xVaild.HandleValidationError(ctx, err)`，执行 `ctx.Abort()`，并返回 `nil`。
 - 调用方拿到 `nil` 时，应立即 `return`，避免重复写响应。
 
-## API 列表
+## API 结构
 
 ```go title="binding.go"
-func BindData[T any](ctx *gin.Context, data *T) *T
-func BindQuery[T any](ctx *gin.Context, data *T) *T
-func BindURI[T any](ctx *gin.Context, data *T) *T
-func BindHeader[T any](ctx *gin.Context, data *T) *T
+func Bind[T any](ctx *gin.Context, data *T) *pack.Binding[T]
+
+func (u *Binding[T]) Data() *T
+func (u *Binding[T]) Query() *T
+func (u *Binding[T]) URI() *T
+func (u *Binding[T]) Header() *T
 ```
 
 ## 使用示例
 
-### 1) JSON 请求体：BindData
+### 1) JSON 请求体：Data
 
 ```go title="handler/user.go"
 type CreateUserRequest struct {
@@ -41,7 +43,7 @@ type CreateUserRequest struct {
 }
 
 func CreateUser(ctx *gin.Context) {
-    req := xUtil.BindData(ctx, &CreateUserRequest{})
+    req := xUtil.Bind(ctx, &CreateUserRequest{}).Data()
     if req == nil {
         return
     }
@@ -51,7 +53,7 @@ func CreateUser(ctx *gin.Context) {
 }
 ```
 
-### 2) Query 参数：BindQuery
+### 2) Query 参数：Query
 
 ```go
 type ListUserQuery struct {
@@ -60,7 +62,7 @@ type ListUserQuery struct {
 }
 
 func ListUsers(ctx *gin.Context) {
-    query := xUtil.BindQuery(ctx, &ListUserQuery{})
+    query := xUtil.Bind(ctx, &ListUserQuery{}).Query()
     if query == nil {
         return
     }
@@ -69,7 +71,7 @@ func ListUsers(ctx *gin.Context) {
 }
 ```
 
-### 3) URI 参数：BindURI
+### 3) URI 参数：URI
 
 ```go
 type UserURI struct {
@@ -77,7 +79,7 @@ type UserURI struct {
 }
 
 func GetUser(ctx *gin.Context) {
-    uri := xUtil.BindURI(ctx, &UserURI{})
+    uri := xUtil.Bind(ctx, &UserURI{}).URI()
     if uri == nil {
         return
     }
@@ -86,7 +88,7 @@ func GetUser(ctx *gin.Context) {
 }
 ```
 
-### 4) Header 参数：BindHeader
+### 4) Header 参数：Header
 
 ```go
 type TraceHeader struct {
@@ -94,7 +96,7 @@ type TraceHeader struct {
 }
 
 func GetProfile(ctx *gin.Context) {
-    header := xUtil.BindHeader(ctx, &TraceHeader{})
+    header := xUtil.Bind(ctx, &TraceHeader{}).Header()
     if header == nil {
         return
     }
@@ -116,10 +118,10 @@ if err := ctx.ShouldBindQuery(&query); err != nil {
 }
 ```
 
-使用 `BindQuery`：
+使用 `Bind(...).Query()`：
 
 ```go
-query := xUtil.BindQuery(ctx, &ListUserQuery{})
+query := xUtil.Bind(ctx, &ListUserQuery{}).Query()
 if query == nil {
     return
 }
@@ -127,8 +129,8 @@ if query == nil {
 
 ## 注意事项
 
-- `BindData` 使用 JSON 绑定，适用于请求体场景。
-- `BindQuery` / `BindURI` / `BindHeader` 分别用于 query、路径参数与 header。
+- `Data` 使用 JSON 绑定，适用于请求体场景。
+- `Query` / `URI` / `Header` 分别用于 query、路径参数与 header。
 - 返回 `nil` 代表请求已被中止，调用方应立即 `return`。
 - 需要完全自定义错误处理时，可保留手动绑定流程。
 

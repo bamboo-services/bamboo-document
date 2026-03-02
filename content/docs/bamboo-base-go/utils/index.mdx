@@ -11,139 +11,166 @@ import { TypeTable } from '@/components/type-table';
 `xUtil` 提供丰富的工具函数，涵盖字符串处理、时间操作、数据验证、加密哈希、密码处理等常用场景。
 
 ```go
-import xUtil "github.com/bamboo-services/bamboo-base-go/common/utility"
+import xUtil "github.com/xiaolfeng/bamboo-base-go/common/utility"
 ```
 
 ## 功能分类
 
 <TypeTable
   type={{
-    common: {
-      description: '通用工具：泛型指针、切片操作、布尔转换',
-      type: 'common.go',
-      required: true,
-    },
-    binding: {
+    Bind: {
       description: '请求绑定：泛型 JSON 绑定与校验错误处理',
-      type: 'binding.go',
+      type: 'func Bind[T any](ctx *gin.Context, data *T) *pack.Binding[T]',
       required: true,
     },
-    parse: {
-      description: '类型解析：数字、布尔、字符串解析与转换',
-      type: 'parse.go',
+    Encryption: {
+      description: '加密哈希： SHA-256、MD5',
+      type: 'func Encryption() *pack.Encryption',
       required: true,
     },
-    string: {
-      description: '字符串处理：空白检查、截断、命名转换、脱敏',
-      type: 'string.go',
+    Generate: {
+      description: '随机生成: 随机字符串、数字串',
+      type: 'func Generate() *pack.Generate',
       required: true,
     },
-    time: {
-      description: '时间处理：格式化、解析、范围计算、年龄计算',
-      type: 'time.go',
+    Password: {
+      description: '密码处理: bcrypt 加密与验证',
+      type: 'func Password() *pack.Password',
       required: true,
     },
-    validate: {
-      description: '数据验证：手机号、身份证、邮箱、URL、密码强度',
-      type: 'validate.go',
+    Security: {
+      description: '安全密钥: 生成与验证安全密钥',
+      type: 'func Security() *pack.Security',
       required: true,
     },
-    encryption: {
-      description: '加密哈希：SHA-256、MD5',
-      type: 'encryption.go',
+    Str: {
+      description: '字符串处理: 空白检查、截断、命名转换、脱敏',
+      type: 'func Str() *pack.Str',
       required: true,
     },
-    password: {
-      description: '密码处理：bcrypt 加密与验证',
-      type: 'password.go',
+    Timer: {
+      description: '时间处理: 格式化、解析、范围计算、年龄计算',
+      type: 'func Timer() *pack.Timer',
       required: true,
     },
-    security: {
-      description: '安全密钥：生成与验证安全密钥',
-      type: 'security.go',
+    Parse: {
+      description: '类型解析: 数字、布尔、字符串解析与转换',
+      type: 'func Parse() *pack.Parse',
       required: true,
     },
-    generate: {
-      description: '随机生成：随机字符串、数字串',
-      type: 'generate.go',
+    Valid: {
+      description: '数据验证: 手机号、身份证、邮箱、URL、密码强度',
+      type: 'func Valid() *pack.Valid',
       required: true,
     },
   }}
 />
+
+## 调用方式
+
+所有工具函数采用**链式调用**方式：
+
+```go
+// [!code highlight]
+// 字符串工具
+xUtil.Str().IsBlank("  ")                    // true
+xUtil.Str().DefaultIfBlank("", "default")   // "default"
+
+// [!code highlight]
+// 时间工具
+xUtil.Timer().FormatNow("2006-01-02")        // "2026-02-02"
+xUtil.Timer().StartOfDay(time.Now())        // 今天 00:00:00
+
+// [!code highlight]
+// 验证工具
+xUtil.Valid().IsPhone("13812345678")         // true
+xUtil.Valid().IsEmail("test@example.com")    // true
+
+// [!code highlight]
+// 密码工具
+hash, _ := xUtil.Password().Encrypt("myPassword123")
+xUtil.Password().IsValid("myPassword123", hash)  // true
+
+// [!code highlight]
+// 生成工具
+code := xUtil.Generate().RandomString(16)          // "aB3xY9kLmN2pQ5wR"
+numCode := xUtil.Generate().RandomNumberString(6)  // "384729"
+
+// [!code highlight]
+// 安全密钥工具
+key := xUtil.Security().GenerateKey()               // "cs_a1b2c3d4..."
+```
 
 ## 快速示例
 
 ### 字符串处理
 
 ```go
-// [!code highlight:2]
 // 空白检查
-xUtil.IsBlank("  ")                    // true
-xUtil.DefaultIfBlank("", "default")    // "default"
-
 // [!code highlight:2]
+xUtil.Str().IsBlank("  ")                    // true
+xUtil.Str().DefaultIfBlank("", "default")    // "default"
+
 // 字符串脱敏
-xUtil.MaskString("13812345678", 3, 4, "*")  // "138****5678"
+// [!code highlight]
+xUtil.Str().Mask("13812345678", 3, 4, "*")  // "138****5678"
 
-// [!code highlight:2]
 // 命名转换
-xUtil.CamelToSnake("userName")         // "user_name"
+// [!code highlight]
+xUtil.Str().CamelToSnake("userName")         // "user_name"
 ```
 
 ### 时间处理
 
 ```go
-// [!code highlight:2]
 // 格式化
-dateStr := xUtil.FormatNow(xUtil.TimeFormatDate)  // "2026-02-02"
+// [!code highlight]
+dateStr := xUtil.Timer().FormatNow("2006-01-02")  // "2026-02-02"
 
-// [!code highlight:2]
 // 时间范围
-start := xUtil.StartOfDay(time.Now())   // 今天 00:00:00
-end := xUtil.EndOfMonth(time.Now())     // 本月最后一天 23:59:59
-
 // [!code highlight:2]
-// 年龄计算
-age := xUtil.Age(birthday)              // 26
-```
+start := xUtil.Timer().StartOfDay(time.Now())   // 今天 00:00:00
+end := xUtil.Timer().EndOfMonth(time.Now())     // 本月最后一天 23:59:59
 
+// 年龄计算
+// [!code highlight]
+age := xUtil.Timer().Age(birthday)              // 26
+```
 ### 数据验证
 
 ```go
-// [!code highlight:2]
 // 格式验证
-xUtil.IsValidPhone("13812345678")       // true
-xUtil.IsValidEmail("test@example.com")  // true
-xUtil.IsValidUUID("550e8400-...")       // true
-
 // [!code highlight:2]
-// 密码强度
-xUtil.IsStrongPassword("Abc123!@#")     // true
-```
+xUtil.Valid().IsPhone("13812345678")         // true
+xUtil.Valid().IsEmail("test@example.com")    // true
+xUtil.Valid().IsUUID("550e8400-...")         // true
 
+// 密码强度
+// [!code highlight]
+xUtil.Valid().IsStrongPassword("Abc123!@#")   // true
+```
 ### 密码加密
 
 ```go
-// [!code highlight:2]
 // 加密密码
-hash := xUtil.MustEncryptPasswordString("myPassword123")
+// [!code highlight]
+hash, _ := xUtil.Password().Encrypt("myPassword123")
 
-// [!code highlight:2]
 // 验证密码
-isValid := xUtil.IsPasswordValid("myPassword123", hash)  // true
+// [!code highlight]
+isValid := xUtil.Password().IsValid("myPassword123", hash)  // true
 ```
-
 ### 随机生成
 
 ```go
-// [!code highlight:2]
 // 随机字符串
-code := xUtil.GenerateRandomString(16)        // "aB3xY9kLmN2pQ5wR"
-numCode := xUtil.GenerateRandomNumberString(6) // "384729"
-
 // [!code highlight:2]
+code := xUtil.Generate().RandomString(16)          // "aB3xY9kLmN2pQ5wR"
+numCode := xUtil.Generate().RandomNumberString(6)  // "384729"
+
 // 安全密钥
-key := xUtil.GenerateSecurityKey()            // "cs_a1b2c3d4..."
+// [!code highlight]
+key := xUtil.Security().GenerateKey()               // "cs_a1b2c3d4..."
 ```
 
 ## 下一步

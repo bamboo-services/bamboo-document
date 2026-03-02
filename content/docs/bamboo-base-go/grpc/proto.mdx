@@ -49,7 +49,7 @@ message BaseResponse {
 
 ## Buf 管理
 
-Proto 生成已从 `make proto` 迁移到 [Buf](https://buf.build/)。
+Proto 生成基于 [Buf](https://buf.build/) 管理，仓库层通常通过 `make proto` 统一执行。
 
 ### buf.yaml
 
@@ -75,10 +75,15 @@ plugins:
 ### 生成命令
 
 ```bash
+# 在 bamboo-base 仓库根目录执行（推荐）
+make proto
+
+# 或在 grpc 模块目录直接执行 Buf
+cd plugins/grpc
 buf generate
 ```
 
-生成结果输出到 `grpc/generate/` 目录。
+生成结果输出到 `plugins/grpc/generate/` 目录。
 
 ## 业务端引用方式
 
@@ -109,6 +114,6 @@ message YourResponse {
 ## 下一步
 
 <Cards>
-  <Card title="gRPC 结果处理" href="/docs/bamboo-base-go/plugins/grpc/result" />
+  <Card title="gRPC 结果处理" href="/docs/bamboo-base-go/grpc/result" />
   <Card title="内置拦截器" href="/docs/bamboo-base-go/grpc/interceptors" />
 </Cards>

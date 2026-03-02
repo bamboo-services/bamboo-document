@@ -8,7 +8,18 @@ import { TypeTable } from '@/components/type-table';
 
 # 字符串处理
 
-`xUtil` 提供丰富的字符串处理函数，包括空白检查、截断、命名转换、脱敏等。
+`xUtil.Str()` 提供丰富的字符串处理函数，包括空白检查、截断、命名转换、脱敏等。
+
+```go
+import xUtil "github.com/xiaolfeng/bamboo-base-go/common/utility"
+```
+
+## 入口函数
+
+```go title="utility.go"
+// [!code highlight]
+func Str() *pack.Str
+```
 
 ## 空白检查
 
@@ -16,45 +27,48 @@ import { TypeTable } from '@/components/type-table';
 
 检查字符串是否为空白（空字符串或只包含空白字符）：
 
-```go title="string.go"
+```go title="package/string.go"
 // [!code highlight]
-func IsBlank(str string) bool
+func (s *Str) IsBlank(str string) bool
 ```
 
 ```go
-xUtil.IsBlank("")          // true
-xUtil.IsBlank("  ")        // true
-xUtil.IsBlank("\t\n")      // true
-xUtil.IsBlank("hello")     // false
+// [!code highlight:4]
+xUtil.Str().IsBlank("")          // true
+xUtil.Str().IsBlank("  ")        // true
+xUtil.Str().IsBlank("\t\n")      // true
+xUtil.Str().IsBlank("hello")     // false
 ```
 
 ### IsNotBlank
 
 检查字符串是否不为空白：
 
-```go title="string.go"
+```go title="package/string.go"
 // [!code highlight]
-func IsNotBlank(str string) bool
+func (s *Str) IsNotBlank(str string) bool
 ```
 
 ```go
-xUtil.IsNotBlank("hello")  // true
-xUtil.IsNotBlank("")       // false
+// [!code highlight:2]
+xUtil.Str().IsNotBlank("hello")  // true
+xUtil.Str().IsNotBlank("")       // false
 ```
 
 ### DefaultIfBlank
 
 如果字符串为空白则返回默认值：
 
-```go title="string.go"
+```go title="package/string.go"
 // [!code highlight]
-func DefaultIfBlank(str, defaultStr string) string
+func (s *Str) DefaultIfBlank(str, defaultStr string) string
 ```
 
 ```go
-xUtil.DefaultIfBlank("", "default")      // "default"
-xUtil.DefaultIfBlank("  ", "default")    // "default"
-xUtil.DefaultIfBlank("hello", "default") // "hello"
+// [!code highlight:3]
+xUtil.Str().DefaultIfBlank("", "default")      // "default"
+xUtil.Str().DefaultIfBlank("  ", "default")    // "default"
+xUtil.Str().DefaultIfBlank("hello", "default") // "hello"
 ```
 
 ## 字符串截断
@@ -63,29 +77,31 @@ xUtil.DefaultIfBlank("hello", "default") // "hello"
 
 截断字符串到指定长度：
 
-```go title="string.go"
+```go title="package/string.go"
 // [!code highlight]
-func Truncate(str string, maxLen int) string
+func (s *Str) Truncate(str string, maxLen int) string
 ```
 
 ```go
-xUtil.Truncate("Hello World", 5)   // "Hello"
-xUtil.Truncate("Hi", 10)           // "Hi"
+// [!code highlight:2]
+xUtil.Str().Truncate("Hello World", 5)   // "Hello"
+xUtil.Str().Truncate("Hi", 10)           // "Hi"
 ```
 
 ### TruncateWithSuffix
 
 截断字符串并添加后缀：
 
-```go title="string.go"
+```go title="package/string.go"
 // [!code highlight]
-func TruncateWithSuffix(str string, maxLen int, suffix string) string
+func (s *Str) TruncateWithSuffix(str string, maxLen int, suffix string) string
 ```
 
 ```go
-xUtil.TruncateWithSuffix("Hello World", 8, "...")   // "Hello..."
-xUtil.TruncateWithSuffix("Hi", 10, "...")           // "Hi"
-xUtil.TruncateWithSuffix("Hello", 8, "")            // "Hello"（默认后缀 "..."）
+// [!code highlight:3]
+xUtil.Str().TruncateWithSuffix("Hello World", 8, "...")   // "Hello..."
+xUtil.Str().TruncateWithSuffix("Hi", 10, "...")           // "Hi"
+xUtil.Str().TruncateWithSuffix("Hello", 8, "")            // "Hello"（默认后缀 "..."）
 ```
 
 ## 命名转换
@@ -94,138 +110,112 @@ xUtil.TruncateWithSuffix("Hello", 8, "")            // "Hello"（默认后缀 ".
 
 驼峰命名转蛇形命名：
 
-```go title="string.go"
+```go title="package/string.go"
 // [!code highlight]
-func CamelToSnake(str string) string
+func (s *Str) CamelToSnake(str string) string
 ```
 
 ```go
-xUtil.CamelToSnake("userName")       // "user_name"
-xUtil.CamelToSnake("UserName")       // "user_name"
-xUtil.CamelToSnake("userID")         // "user_i_d"
-xUtil.CamelToSnake("HTTPServer")     // "h_t_t_p_server"
+// [!code highlight:4]
+xUtil.Str().CamelToSnake("userName")       // "user_name"
+xUtil.Str().CamelToSnake("UserName")       // "user_name"
+xUtil.Str().CamelToSnake("userID")         // "user_i_d"
+xUtil.Str().CamelToSnake("HTTPServer")     // "h_t_t_p_server"
 ```
 
 ### SnakeToCamel
 
 蛇形命名转驼峰命名：
 
-```go title="string.go"
+```go title="package/string.go"
 // [!code highlight]
-func SnakeToCamel(str string) string
+func (s *Str) SnakeToCamel(str string) string
 ```
 
 ```go
-xUtil.SnakeToCamel("user_name")      // "userName"
-xUtil.SnakeToCamel("user_id")        // "userId"
-xUtil.SnakeToCamel("http_server")    // "httpServer"
+// [!code highlight:3]
+xUtil.Str().SnakeToCamel("user_name")      // "userName"
+xUtil.Str().SnakeToCamel("user_id")        // "userId"
+xUtil.Str().SnakeToCamel("http_server")    // "httpServer"
 ```
 
 ## 字符串脱敏
 
-### MaskString
+### Mask
 
 对字符串进行脱敏处理：
 
-```go title="string.go"
+```go title="package/string.go"
 // [!code highlight]
-func MaskString(str string, start, end int, mask string) string
+func (s *Str) Mask(str string, start, end int, mask string) string
 ```
 
-**参数说明：**
-
-<TypeTable
-  type={{
-    str: {
-      description: '要脱敏的字符串',
-      type: 'string',
-      required: true,
-    },
-    start: {
-      description: '保留开头的字符数',
-      type: 'int',
-      required: true,
-    },
-    end: {
-      description: '保留结尾的字符数',
-      type: 'int',
-      required: true,
-    },
-    mask: {
-      description: '脱敏字符，默认 "*"',
-      type: 'string',
-      default: '"*"',
-    },
-  }}
-/>
-
-**示例：**
+**参数说明:**
+- `start`: 开始保留的字符数
+- `end`: 结尾保留的字符数
+- `mask`: 用于替换的字符
 
 ```go
-// [!code highlight:2]
+// [!code highlight:4]
 // 手机号脱敏
-xUtil.MaskString("13812345678", 3, 4, "*")   // "138****5678"
+xUtil.Str().Mask("13812345678", 3, 4, "*")   // "138****5678"
 
-// [!code highlight:2]
-// 身份证脱敏
-xUtil.MaskString("110101199001011234", 6, 4, "*")  // "110101********1234"
-
-// [!code highlight:2]
 // 邮箱脱敏
-xUtil.MaskString("test@example.com", 2, 4, "*")   // "te**********m.com"
+xUtil.Str().Mask("hello@example.com", 2, 11, "*")  // "he***********.com"
 
-// [!code highlight:2]
-// 短字符串（长度不足时全部脱敏）
-xUtil.MaskString("abc", 3, 4, "*")           // "***"
+// 身份证脱敏
+xUtil.Str().Mask("110101199001011234", 3, 4, "*")  // "110***********1234"
 ```
 
 ## 其他工具
 
-### IsValidEmail
-
-检查是否为有效的邮箱地址：
-
-```go title="string.go"
-// [!code highlight]
-func IsValidEmail(email string) bool
-```
-
-```go
-xUtil.IsValidEmail("test@example.com")   // true
-xUtil.IsValidEmail("invalid-email")      // false
-```
-
 ### RemoveSpaces
 
-移除字符串中的所有空格：
+移除所有空白字符：
 
-```go title="string.go"
+```go title="package/string.go"
 // [!code highlight]
-func RemoveSpaces(str string) string
+func (s *Str) RemoveSpaces(str string) string
 ```
 
 ```go
-xUtil.RemoveSpaces("hello world")        // "helloworld"
-xUtil.RemoveSpaces("  a  b  c  ")        // "abc"
+// [!code highlight:2]
+xUtil.Str().RemoveSpaces("Hello World")   // "HelloWorld"
+xUtil.Str().RemoveSpaces("a b c")         // "abc"
 ```
 
 ### CountWords
 
-统计字符串中的单词数量：
+统计单词数量：
 
-```go title="string.go"
+```go title="package/string.go"
 // [!code highlight]
-func CountWords(str string) int
+func (s *Str) CountWords(str string) int
 ```
 
 ```go
-xUtil.CountWords("hello world")          // 2
-xUtil.CountWords("  hello   world  ")    // 2
-xUtil.CountWords("")                     // 0
+// [!code highlight:2]
+xUtil.Str().CountWords("Hello World")    // 2
+xUtil.Str().CountWords("你好 世界")       // 2
+```
+
+### IsValidEmail
+
+验证邮箱格式：
+
+```go title="package/string.go"
+// [!code highlight]
+func (s *Str) IsValidEmail(email string) bool
+```
+
+```go
+// [!code highlight:3]
+xUtil.Str().IsValidEmail("test@example.com")   // true
+xUtil.Str().IsValidEmail("invalid")           // false
+xUtil.Str().IsValidEmail("test@.com")         // false
 ```
 
 ## 下一步
-
 <Cards>
   <Card title="时间处理" href="/docs/bamboo-base-go/utils/time" />
   <Card title="数据验证" href="/docs/bamboo-base-go/utils/validate" />

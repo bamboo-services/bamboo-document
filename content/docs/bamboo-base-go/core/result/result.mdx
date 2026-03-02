@@ -140,7 +140,7 @@ func (h *AppHandler) CreateApp(ctx *gin.Context) {
     h.log.Info(ctx, "开始处理创建应用请求")
 
     // 验证并绑定数据
-    getReq := bUtil.BindData(ctx, &apiApp.CreateAppRequest{})
+    getReq := xUtil.Bind(ctx, &apiApp.CreateAppRequest{}).Data()
     if getReq == nil {
         return
     }
