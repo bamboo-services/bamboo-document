@@ -1,0 +1,99 @@
+---
+title: AI 集成
+description: 让 AI 助手直接读取竹简文档内容
+icon: Bot
+---
+
+# AI 集成
+
+本站原生支持 LLM（大语言模型）友好协议，你可以让 AI 助手直接读取文档内容，获得更精准的技术支持。
+
+## 使用方式
+
+### 方式一：文档索引
+
+访问 `/llms.txt` 获取所有文档页面的索引列表，然后按需请求单页内容。
+
+### 方式二：单页 MDX 模式
+
+每个文档页面都支持 MDX 原始内容获取，在 URL 后加 `.mdx` 即可：
+
+```
+/docs/bamboo-base-java/quick-start.mdx
+/docs/bamboo-base-go/core/result/base-response.mdx
+```
+
+### 方式三：完整文档
+
+访问 `/llms-full.txt` 获取所有文档的完整内容（内容较多，建议按需使用）。
+
+## 在 Claude 中使用
+
+你可以在 Claude 对话中这样使用：
+
+```
+请阅读 /docs/bamboo-base-java/quick-start.mdx 并帮我理解如何集成
+```
+
+或先获取索引：
+
+```
+请访问 /llms.txt，然后阅读我需要的页面 .mdx 版本
+```
+
+## 在 Cursor 中使用
+
+在 Cursor 的 Docs 功能中添加文档源时，使用单页模式更精准：
+
+```
+https://docs.bamboo.x-lf.com/docs/bamboo-base-java/index.mdx
+```
+
+## Fetch 调用示例
+
+如果你使用的 AI 工具支持 `fetch` 或网络请求功能，可以直接在提示词中嵌入文档内容：
+
+```markdown
+请使用 fetch 工具获取以下文档内容，并基于内容回答我的问题：
+
+1. 首先获取文档索引：
+   https://docs.bamboo.x-lf.com/llms.txt
+
+2. 根据索引找到需要的页面，例如 Go 语言快速开始：
+   https://docs.bamboo.x-lf.com/docs/bamboo-base-go/quick-start.mdx
+
+3. 阅读内容后，帮我解决以下问题：
+   [你的问题]
+```
+
+### 完整示例提示词
+
+```markdown
+你是一个专业的后端开发助手。请帮我完成以下任务：
+
+## 步骤 1：获取文档
+使用 fetch 工具访问以下 URL 获取竹简文档：
+- 文档索引：https://docs.bamboo.x-lf.com/llms.txt
+- Go 组件库：https://docs.bamboo.x-lf.com/docs/bamboo-base-go/index.mdx
+
+## 步骤 2：分析需求
+根据获取的文档内容，帮我：
+1. 理解竹简库的核心功能模块
+2. 选择适合我项目的组件
+3. 提供集成代码示例
+
+## 我的项目背景
+- 语言：Go / Java（请选择）
+- 框架：Gin / Spring Boot（请选择）
+- 需求：[描述你的具体需求]
+```
+
+<Callout type="info" title="提示">
+将上述提示词复制到 Claude、ChatGPT 或其他支持网络请求的 AI 工具中，即可自动获取并分析文档内容。
+</Callout>
+
+## 相关链接
+
+- [LLM 协议文件](/llms.txt) - 文档索引
+- [完整文档](/llms-full.txt) - 所有内容合并
+- [页面操作](./navigation) - 每页可复制 MDX 源码

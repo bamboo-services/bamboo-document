@@ -1,50 +1,79 @@
 ---
-title: 竹简文档
-description: Bamboo 服务组件库文档中心
-icon: Home
+title: 入门指南
+description: 快速了解竹简文档的使用方法
+icon: BookOpen
 ---
 
-# 竹简文档
+# 入门指南
 
-欢迎来到 **竹简文档**，这里是 Bamboo 服务各组件库的统一文档中心。
+欢迎使用竹简文档！本指南将帮助你快速了解如何使用本站获取所需信息。
 
-## 可用组件库
+## 关于竹简库
+
+竹简库是一套跨语言的后端服务组件库，旨在提供统一风格的 API 设计和开发体验。目前支持：
 
 <Cards>
   <Card
     title="筱工具 (Golang)"
-    description="Go 语言基础组件库，基于 Gin 框架构建"
-    href="./bamboo-base-go"
+    description="基于 Gin 框架的 Go 语言组件库"
+    href="../bamboo-base-go"
+  />
+  <Card
+    title="筱工具 (Java)"
+    description="基于 Spring Boot 3 的 Java 语言组件库"
+    href="../bamboo-base-java"
   />
 </Cards>
 
-## 即将推出
+## 快速开始
 
-以下组件库正在开发中，敬请期待：
+### 选择你的语言
 
-| 组件库 | 语言 | 状态 |
-|--------|------|------|
-| bamboo-base-java | Java | 规划中 |
-| bamboo-base-ts | TypeScript | 规划中 |
+根据你的技术栈选择对应的文档：
 
-## 关于
+- **Go 开发者**：前往 [Go 快速开始](../bamboo-base-go/quick-start) 了解如何在 Gin 项目中集成
+- **Java 开发者**：前往 [Java 快速开始](../bamboo-base-java/quick-start) 了解如何在 Spring Boot 项目中集成
 
-竹简文档是 Bamboo 服务生态的统一文档平台，旨在为开发者提供清晰、完整的组件库使用指南。
+### 核心概念
 
-### 特点
+竹简库在两种语言中提供了相似的核心功能：
 
-- **多语言支持** - 覆盖 Go、Java、TypeScript 等主流语言
-- **统一规范** - 各语言库遵循相似的设计理念和 API 风格
-- **持续更新** - 文档与代码同步维护
+| 功能 | 说明 |
+|------|------|
+| **统一响应** | `BaseResponse` 标准化 API 响应格式 |
+| **错误码** | 统一的错误码体系，便于前后端协作 |
+| **雪花算法** | 分布式 ID 生成器 |
+| **上下文管理** | 请求上下文与链路追踪 |
+| **异常处理** | 分层异常处理器，优雅处理各类异常 |
 
-### 贡献
+## 反馈与贡献
 
-如果你发现文档有误或想要贡献内容，欢迎提交 Issue 或 PR。
+如果你发现文档有误或有改进建议：
+
+- **GitHub**：[bamboo-services](https://github.com/bamboo-services) 提交 Issue 或 PR
+- **网站**：[筱锋的博客](https://www.x-lf.com) 留言
+
+---
 
 <Cards>
   <Card
-    title="GitHub"
-    description="查看源码与提交反馈"
-    href="https://github.com/bamboo-services"
+    title="Go 快速开始"
+    description="5 分钟集成到你的 Gin 项目"
+    href="../bamboo-base-go/quick-start"
+  />
+  <Card
+    title="Java 快速开始"
+    description="5 分钟集成到你的 Spring Boot 项目"
+    href="../bamboo-base-java/quick-start"
+  />
+  <Card
+    title="AI 集成"
+    description="了解如何让 AI 读取文档"
+    href="./ai-integration"
+  />
+  <Card
+    title="文档导航"
+    description="熟悉文档站的使用方式"
+    href="./navigation"
   />
 </Cards>

@@ -1,8 +1,12 @@
 {
   "title": "入门指南",
   "icon": "BookOpen",
-  "description": "选择你需要的库",
+  "description": "快速了解竹简文档",
   "root": true,
   "defaultOpen": true,
-  "pages": ["index"]
+  "pages": [
+    "index",
+    "ai-integration",
+    "navigation"
+  ]
 }
