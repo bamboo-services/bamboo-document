@@ -1,0 +1,76 @@
+---
+title: 筱工具(Java)
+description: 筱锋的 Java 语言基础组件库文档
+icon: Coffee
+---
+
+# 筱工具(Java)
+
+**筱工具(Java)** 是筱锋的 Java 语言多模块基础组件库，基于 Spring Boot 3 构建，为 Web 服务与微服务提供标准化的基础设施。
+
+## 特性
+
+- 🚀 **Spring Boot 3 原生** - 基于 Java 17 + Spring Boot 3.5，完整自动配置支持
+- 📦 **多模块设计** - 五大模块（base / mvc / webflux / notify / triple），按需引入
+- 📝 **统一响应** - `BaseResponse<E>` 泛型响应体，标准化 API 输出格式
+- 🔢 **70+ 错误码** - `ErrorCode` 枚举覆盖通用、客户端、服务端全场景
+- 🆔 **分布式 ID** - 雪花算法 ID 生成、解析与验证
+- 🛡️ **异常兜底** - 多层 `@ControllerAdvice` 异常处理器，覆盖 Java / Spring / MySQL / PostgreSQL 异常
+- 🔍 **AOP 日志** - 日志切面、调试切面、业务日志切面
+- 🔒 **过滤器链** - CORS、权限、上下文注入等开箱即用过滤器
+- ⚡ **双框架** - 同时支持 Spring MVC 与 Spring WebFlux
+- 📧 **通知服务** - 邮件 + Webhook 多渠道通知
+- 🔌 **Dubbo Triple** - Dubbo Triple RPC 请求校验与上下文传播
+
+## 模块概览
+
+| 模块 | Maven Artifact | 描述 |
+|------|---------------|------|
+| [核心库](/docs/bamboo-base-java/base) | `bamboo-base` | BaseResponse、ErrorCode、雪花算法 |
+| [Spring MVC](/docs/bamboo-base-java/mvc) | `bamboo-mvc` | 异常处理、过滤器、AOP 切面、上下文管理 |
+| [Spring WebFlux](/docs/bamboo-base-java/webflux) | `bamboo-webflux` | 响应式版本的异常处理、WebFilter、切面 |
+| [通知服务](/docs/bamboo-base-java/notify) | `bamboo-notify` | 邮件通知、Webhook 通知、模板引擎 |
+| [Dubbo Triple](/docs/bamboo-base-java/triple) | `bamboo-triple` | Triple RPC 请求/响应模型、切面、注解 |
+
+## 快速开始
+
+```xml title="pom.xml"
+<!-- 按需引入对应模块 -->
+<dependency>
+    <groupId>com.x-lf.utility</groupId>
+    <artifactId>bamboo-base</artifactId>
+    <version>2.0.0-beta2</version>
+</dependency>
+
+<dependency>
+    <groupId>com.x-lf.utility</groupId>
+    <artifactId>bamboo-mvc</artifactId>
+    <version>2.0.0-beta2</version>
+</dependency>
+```
+
+```java title="DemoController.java"
+import com.xlf.utility.BaseResponse;
+import com.xlf.utility.ErrorCode;
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+@RequestMapping("/api")
+public class DemoController {
+
+    @GetMapping("/ping")
+    public BaseResponse<String> ping() {
+        // [!code highlight:2]
+        // 返回标准化成功响应
+        return new BaseResponse<>(ErrorCode.SUCCESS, "pong");
+    }
+}
+```
+
+## 更多信息
+
+<Cards>
+  <Card title="快速开始" href="/docs/bamboo-base-java/quick-start" />
+  <Card title="模块架构" href="/docs/bamboo-base-java/architecture" />
+  <Card title="GitHub 仓库" href="https://github.com/XiaoLFeng/general-utils" />
+</Cards>

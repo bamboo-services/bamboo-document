@@ -1,0 +1,158 @@
+---
+title: SnowflakeInfoDTO
+description: 雪花 ID 解析结果数据传输对象，包含 ID 各段的完整信息
+icon: FileCode
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# SnowflakeInfoDTO
+
+`SnowflakeInfoDTO` 是雪花 ID 的解析结果数据传输对象，位于 `com.xlf.utility.models.dto` 包下。当调用 `SnowflakeUtil.parse(long id)` 时，返回该对象，包含 ID 中各段的完整信息。
+
+## 类定义
+
+```java title="SnowflakeInfoDTO.java"
+package com.xlf.utility.models.dto;
+
+import java.time.LocalDateTime;
+
+public class SnowflakeInfoDTO {
+    private Long id;
+    private Long timestamp;
+    private Long datacenterId;
+    private Long machineId;
+    private Integer gene;
+    private Long sequence;
+    private LocalDateTime generatedAt;
+}
+```
+
+## 字段说明
+
+<TypeTable
+  type={{
+    id: {
+      description: '原始雪花 ID 值，即传入 parse 方法的原始长整型。',
+      type: 'Long',
+      required: true,
+    },
+    timestamp: {
+      description: '生成时间戳（毫秒级 Unix 时间戳）。该值为 epoch 偏移量加上配置的起始纪元。',
+      type: 'Long',
+      required: true,
+    },
+    datacenterId: {
+      description: '数据中心 ID，从 ID 的对应位段中提取，范围 0~7。',
+      type: 'Long',
+      required: true,
+    },
+    machineId: {
+      description: '机器 ID，从 ID 的对应位段中提取，范围 0~15。',
+      type: 'Long',
+      required: true,
+    },
+    gene: {
+      description: '基因位值，从 ID 的对应位段中提取，范围 0~7。标准模式生成的 ID 此值为 0。',
+      type: 'Integer',
+      required: true,
+    },
+    sequence: {
+      description: '序列号，同一毫秒内的自增编号，范围 0~4095。',
+      type: 'Long',
+      required: true,
+    },
+    generatedAt: {
+      description: '生成时间，由 timestamp 转换而来的 LocalDateTime 对象，便于直接展示。',
+      type: 'LocalDateTime',
+      required: true,
+    },
+  }}
+/>
+
+## 使用示例
+
+### 基本解析
+
+```java title="Example.java"
+import com.xlf.utility.utility.SnowflakeUtil;
+import com.xlf.utility.models.dto.SnowflakeInfoDTO;
+
+long id = SnowflakeUtil.generate();
+
+// [!code highlight:2]
+// 解析雪花 ID，获取完整信息
+SnowflakeInfoDTO info = SnowflakeUtil.parse(id);
+
+System.out.println("原始 ID: " + info.getId());
+System.out.println("时间戳: " + info.getTimestamp());
+System.out.println("数据中心 ID: " + info.getDatacenterId());
+System.out.println("机器 ID: " + info.getMachineId());
+System.out.println("基因位: " + info.getGene());
+System.out.println("序列号: " + info.getSequence());
+System.out.println("生成时间: " + info.getGeneratedAt());
+```
+
+输出示例：
+
+```
+原始 ID: 123456789012345678
+时间戳: 1706150400000
+数据中心 ID: 1
+机器 ID: 1
+基因位: 0
+序列号: 42
+生成时间: 2024-01-25T08:00:00
+```
+
+### 审计与排查
+
+在日志追踪与问题排查场景中，可通过解析 ID 快速定位生成来源：
+
+```java title="AuditService.java"
+import com.xlf.utility.utility.SnowflakeUtil;
+import com.xlf.utility.models.dto.SnowflakeInfoDTO;
+
+public class AuditService {
+
+    public void auditRecord(Long recordId) {
+        SnowflakeInfoDTO info = SnowflakeUtil.parse(recordId);
+
+        // [!code highlight:4]
+        // 通过解析结果定位记录来源
+        log.info("记录 {} 生成于 {}，来自数据中心 {} 机器 {}",
+            info.getId(),
+            info.getGeneratedAt(),
+            info.getDatacenterId(),
+            info.getMachineId()
+        );
+    }
+}
+```
+
+### 分片路由验证
+
+在分库分表场景中，可通过基因位验证数据路由的正确性：
+
+```java title="ShardingValidator.java"
+import com.xlf.utility.utility.SnowflakeUtil;
+import com.xlf.utility.models.dto.SnowflakeInfoDTO;
+
+public class ShardingValidator {
+
+    public boolean validateShard(Long orderId, int expectedShard) {
+        SnowflakeInfoDTO info = SnowflakeUtil.parse(orderId);
+        // [!code highlight:2]
+        // 校验基因位是否与预期分片一致
+        return info.getGene() == expectedShard;
+    }
+}
+```
+
+## 下一步
+
+<Cards>
+  <Card title="SnowflakeUtil" href="/docs/bamboo-base-java/base/snowflake/util" />
+  <Card title="SnowflakeIdGenerator" href="/docs/bamboo-base-java/base/snowflake/generator" />
+  <Card title="核心库概览" href="/docs/bamboo-base-java/base" />
+</Cards>

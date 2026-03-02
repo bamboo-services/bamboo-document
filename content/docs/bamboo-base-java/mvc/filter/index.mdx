@@ -1,0 +1,115 @@
+---
+title: 过滤器概览
+description: bamboo-mvc 过滤器链提供上下文注入、跨域处理、安全校验等 HTTP 请求预处理能力
+icon: Filter
+---
+
+# 过滤器概览
+
+`bamboo-mvc` 提供一组基于 `javax.servlet.Filter` 的 HTTP 请求预处理过滤器，覆盖上下文注入、跨域处理、安全校验和权限控制等场景。所有过滤器均通过 `BaseSdkAutoConfiguration` 自动注册。
+
+## 过滤器列表
+
+| 过滤器 | 优先级 | 职责 | 类型 |
+|--------|--------|------|------|
+| `ContextFilter` | `HIGHEST_PRECEDENCE` | 请求上下文初始化，生成/提取 UUID，设置 MDC | 内置自动注册 |
+| `AllowCorsFilterHandler` | 用户定义 | CORS 跨域请求处理 | 需手动配置 |
+| `AllowOptionFilterHandler` | 用户定义 | OPTIONS 预检请求快速响应 | 需手动配置 |
+| `BanEmptyReferer` | 用户定义 | 拦截空 Referer 请求 | 需手动配置 |
+| `PermissionFilterHandler` | 用户定义 | 权限校验（抽象类，需实现） | 需继承实现 |
+
+## 过滤器执行顺序
+
+```
+HTTP 请求
+    │
+    ▼
+ContextFilter (HIGHEST_PRECEDENCE)
+    │  生成/提取上下文 UUID
+    │  设置 MDC 日志追踪
+    │  初始化 ContextHolder
+    ▼
+AllowCorsFilterHandler（可选）
+    │  校验 Origin/Host
+    │  设置 CORS 响应头
+    ▼
+AllowOptionFilterHandler（可选）
+    │  OPTIONS 请求直接返回 200
+    ▼
+BanEmptyReferer（可选）
+    │  拦截空 Referer 请求
+    ▼
+PermissionFilterHandler（可选）
+    │  检查 @NeedPermission 注解
+    │  执行权限校验
+    ▼
+Spring MVC DispatcherServlet
+    │
+    ▼
+Controller → Service → Repository
+```
+
+## 注册方式
+
+### 自动注册
+
+`ContextFilter` 由自动配置以最高优先级自动注册，无需任何配置。
+
+### 手动注册
+
+其他过滤器需要在配置类中手动注册为 `FilterRegistrationBean`：
+
+```java title="FilterConfig.java"
+@Configuration
+public class FilterConfig {
+
+    // [!code highlight:3]
+    // 注册 CORS 过滤器
+    @Bean
+    public FilterRegistrationBean<AllowCorsFilterHandler> corsFilter() {
+        FilterRegistrationBean<AllowCorsFilterHandler> registration =
+            new FilterRegistrationBean<>();
+        registration.setFilter(new AllowCorsFilterHandler(
+            new String[]{"example.com", "api.example.com"},
+            new String[]{"GET", "POST", "PUT", "DELETE"},
+            new String[]{"Authorization", "Content-Type"}
+        ));
+        registration.addUrlPatterns("/*");
+        registration.setOrder(1);
+        return registration;
+    }
+
+    // [!code highlight:3]
+    // 注册 OPTIONS 过滤器
+    @Bean
+    public FilterRegistrationBean<AllowOptionFilterHandler> optionFilter() {
+        FilterRegistrationBean<AllowOptionFilterHandler> registration =
+            new FilterRegistrationBean<>();
+        registration.setFilter(new AllowOptionFilterHandler());
+        registration.addUrlPatterns("/*");
+        registration.setOrder(2);
+        return registration;
+    }
+}
+```
+
+## 配置属性
+
+上下文过滤器支持通过 `application.yml` 配置：
+
+```yaml title="application.yml"
+bamboo:
+  context:
+    enable-input: true
+    exclude-urls:
+      - /actuator/**
+      - /health
+```
+
+## 下一步
+
+<Cards>
+  <Card title="上下文过滤器" href="/docs/bamboo-base-java/mvc/filter/context" />
+  <Card title="CORS 跨域" href="/docs/bamboo-base-java/mvc/filter/cors" />
+  <Card title="权限过滤器" href="/docs/bamboo-base-java/mvc/filter/permission" />
+</Cards>

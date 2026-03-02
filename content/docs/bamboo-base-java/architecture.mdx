@@ -1,0 +1,101 @@
+---
+title: 模块架构
+description: 筱工具(Java) 多模块架构说明与依赖关系
+icon: Layers
+---
+
+# 模块架构
+
+筱工具(Java) 采用多模块架构，各模块职责明确、可独立引入。
+
+## 模块依赖关系
+
+```
+bamboo-base (核心库，零框架依赖)
+├── bamboo-mvc (Spring MVC 集成)
+├── bamboo-webflux (Spring WebFlux 集成)
+├── bamboo-notify (通知服务)
+└── bamboo-triple (Dubbo Triple RPC)
+```
+
+所有业务模块均依赖 `bamboo-base`，但彼此之间互不依赖，可按需组合使用。
+
+## 模块职责
+
+| 模块 | 定位 | 核心能力 |
+|------|------|---------|
+| **bamboo-base** | 基础层 | 通用响应体、错误码、雪花算法 |
+| **bamboo-mvc** | MVC 集成层 | 异常处理器、过滤器、AOP 切面、上下文管理 |
+| **bamboo-webflux** | WebFlux 集成层 | 响应式异常处理、WebFilter、切面 |
+| **bamboo-notify** | 通知层 | 邮件通知、Webhook 回调、消息模板 |
+| **bamboo-triple** | RPC 层 | Dubbo Triple 请求校验、上下文传播 |
+
+## Maven 坐标
+
+所有模块共享相同的 groupId 和版本号：
+
+```xml title="pom.xml"
+<properties>
+    <general-utils.version>2.0.0-beta2</general-utils.version>
+</properties>
+
+<!-- 核心库（必选） -->
+<dependency>
+    <groupId>com.x-lf.utility</groupId>
+    <artifactId>bamboo-base</artifactId>
+    <version>${general-utils.version}</version>
+</dependency>
+
+<!-- Spring MVC 集成（二选一） -->
+<dependency>
+    <groupId>com.x-lf.utility</groupId>
+    <artifactId>bamboo-mvc</artifactId>
+    <version>${general-utils.version}</version>
+</dependency>
+
+<!-- Spring WebFlux 集成（二选一） -->
+<dependency>
+    <groupId>com.x-lf.utility</groupId>
+    <artifactId>bamboo-webflux</artifactId>
+    <version>${general-utils.version}</version>
+</dependency>
+
+<!-- 通知服务（可选） -->
+<dependency>
+    <groupId>com.x-lf.utility</groupId>
+    <artifactId>bamboo-notify</artifactId>
+    <version>${general-utils.version}</version>
+</dependency>
+
+<!-- Dubbo Triple RPC（可选） -->
+<dependency>
+    <groupId>com.x-lf.utility</groupId>
+    <artifactId>bamboo-triple</artifactId>
+    <version>${general-utils.version}</version>
+</dependency>
+```
+
+## 技术栈
+
+| 技术 | 版本 | 说明 |
+|------|------|------|
+| Java | 17 | 最低要求 JDK 17 |
+| Spring Boot | 3.5.x | 基础框架 |
+| MyBatis-Plus | 3.5.x | ORM 框架（MVC 模块可选） |
+| HuTool | 5.8.x | 工具库 |
+| Dubbo | 3.3.x | RPC 框架（Triple 模块） |
+
+## 推荐用法
+
+- **传统 Web 服务**：`bamboo-base` + `bamboo-mvc`
+- **响应式 Web 服务**：`bamboo-base` + `bamboo-webflux`
+- **微服务 + RPC**：`bamboo-base` + `bamboo-mvc` + `bamboo-triple`
+- **带通知功能**：在上述基础上追加 `bamboo-notify`
+
+## 下一步
+
+<Cards>
+  <Card title="快速开始" href="/docs/bamboo-base-java/quick-start" />
+  <Card title="核心库" href="/docs/bamboo-base-java/base" />
+  <Card title="Spring MVC" href="/docs/bamboo-base-java/mvc" />
+</Cards>

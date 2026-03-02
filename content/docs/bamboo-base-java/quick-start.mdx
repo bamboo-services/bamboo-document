@@ -1,0 +1,260 @@
+---
+title: 快速开始
+description: 5 分钟快速上手筱工具(Java)
+icon: Zap
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# 快速开始
+
+本指南将帮助你快速搭建一个基于筱工具(Java) 的 Spring Boot Web 服务。
+
+## 安装
+
+在 `pom.xml` 中添加依赖：
+
+```xml title="pom.xml"
+<dependencies>
+    <!-- 核心库（必选） -->
+    <dependency>
+        <groupId>com.x-lf.utility</groupId>
+        <artifactId>bamboo-base</artifactId>
+        <version>2.0.0-beta2</version>
+    </dependency>
+
+    <!-- Spring MVC 集成（推荐） -->
+    <dependency>
+        <groupId>com.x-lf.utility</groupId>
+        <artifactId>bamboo-mvc</artifactId>
+        <version>2.0.0-beta2</version>
+    </dependency>
+</dependencies>
+```
+
+## 项目结构
+
+推荐的项目结构：
+
+```
+your-project/
+├── src/main/java/com/example/demo/
+│   ├── DemoApplication.java            # 启动类
+│   ├── controller/                     # 控制器
+│   │   └── UserController.java
+│   ├── service/                        # 业务逻辑
+│   │   └── UserService.java
+│   ├── mapper/                         # 数据访问层
+│   │   └── UserMapper.java
+│   ├── model/
+│   │   ├── entity/                     # 数据库实体
+│   │   └── dto/                        # 数据传输对象
+│   └── exception/                      # 自定义异常处理
+│       └── GlobalExceptionHandler.java
+├── src/main/resources/
+│   └── application.yml                 # 配置文件
+└── pom.xml
+```
+
+## 配置文件
+
+```yaml title="application.yml"
+# 服务配置
+server:
+  port: 8080
+
+# 筱工具上下文配置
+bamboo:
+  context:
+    enable-input: true                   # 允许外部传入 Context UUID
+    exclude-urls:                        # 排除的 URL（不注入上下文）
+      - /actuator/**
+
+# 数据库配置（可选，使用 MyBatis-Plus 时）
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/your_database
+    username: postgres
+    password: your_password
+    driver-class-name: org.postgresql.Driver
+```
+
+## 启动类
+
+```java title="DemoApplication.java"
+package com.example.demo;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class DemoApplication {
+
+    public static void main(String[] args) {
+        // [!code highlight:2]
+        // bamboo-mvc 的自动配置会自动注册过滤器、异常处理器和 AOP 切面
+        SpringApplication.run(DemoApplication.class, args);
+    }
+}
+```
+
+## 控制器编写
+
+```java title="controller/UserController.java"
+package com.example.demo.controller;
+
+import com.xlf.utility.BaseResponse;
+import com.xlf.utility.ErrorCode;
+import com.xlf.utility.mvc.ResultUtil;
+import com.example.demo.model.dto.UserDTO;
+import com.example.demo.service.UserService;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+@RequestMapping("/api/v1/user")
+@RequiredArgsConstructor
+public class UserController {
+
+    private final UserService userService;
+
+    // [!code highlight]
+    // 获取用户信息
+    @GetMapping("/{id}")
+    public ResponseEntity<BaseResponse<UserDTO>> getUser(@PathVariable Long id) {
+        // [!code highlight:2]
+        // 使用 ResultUtil 返回标准化响应
+        UserDTO user = userService.getUserById(id);
+        return ResultUtil.success("获取成功", user);
+    }
+
+    // [!code highlight]
+    // 创建用户
+    @PostMapping
+    public ResponseEntity<BaseResponse<Void>> createUser(@RequestBody UserDTO userDTO) {
+        userService.createUser(userDTO);
+        return ResultUtil.success("创建成功");
+    }
+}
+```
+
+## 业务逻辑层
+
+```java title="service/UserService.java"
+package com.example.demo.service;
+
+import com.xlf.utility.ErrorCode;
+import com.xlf.utility.exception.library.BusinessException;
+import com.example.demo.model.dto.UserDTO;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+
+@Service
+@RequiredArgsConstructor
+public class UserService {
+
+    // [!code highlight]
+    // 获取用户
+    public UserDTO getUserById(Long id) {
+        // 业务逻辑...
+        if (id == null) {
+            // [!code highlight:2]
+            // 抛出业务异常，会被全局异常处理器捕获并转换为标准响应
+            throw new BusinessException(ErrorCode.PARAMETER_ERROR, "用户 ID 不能为空");
+        }
+        return new UserDTO(id, "test_user", "test@example.com");
+    }
+
+    public void createUser(UserDTO userDTO) {
+        // 业务逻辑...
+    }
+}
+```
+
+## 自定义异常处理
+
+如果需要扩展异常处理，继承 `SystemExceptionHandler`：
+
+```java title="exception/GlobalExceptionHandler.java"
+package com.example.demo.exception;
+
+import com.xlf.utility.BaseResponse;
+import com.xlf.utility.ErrorCode;
+import com.xlf.utility.mvc.ResultUtil;
+import com.xlf.utility.mvc.exception.SystemExceptionHandler;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+
+// [!code highlight:2]
+// 继承 SystemExceptionHandler 以获得内置异常处理能力
+@RestControllerAdvice
+public class GlobalExceptionHandler extends SystemExceptionHandler {
+
+    // [!code highlight:2]
+    // 添加自定义异常处理
+    @ExceptionHandler(IllegalStateException.class)
+    public ResponseEntity<BaseResponse<Void>> handleIllegalState(IllegalStateException e) {
+        return ResultUtil.error(ErrorCode.SERVER_INTERNAL_ERROR, e.getMessage(), null);
+    }
+}
+```
+
+## 运行项目
+
+```bash
+# 启动服务
+mvn spring-boot:run
+```
+
+启动成功后，你将看到类似输出：
+
+```
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+2026-01-15 10:00:00 [INFO] [MAIN] Started DemoApplication in 2.5 seconds
+```
+
+## 测试接口
+
+```bash
+# 获取用户
+curl http://localhost:8080/api/v1/user/1
+
+# 创建用户
+curl -X POST http://localhost:8080/api/v1/user \
+  -H "Content-Type: application/json" \
+  -d '{"username":"test","email":"test@example.com"}'
+```
+
+成功响应示例：
+
+```json title="response.json"
+{
+  "context": "550e8400-e29b-41d4-a716-446655440000",
+  "output": "SUCCESS",
+  "code": 200,
+  "message": "获取成功",
+  "error_message": null,
+  "duration": 15,
+  "data": {
+    "id": 1,
+    "username": "test_user",
+    "email": "test@example.com"
+  }
+}
+```
+
+## 下一步
+
+<Cards>
+  <Card title="模块架构" href="/docs/bamboo-base-java/architecture" />
+  <Card title="核心库详解" href="/docs/bamboo-base-java/base" />
+  <Card title="异常处理" href="/docs/bamboo-base-java/mvc/exception" />
+</Cards>

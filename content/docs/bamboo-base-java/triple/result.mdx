@@ -1,0 +1,161 @@
+---
+title: TripleResult
+description: TripleResult 静态工厂类，快速构建标准化的成功与错误响应
+icon: Factory
+---
+
+# TripleResult
+
+`TripleResult` 是 `TripleResponse<T>` 的静态工厂类，提供一组便捷方法用于快速构建标准化的成功与错误响应。该类自动从 MVC `ContextHolder` 获取链路追踪 ID 与请求耗时，无需手动填充上下文信息。
+
+## 成功响应
+
+### success()
+
+构建不携带数据的成功响应：
+
+```java title="TripleResult.java"
+// [!code highlight:2]
+// 无数据成功响应
+TripleResponse<Void> response = TripleResult.success();
+```
+
+### success(T data)
+
+构建携带数据的成功响应：
+
+```java title="TripleResult.java"
+UserDTO user = userService.getById(userId);
+// [!code highlight:2]
+// 携带业务数据
+TripleResponse<UserDTO> response = TripleResult.success(user);
+```
+
+### success(T data, String message)
+
+构建携带数据与自定义消息的成功响应：
+
+```java title="TripleResult.java"
+// [!code highlight:2]
+// 携带数据与自定义消息
+TripleResponse<UserDTO> response = TripleResult.success(user, "用户查询成功");
+```
+
+## 错误响应
+
+### error(ErrorCode)
+
+基于 ErrorCode 枚举构建错误响应：
+
+```java title="TripleResult.java"
+// [!code highlight:2]
+// 使用预定义错误码
+TripleResponse<Void> response = TripleResult.error(ErrorCode.PARAMETER_ERROR);
+```
+
+### error(ErrorCode, String)
+
+基于 ErrorCode 并附带自定义消息：
+
+```java title="TripleResult.java"
+// [!code highlight:3]
+// 自定义错误消息
+TripleResponse<Void> response = TripleResult.error(
+        ErrorCode.PARAMETER_ERROR, "用户 ID 不能为空");
+```
+
+### error(ErrorCode, String, T)
+
+基于 ErrorCode、自定义消息并携带错误详情数据：
+
+```java title="TripleResult.java"
+// [!code highlight:4]
+// 携带错误详情数据
+ValidationResult detail = new ValidationResult("userId", "不能为空");
+TripleResponse<ValidationResult> response = TripleResult.error(
+        ErrorCode.PARAMETER_ERROR, "参数校验失败", detail);
+```
+
+### error(Exception)
+
+基于异常对象构建错误响应：
+
+```java title="TripleResult.java"
+try {
+    // 业务逻辑
+} catch (Exception e) {
+    // [!code highlight:2]
+    // 异常转错误响应
+    return TripleResult.error(e);
+}
+```
+
+## 方法汇总
+
+| 方法签名 | 返回类型 | 说明 |
+|----------|---------|------|
+| `success()` | `TripleResponse<Void>` | 无数据成功响应 |
+| `success(T data)` | `TripleResponse<T>` | 携带数据的成功响应 |
+| `success(T data, String message)` | `TripleResponse<T>` | 携带数据与消息的成功响应 |
+| `error(ErrorCode)` | `TripleResponse<Void>` | 基于错误码的失败响应 |
+| `error(ErrorCode, String)` | `TripleResponse<Void>` | 基于错误码与消息的失败响应 |
+| `error(ErrorCode, String, T)` | `TripleResponse<T>` | 携带错误详情的失败响应 |
+| `error(Exception)` | `TripleResponse<Void>` | 基于异常的失败响应 |
+
+## 上下文自动填充
+
+`TripleResult` 内部通过 MVC `ContextHolder` 自动填充以下字段：
+
+- **context** - 从 `ContextHolder.getContextId()` 获取链路追踪 ID
+- **duration** - 从 `ContextHolder.getDuration()` 计算请求耗时
+- **timestamp** - 使用 `System.currentTimeMillis()` 获取当前时间
+
+因此，使用 `TripleResult` 前需确保 `DubboContextAspect` 已正确初始化上下文。
+
+## 完整使用示例
+
+```java title="OrderTripleServiceImpl.java"
+import com.xlf.utility.ErrorCode;
+import com.xlf.utility.triple.TripleResponse;
+import com.xlf.utility.triple.TripleResult;
+import org.apache.dubbo.config.annotation.DubboService;
+
+@DubboService
+public class OrderTripleServiceImpl implements OrderTripleService {
+
+    @DubboPersistentContext
+    @TripleRequestCheck(message = "订单查询参数无效", errorCode = "ORDER_QUERY_INVALID")
+    @Override
+    public TripleResponse<OrderDTO> queryOrder(OrderQueryRequest request) {
+        OrderDTO order = orderRepository.findById(request.getOrderId());
+        if (order == null) {
+            // [!code highlight:3]
+            // 业务错误：订单不存在
+            return TripleResult.error(
+                    ErrorCode.REQUEST_RESOURCE_NOT_FOUND, "订单不存在");
+        }
+        return TripleResult.success(order, "查询成功");
+    }
+
+    @DubboPersistentContext
+    @Override
+    public TripleResponse<Void> cancelOrder(OrderCancelRequest request) {
+        try {
+            orderService.cancel(request.getOrderId());
+            return TripleResult.success();
+        } catch (Exception e) {
+            // [!code highlight:2]
+            // 异常兜底处理
+            return TripleResult.error(e);
+        }
+    }
+}
+```
+
+## 下一步
+
+<Cards>
+  <Card title="TripleRequest 请求模型" href="/docs/bamboo-base-java/triple/request" />
+  <Card title="TripleResponse 响应模型" href="/docs/bamboo-base-java/triple/response" />
+  <Card title="AOP 切面" href="/docs/bamboo-base-java/triple/aspect" />
+</Cards>

@@ -1,0 +1,152 @@
+---
+title: Java 基础异常
+description: JavaBaseExceptionHandler 处理 Java 标准库中的常见运行时异常与受检异常
+icon: Bug
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# JavaBaseExceptionHandler
+
+`JavaBaseExceptionHandler` 是异常处理链的最底层，负责捕获 Java 标准库中的常见异常。该处理器标注 `@RestControllerAdvice`，所有异常均转换为标准化的 `BaseResponse<Void>` 响应。
+
+## 处理的异常类型
+
+<TypeTable
+  type={{
+    IOException: {
+      description: 'I/O 操作异常，如文件读写失败、网络连接中断',
+      type: 'ErrorCode.SERVER_INTERNAL_ERROR',
+      required: true,
+    },
+    NullPointerException: {
+      description: '空指针异常，访问 null 引用的成员',
+      type: 'ErrorCode.SERVER_INTERNAL_ERROR',
+      required: true,
+    },
+    FileNotFoundException: {
+      description: '文件未找到异常',
+      type: 'ErrorCode.SERVER_INTERNAL_ERROR',
+      required: true,
+    },
+    IllegalArgumentException: {
+      description: '非法参数异常，方法接收到不合法的参数值',
+      type: 'ErrorCode.PARAMETER_ERROR',
+      required: true,
+    },
+    ClassCastException: {
+      description: '类型转换异常，对象无法转换为目标类型',
+      type: 'ErrorCode.SERVER_INTERNAL_ERROR',
+      required: true,
+    },
+    ArrayIndexOutOfBoundsException: {
+      description: '数组下标越界异常',
+      type: 'ErrorCode.SERVER_INTERNAL_ERROR',
+      required: true,
+    },
+    ArithmeticException: {
+      description: '算术异常，如除以零',
+      type: 'ErrorCode.SERVER_INTERNAL_ERROR',
+      required: true,
+    },
+    UnsupportedOperationException: {
+      description: '不支持的操作异常，调用了未实现的方法',
+      type: 'ErrorCode.SERVER_INTERNAL_ERROR',
+      required: true,
+    },
+    SecurityException: {
+      description: '安全异常，违反安全策略',
+      type: 'ErrorCode.SERVER_INTERNAL_ERROR',
+      required: true,
+    },
+    ConcurrentModificationException: {
+      description: '并发修改异常，在迭代过程中修改集合',
+      type: 'ErrorCode.SERVER_INTERNAL_ERROR',
+      required: true,
+    },
+    TimeoutException: {
+      description: '超时异常，操作在规定时间内未完成',
+      type: 'ErrorCode.SERVER_INTERNAL_ERROR',
+      required: true,
+    },
+    IllegalStateException: {
+      description: '非法状态异常，对象处于不适当的状态',
+      type: 'ErrorCode.SERVER_INTERNAL_ERROR',
+      required: true,
+    },
+    Exception: {
+      description: '兜底处理器，捕获所有未被其他处理器匹配的异常',
+      type: 'ErrorCode.SERVER_INTERNAL_ERROR',
+      required: true,
+    },
+  }}
+/>
+
+## 处理器结构
+
+```java title="JavaBaseExceptionHandler.java"
+@RestControllerAdvice
+public class JavaBaseExceptionHandler {
+
+    // [!code highlight:3]
+    @ExceptionHandler(NullPointerException.class)
+    public ResponseEntity<BaseResponse<Void>> handleNullPointerException(
+            NullPointerException e) {
+        return ResultUtil.error(
+            ErrorCode.SERVER_INTERNAL_ERROR, e.getMessage(), null
+        );
+    }
+
+    // [!code highlight:3]
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<BaseResponse<Void>> handleIllegalArgumentException(
+            IllegalArgumentException e) {
+        return ResultUtil.error(
+            ErrorCode.PARAMETER_ERROR, e.getMessage(), null
+        );
+    }
+
+    // [!code highlight:3]
+    // 兜底处理器：捕获所有未被显式处理的异常
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<BaseResponse<Void>> handleException(Exception e) {
+        return ResultUtil.error(
+            ErrorCode.SERVER_INTERNAL_ERROR, e.getMessage(), null
+        );
+    }
+
+    // ... 其他异常处理方法
+}
+```
+
+## 响应示例
+
+当发生 `NullPointerException` 时，响应如下：
+
+```json title="response.json"
+{
+  "context": "550e8400-e29b-41d4-a716-446655440000",
+  "output": "SERVER_INTERNAL_ERROR",
+  "code": 50000,
+  "message": null,
+  "error_message": "Cannot invoke method on null reference",
+  "duration": 3,
+  "data": null
+}
+```
+
+HTTP 状态码为 `500`（50000 / 100）。
+
+## 设计说明
+
+- `IllegalArgumentException` 映射为 `PARAMETER_ERROR`（HTTP 400），其余异常统一映射为 `SERVER_INTERNAL_ERROR`（HTTP 500）
+- `Exception` 兜底处理器确保任何未预期的异常都不会泄露堆栈信息至客户端
+- 所有处理方法均通过 `ResultUtil.error()` 构建响应，自动注入上下文标识与请求耗时
+
+## 下一步
+
+<Cards>
+  <Card title="公共业务异常" href="/docs/bamboo-base-java/mvc/exception/public" />
+  <Card title="Spring MVC 异常" href="/docs/bamboo-base-java/mvc/exception/spring-boot" />
+  <Card title="异常处理概览" href="/docs/bamboo-base-java/mvc/exception" />
+</Cards>

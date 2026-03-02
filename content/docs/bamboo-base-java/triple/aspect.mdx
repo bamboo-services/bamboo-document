@@ -1,0 +1,174 @@
+---
+title: AOP 切面
+description: DubboContextAspect 与 TripleRequestCheckAspect 实现上下文传播与请求校验
+icon: Layers
+---
+
+# AOP 切面
+
+bamboo-triple 提供两个核心 AOP 切面，分别负责 Dubbo Triple 调用链的上下文传播与请求参数校验。两者均以 `HIGHEST_PRECEDENCE` 优先级执行，确保在业务逻辑之前完成基础设施初始化。
+
+## DubboContextAspect
+
+`DubboContextAspect` 是上下文传播切面，拦截标注 `@DubboPersistentContext` 的方法，从请求参数中提取链路追踪 ID 并初始化上下文环境。
+
+### 工作流程
+
+```
+客户端调用 Dubbo 服务方法
+        │
+        ▼
+DubboContextAspect (@Around)
+        │
+        ├── 1. 通过反射获取第一个参数的 getCtx() 方法
+        ├── 2. 提取 ctx 值（链路追踪 ID）
+        ├── 3. 初始化 ContextHolder（设置 contextId 与起始时间）
+        ├── 4. 设置 MDC（日志链路追踪）
+        ├── 5. 执行目标方法
+        └── 6. 清理 ContextHolder 与 MDC
+```
+
+### 类定义
+
+```java title="DubboContextAspect.java"
+package com.xlf.utility.triple;
+
+import org.aspectj.lang.annotation.Aspect;
+import org.aspectj.lang.annotation.Around;
+import org.springframework.core.annotation.Order;
+import org.springframework.core.Ordered;
+import org.springframework.stereotype.Component;
+
+// [!code highlight:3]
+// 最高优先级执行，确保上下文在所有切面之前初始化
+@Aspect
+@Component
+@Order(Ordered.HIGHEST_PRECEDENCE)
+public class DubboContextAspect {
+
+    @Around("@annotation(DubboPersistentContext)")
+    public Object around(ProceedingJoinPoint joinPoint) throws Throwable {
+        // 1. 反射提取 ctx
+        // 2. 初始化 ContextHolder + MDC
+        // 3. 执行目标方法
+        // 4. 清理上下文
+    }
+}
+```
+
+### 上下文提取机制
+
+切面通过反射机制从方法参数中提取上下文 ID：
+
+```java title="ContextExtraction.java"
+// [!code highlight:5]
+// 反射调用 getCtx() 获取链路追踪 ID
+Object[] args = joinPoint.getArgs();
+for (Object arg : args) {
+    Method getCtx = arg.getClass().getMethod("getCtx");
+    String contextId = (String) getCtx.invoke(arg);
+    // 初始化 ContextHolder
+}
+```
+
+该机制要求方法的请求参数中至少有一个对象提供 `getCtx()` 方法（通常为 `TripleRequest` 子类）。
+
+### ContextHolder 与 MDC
+
+初始化完成后，以下信息可在整个调用链中使用：
+
+| 存储位置 | 键 | 值 | 用途 |
+|----------|-----|-----|------|
+| `ContextHolder` | contextId | UUID | `TripleResult` 自动填充 `context` 字段 |
+| `ContextHolder` | startTime | 时间戳 | `TripleResult` 自动计算 `duration` 字段 |
+| `MDC` | contextId | UUID | 日志框架自动输出链路追踪 ID |
+
+## TripleRequestCheckAspect
+
+`TripleRequestCheckAspect` 是请求校验切面，拦截标注 `@TripleRequestCheck` 的方法，调用请求参数的 `validate()` 方法进行参数校验。
+
+### 工作流程
+
+```
+Dubbo 服务方法调用
+        │
+        ▼
+TripleRequestCheckAspect (@Around)
+        │
+        ├── 1. 从方法参数中查找 TripleRequest 类型的参数
+        ├── 2. 调用 validate() 方法
+        ├── 3a. validate() 返回 true → 继续执行目标方法
+        └── 3b. validate() 返回 false → 抛出 BusinessException
+```
+
+### 类定义
+
+```java title="TripleRequestCheckAspect.java"
+package com.xlf.utility.triple;
+
+import org.aspectj.lang.annotation.Aspect;
+import org.aspectj.lang.annotation.Around;
+import org.springframework.core.annotation.Order;
+import org.springframework.core.Ordered;
+import org.springframework.stereotype.Component;
+
+// [!code highlight:3]
+// 最高优先级执行，在业务逻辑之前完成参数校验
+@Aspect
+@Component
+@Order(Ordered.HIGHEST_PRECEDENCE)
+public class TripleRequestCheckAspect {
+
+    @Around("@annotation(tripleRequestCheck)")
+    public Object around(ProceedingJoinPoint joinPoint,
+                         TripleRequestCheck tripleRequestCheck) throws Throwable {
+        // 1. 提取 TripleRequest 参数
+        // 2. 调用 validate()
+        // 3. 校验失败则抛出 BusinessException
+    }
+}
+```
+
+### 校验失败处理
+
+当 `validate()` 返回 `false` 时，切面将抛出 `BusinessException`，异常消息与错误码来源于 `@TripleRequestCheck` 注解的属性：
+
+```java title="ValidationFailure.java"
+// [!code highlight:4]
+// 校验失败时抛出异常，消息与错误码来自注解属性
+if (!request.validate()) {
+    throw new BusinessException(
+            tripleRequestCheck.message(),
+            tripleRequestCheck.errorCode());
+}
+```
+
+## 切面执行顺序
+
+当方法同时标注 `@DubboPersistentContext` 与 `@TripleRequestCheck` 时，执行顺序如下：
+
+```
+请求进入
+    │
+    ▼
+DubboContextAspect (HIGHEST_PRECEDENCE)
+    │  → 初始化上下文
+    ▼
+TripleRequestCheckAspect (HIGHEST_PRECEDENCE)
+    │  → 参数校验
+    ▼
+目标方法执行
+    │
+    ▼
+返回响应
+```
+
+> 两个切面均为 `HIGHEST_PRECEDENCE`，实际执行顺序由 Spring 容器的注册顺序决定。`TripleAutoConfiguration` 确保 `DubboContextAspect` 优先注册。
+
+## 下一步
+
+<Cards>
+  <Card title="注解" href="/docs/bamboo-base-java/triple/annotation" />
+  <Card title="TripleRequest 请求模型" href="/docs/bamboo-base-java/triple/request" />
+  <Card title="TripleResult 结果工厂" href="/docs/bamboo-base-java/triple/result" />
+</Cards>

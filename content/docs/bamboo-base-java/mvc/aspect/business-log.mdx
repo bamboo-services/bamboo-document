@@ -1,0 +1,120 @@
+---
+title: 业务日志切面
+description: BusinessLogAspect 提供独立的业务日志记录方法，支持 Controller、Service 和 DAO 三层的日志前置处理
+icon: FileText
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# BusinessLogAspect
+
+`BusinessLogAspect` 是一个独立的业务日志工具类，提供 Controller、Service 和 DAO 三层的日志前置处理方法。与 `LogAspectHandler` 基于 AOP 自动拦截不同，`BusinessLogAspect` 需要在业务代码中显式调用，适用于需要自定义日志行为的场景。
+
+## 方法详解
+
+<TypeTable
+  type={{
+    beforeControllerLog: {
+      description: '记录 Controller 层方法的前置日志，包含请求路径、方法名和参数信息',
+      type: 'void',
+      required: true,
+    },
+    beforeServiceLog: {
+      description: '记录 Service 层方法的前置日志，包含服务类名、方法名和参数信息',
+      type: 'void',
+      required: true,
+    },
+    beforeDaoLog: {
+      description: '记录 DAO 层方法的前置日志，包含 Mapper 类名、方法名和查询参数',
+      type: 'void',
+      required: true,
+    },
+  }}
+/>
+
+## 使用示例
+
+### Controller 层
+
+```java title="OrderController.java"
+@RestController
+@RequestMapping("/api/v1/order")
+@RequiredArgsConstructor
+public class OrderController {
+
+    private final BusinessLogAspect businessLogAspect;
+
+    @PostMapping("/create")
+    public ResponseEntity<BaseResponse<OrderVO>> createOrder(
+            @RequestBody OrderDTO dto) {
+        // [!code highlight:2]
+        // 手动记录 Controller 层日志
+        businessLogAspect.beforeControllerLog();
+
+        OrderVO order = orderService.createOrder(dto);
+        return ResultUtil.success("订单创建成功", order);
+    }
+}
+```
+
+### Service 层
+
+```java title="OrderService.java"
+@Service
+@RequiredArgsConstructor
+public class OrderService {
+
+    private final BusinessLogAspect businessLogAspect;
+
+    public OrderVO createOrder(OrderDTO dto) {
+        // [!code highlight:2]
+        // 手动记录 Service 层日志
+        businessLogAspect.beforeServiceLog();
+
+        // 业务逻辑...
+        return orderVO;
+    }
+}
+```
+
+### DAO 层
+
+```java title="OrderRepository.java"
+@Repository
+@RequiredArgsConstructor
+public class OrderRepository {
+
+    private final BusinessLogAspect businessLogAspect;
+
+    public OrderEntity findByOrderNo(String orderNo) {
+        // [!code highlight:2]
+        // 手动记录 DAO 层日志
+        businessLogAspect.beforeDaoLog();
+
+        return orderMapper.selectByOrderNo(orderNo);
+    }
+}
+```
+
+## 与 LogAspectHandler 的对比
+
+| 特性 | LogAspectHandler | BusinessLogAspect |
+|------|-----------------|-------------------|
+| 触发方式 | AOP 自动拦截 | 手动显式调用 |
+| 覆盖范围 | 全局生效 | 按需使用 |
+| 自定义程度 | 固定格式 | 可结合业务逻辑 |
+| 适用场景 | 通用日志记录 | 特定业务流程的日志增强 |
+
+## 注意事项
+
+- `BusinessLogAspect` 是一个独立的组件类，非 AOP 切面，不会自动拦截方法调用
+- 若项目已启用 `LogAspectHandler`（默认启用），通常不需要额外使用 `BusinessLogAspect`
+- 适合在 `LogAspectHandler` 无法满足需求时作为补充手段使用
+
+## 下一步
+
+<Cards>
+  <Card title="日志切面" href="/docs/bamboo-base-java/mvc/aspect/log" />
+  <Card title="调试切面" href="/docs/bamboo-base-java/mvc/aspect/debug" />
+  <Card title="过滤器概览" href="/docs/bamboo-base-java/mvc/filter" />
+</Cards>

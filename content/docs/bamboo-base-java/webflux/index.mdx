@@ -1,0 +1,97 @@
+---
+title: Spring WebFlux
+description: bamboo-webflux 模块提供响应式 Web 服务的标准化基础设施
+icon: Zap
+---
+
+# Spring WebFlux
+
+**bamboo-webflux** 是筱工具(Java) 的响应式 Web 集成模块，基于 Spring WebFlux 与 Project Reactor 构建，为响应式 Web 服务提供与 `bamboo-mvc` 对等的标准化基础设施。
+
+## 核心能力
+
+- **响应式响应构建** - `ResultUtil` 返回 `Mono<ResponseEntity<BaseResponse<T>>>`，与 Reactor 管道无缝衔接
+- **Reactor Context 上下文** - `ContextHolder` 基于 Reactor Context 实现链路追踪，替代 ThreadLocal 方案
+- **多层异常处理** - `@RestControllerAdvice` 异常处理器链，覆盖 Java / Spring WebFlux / 数据库异常
+- **AOP 切面** - 日志切面与调试切面，适配 `Mono` / `Flux` 响应式返回类型
+- **WebFilter 过滤器链** - 上下文注入、CORS 校验、OPTIONS 预检、权限校验等 WebFilter 实现
+- **自动配置** - `@ConditionalOnWebApplication(Type.REACTIVE)` 条件装配，引入即生效
+
+## Maven 依赖
+
+```xml title="pom.xml"
+<dependency>
+    <groupId>com.x-lf.utility</groupId>
+    <artifactId>bamboo-webflux</artifactId>
+    <version>2.0.0-beta2</version>
+</dependency>
+```
+
+`bamboo-webflux` 会自动传递依赖 `bamboo-base`，无需重复声明。
+
+## 与 Spring MVC 模块的区别
+
+| 对比项 | bamboo-mvc | bamboo-webflux |
+|--------|-----------|----------------|
+| 底层框架 | Spring MVC (Servlet) | Spring WebFlux (Reactive) |
+| 线程模型 | 一请求一线程 | 事件循环 + 少量线程 |
+| 上下文传递 | `ThreadLocal` | Reactor Context |
+| 返回类型 | `ResponseEntity<BaseResponse<T>>` | `Mono<ResponseEntity<BaseResponse<T>>>` |
+| 过滤器 | `Filter` (Servlet) | `WebFilter` (Reactive) |
+| 请求对象 | `HttpServletRequest` | `ServerWebExchange` |
+
+两个模块在 API 设计上保持高度一致，如果你熟悉 `bamboo-mvc`，迁移至 `bamboo-webflux` 的学习成本极低。
+
+## 自动装配
+
+`bamboo-webflux` 通过 `WebFluxSdkAutoConfiguration` 实现自动配置，当检测到当前应用为响应式 Web 应用时，自动注册以下组件：
+
+- `ContextFilter` - 上下文注入 WebFilter
+- `LogAspectHandler` - 日志切面
+- `DebugAspectHandler` - 调试切面
+- `ErrorController` - 错误控制器
+- `MybatisPlusConfigHandler` - MyBatis-Plus 配置（条件注册）
+
+## 包结构
+
+| 包路径 | 说明 |
+|--------|------|
+| `com.xlf.utility.webflux` | ResultUtil、ContextHolder 核心类 |
+| `com.xlf.utility.webflux.exception` | 异常处理器链 |
+| `com.xlf.utility.webflux.aspect` | AOP 切面 |
+| `com.xlf.utility.webflux.filter` | WebFilter 过滤器 |
+| `com.xlf.utility.webflux.util` | 工具类 |
+| `com.xlf.utility.webflux.config` | 自动配置与属性类 |
+
+## 快速上手
+
+```java title="UserController.java"
+import com.xlf.utility.BaseResponse;
+import com.xlf.utility.webflux.ResultUtil;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+import reactor.core.publisher.Mono;
+
+@RestController
+@RequestMapping("/api/v1/user")
+public class UserController {
+
+    @GetMapping("/{id}")
+    public Mono<ResponseEntity<BaseResponse<UserDTO>>> getUser(@PathVariable Long id) {
+        // [!code highlight:3]
+        // 使用响应式 ResultUtil 构建标准响应
+        // 返回 Mono 类型，自动从 Reactor Context 中提取链路信息
+        return userService.getUserById(id)
+                .flatMap(user -> ResultUtil.success("获取成功", user));
+    }
+}
+```
+
+## 下一步
+
+<Cards>
+  <Card title="响应式 ResultUtil" href="/docs/bamboo-base-java/webflux/result-util" />
+  <Card title="Reactor Context 上下文" href="/docs/bamboo-base-java/webflux/context-holder" />
+  <Card title="自动配置" href="/docs/bamboo-base-java/webflux/auto-configuration" />
+  <Card title="异常处理" href="/docs/bamboo-base-java/webflux/exception" />
+</Cards>

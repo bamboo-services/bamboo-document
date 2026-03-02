@@ -1,0 +1,91 @@
+---
+title: 通知服务
+description: bamboo-notify 模块提供邮件、Webhook、短信等多渠道通知能力
+icon: Bell
+---
+
+# 通知服务
+
+**bamboo-notify** 是筱工具(Java) 的通知层模块，提供统一的多渠道消息通知能力。通过 `NotifyService` 接口抽象，实现邮件、Webhook 等通知渠道的标准化接入。
+
+## 核心架构
+
+```
+NotifyService (统一通知接口)
+├── EmailNotify    (邮件通知实现)
+└── WebhookNotify  (Webhook 通知实现)
+
+TemplateEngine (模板引擎接口)
+└── 自定义实现
+
+NotifyMessage ──→ NotifyService ──→ NotifyResult
+(消息构建)        (发送处理)        (结果反馈)
+```
+
+所有通知渠道均实现 `NotifyService` 接口，业务层通过统一的 `send()` 或 `sendAsync()` 方法发送通知，无需关注底层渠道差异。
+
+## Maven 依赖
+
+```xml title="pom.xml"
+<dependency>
+    <groupId>com.x-lf.utility</groupId>
+    <artifactId>bamboo-notify</artifactId>
+    <version>2.0.0-beta2</version>
+</dependency>
+```
+
+## 通知类型
+
+`NotifyType` 枚举定义了当前支持的通知渠道：
+
+| 枚举值 | 说明 |
+|--------|------|
+| `EMAIL` | 邮件通知，基于 SMTP 协议发送 |
+| `WEBHOOK` | Webhook 通知，通过 HTTP 回调推送 |
+| `SMS` | 短信通知，对接第三方短信服务 |
+
+## 基本用法
+
+```java title="NotifyExample.java"
+import com.xlf.utility.notify.NotifyMessage;
+import com.xlf.utility.notify.NotifyResult;
+import com.xlf.utility.notify.NotifyService;
+import com.xlf.utility.notify.NotifyType;
+
+// [!code highlight:7]
+// 构建通知消息
+NotifyMessage message = NotifyMessage.builder()
+        .to("admin@example.com")
+        .subject("系统告警")
+        .content("服务器 CPU 使用率超过 90%")
+        .type(NotifyType.EMAIL)
+        .priority(1)
+        .build();
+
+// 同步发送
+NotifyResult result = notifyService.send(message);
+
+// 异步发送（无返回值）
+notifyService.sendAsync(message);
+```
+
+## 模块结构
+
+| 类 / 接口 | 说明 |
+|-----------|------|
+| `NotifyService` | 通知服务接口，定义 `send()` 与 `sendAsync()` 方法 |
+| `NotifyMessage` | 通知消息模型，采用 Builder 模式构建 |
+| `NotifyResult` | 通知结果模型，包含成功状态与错误信息 |
+| `NotifyType` | 通知类型枚举 |
+| `TemplateEngine` | 模板引擎接口，支持变量替换渲染 |
+| `EmailNotify` | 邮件通知实现 |
+| `WebhookNotify` | Webhook 通知实现 |
+
+## 下一步
+
+<Cards>
+  <Card title="邮件通知" href="/docs/bamboo-base-java/notify/email" />
+  <Card title="Webhook 通知" href="/docs/bamboo-base-java/notify/webhook" />
+  <Card title="模板引擎" href="/docs/bamboo-base-java/notify/template" />
+  <Card title="数据模型" href="/docs/bamboo-base-java/notify/model" />
+</Cards>

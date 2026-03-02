@@ -1,0 +1,114 @@
+---
+title: PostgreSqlExceptionHandler
+description: PostgreSQL 数据库异常的响应式处理器
+icon: Database
+---
+
+# PostgreSqlExceptionHandler
+
+`PostgreSqlExceptionHandler` 是一个独立的异常处理器，负责捕获 PostgreSQL 数据库操作中产生的异常，并将其转换为标准化的 `Mono<ResponseEntity<BaseResponse<Void>>>` 响应。与 `MysqlExceptionHandler` 类似，该处理器独立于主继承链。
+
+## 类定义
+
+```java title="PostgreSqlExceptionHandler.java"
+// [!code highlight:3]
+// 独立的 PostgreSQL 异常处理器
+@RestControllerAdvice
+public class PostgreSqlExceptionHandler {
+    // ...
+}
+```
+
+## 处理的异常类型
+
+### PSQLException
+
+PostgreSQL JDBC 驱动抛出的通用异常，涵盖连接错误、约束违反、语法错误等多种场景。处理器会根据异常的 `SQLState` 码进行细分处理。
+
+```java title="PostgreSqlExceptionHandler.java"
+@ExceptionHandler(PSQLException.class)
+public Mono<ResponseEntity<BaseResponse<Void>>> handlePSQLException(
+        PSQLException e) {
+    // [!code highlight:2]
+    // 根据 SQLState 码判断异常类型并返回对应的错误码
+    return ResultUtil.error(ErrorCode.SERVER_INTERNAL_ERROR, e.getMessage(), null);
+}
+```
+
+### 常见 SQLState 分类
+
+| SQLState | 含义 | 映射行为 |
+|----------|------|---------|
+| `23505` | 唯一键冲突 (unique_violation) | 数据重复错误 |
+| `23503` | 外键违反 (foreign_key_violation) | 引用数据不存在 |
+| `23502` | 非空违反 (not_null_violation) | 必填字段为空 |
+| `42601` | 语法错误 (syntax_error) | SQL 语法错误 |
+| `42P01` | 表不存在 (undefined_table) | 数据表未定义 |
+| `40P01` | 死锁 (deadlock_detected) | 事务死锁 |
+
+## 启用条件
+
+`PostgreSqlExceptionHandler` 不由自动配置自动注册。使用时需确保以下条件：
+
+1. 项目中引入了 PostgreSQL 驱动依赖
+2. 将 `PostgreSqlExceptionHandler` 注册为 Spring Bean
+
+```java title="ExceptionConfig.java"
+@Configuration
+public class ExceptionConfig {
+
+    @Bean
+    public PostgreSqlExceptionHandler postgreSqlExceptionHandler() {
+        return new PostgreSqlExceptionHandler();
+    }
+}
+```
+
+## 常见场景
+
+### 唯一键冲突
+
+```json title="response.json"
+{
+  "context": "550e8400-e29b-41d4-a716-446655440000",
+  "output": "OPERATION_FAILED",
+  "code": 40900,
+  "message": "操作失败",
+  "error_message": "ERROR: duplicate key value violates unique constraint \"uk_email\"",
+  "duration": 6,
+  "data": null
+}
+```
+
+### 外键约束违反
+
+```json title="response.json"
+{
+  "context": "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+  "output": "SERVER_INTERNAL_ERROR",
+  "code": 50000,
+  "message": "服务器内部错误",
+  "error_message": "ERROR: insert or update on table \"order\" violates foreign key constraint \"fk_user_id\"",
+  "duration": 4,
+  "data": null
+}
+```
+
+## 与 MySQL 处理器的选择
+
+在同一项目中，通常只需要注册其中一个数据库异常处理器：
+
+| 数据库 | 处理器 |
+|--------|--------|
+| MySQL / MariaDB | `MysqlExceptionHandler` |
+| PostgreSQL | `PostgreSqlExceptionHandler` |
+
+如果项目同时连接了多个数据库，可以同时注册两个处理器。
+
+## 下一步
+
+<Cards>
+  <Card title="MySQL 异常处理" href="/docs/bamboo-base-java/webflux/exception/mysql" />
+  <Card title="异常处理概览" href="/docs/bamboo-base-java/webflux/exception" />
+  <Card title="自定义扩展" href="/docs/bamboo-base-java/webflux/exception/custom-system" />
+</Cards>

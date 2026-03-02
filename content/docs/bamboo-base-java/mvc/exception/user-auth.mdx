@@ -1,0 +1,219 @@
+---
+title: 用户认证异常
+description: UserAuthenticationException 提供携带错误类型枚举和用户信息的认证异常处理
+icon: UserX
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# UserAuthenticationException
+
+`UserAuthenticationException` 是专门用于用户认证与授权场景的异常类，继承自 `RuntimeException`。该异常携带 `ErrorType` 枚举标识具体的认证错误类型，并可选择性地附带 `UserInfo` 记录类提供用户上下文信息。
+
+## ErrorType 枚举
+
+`ErrorType` 定义了所有可能的认证错误类型：
+
+<TypeTable
+  type={{
+    TOKEN_EXPIRED: {
+      description: '令牌已过期。用户的访问令牌超过有效期',
+      type: 'ErrorType',
+      required: true,
+    },
+    PERMISSION_DENIED: {
+      description: '权限被拒绝。用户已认证但无权执行当前操作',
+      type: 'ErrorType',
+      required: true,
+    },
+    USER_NOT_LOGIN: {
+      description: '用户未登录。请求未携带有效的认证凭据',
+      type: 'ErrorType',
+      required: true,
+    },
+    USER_NOT_EXIST: {
+      description: '用户不存在。认证凭据中的用户标识无法匹配到有效用户',
+      type: 'ErrorType',
+      required: true,
+    },
+    WRONG_PASSWORD: {
+      description: '密码错误。用户提供的密码与存储的凭据不匹配',
+      type: 'ErrorType',
+      required: true,
+    },
+    USER_BANNED: {
+      description: '用户已被封禁。账户处于禁用状态',
+      type: 'ErrorType',
+      required: true,
+    },
+    LOGIN_WRONG: {
+      description: '登录失败。通用的登录错误，不暴露具体原因',
+      type: 'ErrorType',
+      required: true,
+    },
+    VERIFICATION_CODE: {
+      description: '验证码错误。用户提供的验证码不正确或已过期',
+      type: 'ErrorType',
+      required: true,
+    },
+  }}
+/>
+
+## UserInfo 记录类
+
+`UserInfo` 是一个内嵌的记录类，用于在异常中携带触发认证错误的用户信息：
+
+```java title="UserAuthenticationException.java"
+// [!code highlight:2]
+// 记录类，不可变且自动生成 equals/hashCode/toString
+public record UserInfo(
+    String userId,
+    String username,
+    String email
+) {}
+```
+
+<TypeTable
+  type={{
+    userId: {
+      description: '用户唯一标识符',
+      type: 'String',
+    },
+    username: {
+      description: '用户名',
+      type: 'String',
+    },
+    email: {
+      description: '用户邮箱地址',
+      type: 'String',
+    },
+  }}
+/>
+
+## 异常结构
+
+```java title="UserAuthenticationException.java"
+public class UserAuthenticationException extends RuntimeException {
+
+    // [!code highlight:2]
+    private final ErrorType errorType;
+    private final UserInfo userInfo;
+
+    public UserAuthenticationException(ErrorType errorType, String message) {
+        super(message);
+        this.errorType = errorType;
+        this.userInfo = null;
+    }
+
+    public UserAuthenticationException(
+            ErrorType errorType, String message, UserInfo userInfo) {
+        super(message);
+        this.errorType = errorType;
+        this.userInfo = userInfo;
+    }
+
+    // getter 方法...
+}
+```
+
+## 使用示例
+
+### 抛出认证异常
+
+```java title="AuthService.java"
+@Service
+public class AuthService {
+
+    public TokenVO login(String username, String password) {
+        UserEntity user = userMapper.findByUsername(username);
+
+        if (user == null) {
+            // [!code highlight:3]
+            // 用户不存在
+            throw new UserAuthenticationException(
+                ErrorType.USER_NOT_EXIST, "用户不存在"
+            );
+        }
+
+        if (user.isBanned()) {
+            // [!code highlight:4]
+            // 用户已封禁，附带用户信息
+            throw new UserAuthenticationException(
+                ErrorType.USER_BANNED, "账户已被封禁",
+                new UserInfo(user.getId(), user.getUsername(), user.getEmail())
+            );
+        }
+
+        if (!passwordEncoder.matches(password, user.getPassword())) {
+            // [!code highlight:3]
+            throw new UserAuthenticationException(
+                ErrorType.WRONG_PASSWORD, "密码错误"
+            );
+        }
+
+        return generateToken(user);
+    }
+}
+```
+
+### 令牌校验
+
+```java title="TokenFilter.java"
+public class TokenFilter {
+
+    public void validateToken(String token) {
+        if (token == null || token.isEmpty()) {
+            // [!code highlight:3]
+            throw new UserAuthenticationException(
+                ErrorType.USER_NOT_LOGIN, "请先登录"
+            );
+        }
+
+        if (tokenService.isExpired(token)) {
+            // [!code highlight:3]
+            throw new UserAuthenticationException(
+                ErrorType.TOKEN_EXPIRED, "登录已过期，请重新登录"
+            );
+        }
+    }
+}
+```
+
+### 权限校验
+
+```java title="PermissionService.java"
+public void checkPermission(String userId, String resource) {
+    if (!hasPermission(userId, resource)) {
+        // [!code highlight:3]
+        throw new UserAuthenticationException(
+            ErrorType.PERMISSION_DENIED, "无权访问该资源"
+        );
+    }
+}
+```
+
+## 异常处理
+
+`UserAuthenticationException` 由异常处理器捕获并转换为标准响应：
+
+```json title="response.json"
+{
+  "context": "550e8400-e29b-41d4-a716-446655440000",
+  "output": "UNAUTHORIZED",
+  "code": 40100,
+  "message": null,
+  "error_message": "登录已过期，请重新登录",
+  "duration": 3,
+  "data": null
+}
+```
+
+HTTP 状态码为 `401`（40100 / 100）。
+
+## 下一步
+
+<Cards>
+  <Card title="公共业务异常" href="/docs/bamboo-base-java/mvc/exception/public" />
+  <Card title="权限过滤器" href="/docs/bamboo-base-java/mvc/filter/permission" />
+  <Card title="异常处理概览" href="/docs/bamboo-base-java/mvc/exception" />
+</Cards>

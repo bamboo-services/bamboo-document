@@ -1,0 +1,191 @@
+---
+title: 数据模型
+description: NotifyMessage 与 NotifyResult 定义通知服务的请求与响应数据结构
+icon: Database
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# 数据模型
+
+bamboo-notify 模块通过 `NotifyMessage` 和 `NotifyResult` 两个数据模型，分别定义通知请求的输入参数与发送结果的输出结构。两者均采用 Lombok `@Builder` 模式，支持链式构建。
+
+## NotifyMessage
+
+`NotifyMessage` 是通知消息的载体，封装了接收方、内容、类型等全部发送参数。
+
+### 类定义
+
+```java title="NotifyMessage.java"
+package com.xlf.utility.notify;
+
+import lombok.Builder;
+
+// [!code highlight:2]
+// 通知消息模型，使用 Builder 模式构建
+@Builder
+public class NotifyMessage {
+    private String to;
+    private String subject;
+    private String content;
+    private NotifyType type;
+    private Map<String, Object> variables;
+    private int priority;
+}
+```
+
+### 字段说明
+
+<TypeTable
+  type={{
+    to: {
+      description: '接收方标识。邮件通知时为邮箱地址，Webhook 通知时为回调 URL。',
+      type: 'String',
+      required: true,
+    },
+    subject: {
+      description: '通知主题。邮件通知时对应邮件标题，Webhook 通知时可用于消息分类。',
+      type: 'String',
+      required: true,
+    },
+    content: {
+      description: '通知内容。可为纯文本内容，也可为模板名称（配合 TemplateEngine 使用时）。',
+      type: 'String',
+      required: true,
+    },
+    type: {
+      description: '通知类型。可选值：EMAIL、WEBHOOK、SMS。决定使用哪种通知渠道发送。',
+      type: 'NotifyType',
+      required: true,
+    },
+    variables: {
+      description: '模板变量。键值对形式，配合 TemplateEngine 进行模板渲染时使用。无模板需求时可不设置。',
+      type: 'Map<String, Object>',
+      required: false,
+    },
+    priority: {
+      description: '消息优先级。值越小优先级越高，默认值为 3。可用于通知队列的优先排序。',
+      type: 'int',
+      default: '3',
+    },
+  }}
+/>
+
+### 构建示例
+
+```java title="NotifyMessageExample.java"
+// [!code highlight:8]
+// 完整参数构建
+NotifyMessage message = NotifyMessage.builder()
+        .to("admin@example.com")
+        .subject("系统告警")
+        .content("服务 ${service} 在 ${time} 出现异常：${error}")
+        .type(NotifyType.EMAIL)
+        .variables(Map.of(
+                "service", "order-service",
+                "time", "2026-03-02 14:30:00",
+                "error", "数据库连接超时"
+        ))
+        .priority(1)
+        .build();
+```
+
+```java title="NotifyMessageSimple.java"
+// 最简构建（仅必填字段）
+NotifyMessage message = NotifyMessage.builder()
+        .to("https://hooks.example.com/notify")
+        .subject("部署完成")
+        .content("{\"status\":\"success\"}")
+        .type(NotifyType.WEBHOOK)
+        .build();
+```
+
+## NotifyResult
+
+`NotifyResult` 是通知发送结果的封装，包含发送状态、结果消息与时间戳等信息。提供静态工厂方法简化实例创建。
+
+### 类定义
+
+```java title="NotifyResult.java"
+package com.xlf.utility.notify;
+
+import lombok.Builder;
+import java.time.LocalDateTime;
+
+// [!code highlight:2]
+// 通知结果模型，提供静态工厂方法
+@Builder
+public class NotifyResult {
+    private boolean success;
+    private String message;
+    private LocalDateTime timestamp;
+    private String errorCode;
+
+    public static NotifyResult success(String message) { ... }
+    public static NotifyResult failure(String message) { ... }
+    public static NotifyResult failure(String message, String errorCode) { ... }
+}
+```
+
+### 字段说明
+
+<TypeTable
+  type={{
+    success: {
+      description: '发送是否成功。true 表示通知已成功投递，false 表示发送过程中出现异常。',
+      type: 'boolean',
+      required: true,
+    },
+    message: {
+      description: '结果描述信息。成功时为确认消息，失败时为错误详情。',
+      type: 'String',
+      required: true,
+    },
+    timestamp: {
+      description: '结果生成时间戳。默认值为 LocalDateTime.now()，记录通知处理完成的时刻。',
+      type: 'LocalDateTime',
+      default: 'LocalDateTime.now()',
+    },
+    errorCode: {
+      description: '错误码。仅在发送失败时填充，用于标识具体的失败原因分类。',
+      type: 'String',
+      required: false,
+    },
+  }}
+/>
+
+### 静态工厂方法
+
+| 方法签名 | 说明 |
+|----------|------|
+| `success(String message)` | 创建成功结果，`success` 为 `true` |
+| `failure(String message)` | 创建失败结果，`success` 为 `false`，无错误码 |
+| `failure(String message, String errorCode)` | 创建失败结果，携带错误码 |
+
+### 使用示例
+
+```java title="NotifyResultExample.java"
+// 成功结果
+NotifyResult success = NotifyResult.success("邮件发送成功");
+
+// [!code highlight:3]
+// 失败结果（携带错误码）
+NotifyResult failure = NotifyResult.failure(
+        "SMTP 连接超时", "SMTP_TIMEOUT");
+
+// 判断发送结果
+if (result.isSuccess()) {
+    log.info("通知发送成功: {}", result.getMessage());
+} else {
+    log.error("通知发送失败 [{}]: {}",
+            result.getErrorCode(), result.getMessage());
+}
+```
+
+## 下一步
+
+<Cards>
+  <Card title="通知服务概述" href="/docs/bamboo-base-java/notify" />
+  <Card title="邮件通知" href="/docs/bamboo-base-java/notify/email" />
+  <Card title="模板引擎" href="/docs/bamboo-base-java/notify/template" />
+</Cards>

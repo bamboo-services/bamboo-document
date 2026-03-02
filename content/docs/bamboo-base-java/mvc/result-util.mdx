@@ -1,0 +1,191 @@
+---
+title: ResultUtil
+description: 标准化 HTTP 响应构建工具类，自动注入上下文标识与请求耗时
+icon: PackageCheck
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# ResultUtil
+
+`ResultUtil` 是一个静态工具类，用于构建符合 `BaseResponse<T>` 规范的标准化 HTTP 响应。该工具类会自动从 `ContextHolder` 中获取上下文标识符（Context ID）和请求耗时（Duration），确保每个响应均携带完整的追踪信息。
+
+## 方法签名
+
+### success
+
+构建成功响应，HTTP 状态码固定为 `200 OK`。
+
+```java title="ResultUtil.java"
+// [!code highlight:2]
+// 不携带数据的成功响应
+public static ResponseEntity<BaseResponse<Void>> success(String message)
+
+// [!code highlight:2]
+// 携带数据的成功响应
+public static <T> ResponseEntity<BaseResponse<T>> success(String message, T data)
+```
+
+### error
+
+构建错误响应，HTTP 状态码根据 `ErrorCode` 自动计算。
+
+```java title="ResultUtil.java"
+// [!code highlight:2]
+// HTTP 状态码 = errorCode.getCode() / 100
+public static <T> ResponseEntity<BaseResponse<T>> error(ErrorCode errorCode, String errorMessage, T data)
+```
+
+## 方法详解
+
+<TypeTable
+  type={{
+    'success(message)': {
+      description: '构建不携带业务数据的成功响应。返回 HTTP 200，响应体中 data 字段为 null',
+      type: 'ResponseEntity<BaseResponse<Void>>',
+      required: true,
+    },
+    'success(message, data)': {
+      description: '构建携带业务数据的成功响应。返回 HTTP 200，响应体中 data 字段为传入的泛型数据',
+      type: 'ResponseEntity<BaseResponse<T>>',
+      required: true,
+    },
+    'error(errorCode, errorMessage, data)': {
+      description: '构建错误响应。HTTP 状态码通过 errorCode.getCode() / 100 计算得出，支持附带额外数据',
+      type: 'ResponseEntity<BaseResponse<T>>',
+      required: true,
+    },
+  }}
+/>
+
+## 状态码映射
+
+`ResultUtil` 的 HTTP 状态码由 `ErrorCode` 的编码值决定：
+
+| ErrorCode 编码 | HTTP 状态码 | 含义 |
+|---------------|------------|------|
+| 20000 | 200 | 成功 |
+| 40000 | 400 | 请求参数错误 |
+| 40100 | 401 | 未授权 |
+| 40300 | 403 | 权限不足 |
+| 40400 | 404 | 资源不存在 |
+| 50000 | 500 | 服务器内部错误 |
+
+## 响应体结构
+
+每个响应均包含以下字段：
+
+```json title="response.json"
+{
+  "context": "550e8400-e29b-41d4-a716-446655440000",
+  "output": "SUCCESS",
+  "code": 200,
+  "message": "操作成功",
+  "error_message": null,
+  "duration": 15,
+  "data": null
+}
+```
+
+<TypeTable
+  type={{
+    context: {
+      description: '请求上下文唯一标识符，由 ContextHolder 自动注入',
+      type: 'String (UUID)',
+      required: true,
+    },
+    output: {
+      description: '响应状态标识，成功为 SUCCESS，失败为对应的错误输出',
+      type: 'String',
+      required: true,
+    },
+    code: {
+      description: '业务状态码',
+      type: 'int',
+      required: true,
+    },
+    message: {
+      description: '成功时的提示消息',
+      type: 'String',
+    },
+    error_message: {
+      description: '错误时的详细错误信息',
+      type: 'String',
+    },
+    duration: {
+      description: '请求处理耗时（毫秒），由 ContextHolder 自动计算',
+      type: 'long',
+      required: true,
+    },
+    data: {
+      description: '业务数据载荷，泛型类型',
+      type: 'T',
+    },
+  }}
+/>
+
+## 使用示例
+
+### 成功响应（无数据）
+
+```java title="UserController.java"
+@PostMapping("/register")
+public ResponseEntity<BaseResponse<Void>> register(@RequestBody RegisterDTO dto) {
+    userService.register(dto);
+    // [!code highlight:2]
+    // 返回成功响应，自动注入 context 和 duration
+    return ResultUtil.success("注册成功");
+}
+```
+
+### 成功响应（携带数据）
+
+```java title="UserController.java"
+@GetMapping("/{id}")
+public ResponseEntity<BaseResponse<UserVO>> getUser(@PathVariable Long id) {
+    UserVO user = userService.getUserById(id);
+    // [!code highlight]
+    return ResultUtil.success("查询成功", user);
+}
+```
+
+### 错误响应
+
+```java title="UserController.java"
+@GetMapping("/validate")
+public ResponseEntity<BaseResponse<Void>> validate(@RequestParam String token) {
+    if (!tokenService.isValid(token)) {
+        // [!code highlight:2]
+        // HTTP 状态码将被设置为 401 (40100 / 100)
+        return ResultUtil.error(ErrorCode.UNAUTHORIZED, "令牌已过期", null);
+    }
+    return ResultUtil.success("验证通过");
+}
+```
+
+### 在异常处理器中使用
+
+```java title="GlobalExceptionHandler.java"
+@ExceptionHandler(BusinessException.class)
+public ResponseEntity<BaseResponse<Void>> handleBusinessException(BusinessException e) {
+    // [!code highlight]
+    return ResultUtil.error(e.getErrorCode(), e.getMessage(), null);
+}
+```
+
+## 自动上下文注入
+
+`ResultUtil` 内部通过 `ContextHolder` 获取以下信息：
+
+1. **Context ID** — 调用 `ContextHolder.getContextId()` 获取当前请求的唯一标识
+2. **Duration** — 调用 `ContextHolder.getDuration()` 计算从请求开始到响应构建的耗时
+
+因此，在使用 `ResultUtil` 之前必须确保 `ContextFilter` 已完成上下文初始化。若上下文未初始化，Context ID 和 Duration 将使用默认值。
+
+## 下一步
+
+<Cards>
+  <Card title="上下文管理" href="/docs/bamboo-base-java/mvc/context-holder" />
+  <Card title="异常处理概览" href="/docs/bamboo-base-java/mvc/exception" />
+  <Card title="错误码定义" href="/docs/bamboo-base-java/base" />
+</Cards>

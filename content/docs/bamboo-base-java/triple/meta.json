@@ -1,0 +1,12 @@
+{
+  "title": "Dubbo Triple",
+  "icon": "Radio",
+  "pages": [
+    "index",
+    "request",
+    "response",
+    "result",
+    "aspect",
+    "annotation"
+  ]
+}

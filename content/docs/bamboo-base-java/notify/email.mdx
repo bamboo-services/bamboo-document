@@ -1,0 +1,142 @@
+---
+title: 邮件通知
+description: EmailNotify 基于 SMTP 协议实现邮件通知发送能力
+icon: Mail
+---
+
+# 邮件通知
+
+`EmailNotify` 是 `NotifyService` 接口的邮件通知实现，基于 SMTP 协议完成邮件发送。该实现封装了 SMTP 连接管理与邮件构建逻辑，业务层仅需通过 `NotifyMessage` 传入必要参数即可完成邮件投递。
+
+## 类定义
+
+```java title="EmailNotify.java"
+package com.xlf.utility.notify;
+
+// [!code highlight:2]
+// 邮件通知实现，需配合 SMTP 配置使用
+public class EmailNotify implements NotifyService {
+
+    @Override
+    public NotifyResult send(NotifyMessage message) { ... }
+
+    @Override
+    public void sendAsync(NotifyMessage message) { ... }
+}
+```
+
+## SMTP 配置
+
+使用邮件通知前，需在 `application.yml` 中配置 SMTP 服务参数：
+
+```yaml title="application.yml"
+spring:
+  mail:
+    host: smtp.example.com
+    port: 465
+    username: noreply@example.com
+    password: your-smtp-password
+    properties:
+      mail:
+        smtp:
+          auth: true
+          ssl:
+            enable: true
+          starttls:
+            enable: true
+```
+
+> 生产环境中，建议将 SMTP 密码存储于环境变量或密钥管理服务中，避免明文写入配置文件。
+
+## 使用示例
+
+### 发送简单邮件
+
+```java title="AlertService.java"
+import com.xlf.utility.notify.EmailNotify;
+import com.xlf.utility.notify.NotifyMessage;
+import com.xlf.utility.notify.NotifyResult;
+import com.xlf.utility.notify.NotifyType;
+
+@Service
+public class AlertService {
+    private final NotifyService emailNotify;
+
+    public AlertService(EmailNotify emailNotify) {
+        this.emailNotify = emailNotify;
+    }
+
+    public void sendAlert(String recipient, String subject, String content) {
+        // [!code highlight:6]
+        // 构建邮件消息并发送
+        NotifyMessage message = NotifyMessage.builder()
+                .to(recipient)
+                .subject(subject)
+                .content(content)
+                .type(NotifyType.EMAIL)
+                .build();
+
+        NotifyResult result = emailNotify.send(message);
+        if (!result.isSuccess()) {
+            log.error("邮件发送失败: {}", result.getMessage());
+        }
+    }
+}
+```
+
+### 使用模板变量
+
+```java title="WelcomeService.java"
+import java.util.Map;
+
+public void sendWelcomeEmail(String email, String username) {
+    // [!code highlight:7]
+    // 通过 variables 传递模板变量
+    NotifyMessage message = NotifyMessage.builder()
+            .to(email)
+            .subject("欢迎注册")
+            .content("welcome-template")
+            .type(NotifyType.EMAIL)
+            .variables(Map.of("username", username, "year", 2026))
+            .build();
+
+    emailNotify.sendAsync(message);
+}
+```
+
+### 设置优先级
+
+```java title="EmailPriorityExample.java"
+// [!code highlight:3]
+// priority 值越小优先级越高，默认为 3
+NotifyMessage urgentMessage = NotifyMessage.builder()
+        .to("ops@example.com")
+        .subject("紧急：数据库连接异常")
+        .content("主库连接池耗尽，请立即排查。")
+        .type(NotifyType.EMAIL)
+        .priority(1)
+        .build();
+```
+
+## 错误处理
+
+当邮件发送失败时，`NotifyResult` 将携带错误信息与错误码：
+
+```java title="ErrorHandlingExample.java"
+NotifyResult result = emailNotify.send(message);
+if (!result.isSuccess()) {
+    // [!code highlight:3]
+    // 获取错误码与详细信息
+    String errorCode = result.getErrorCode();
+    String errorMessage = result.getMessage();
+    log.error("邮件发送失败 [{}]: {}", errorCode, errorMessage);
+}
+```
+
+## 下一步
+
+<Cards>
+  <Card title="Webhook 通知" href="/docs/bamboo-base-java/notify/webhook" />
+  <Card title="模板引擎" href="/docs/bamboo-base-java/notify/template" />
+  <Card title="数据模型" href="/docs/bamboo-base-java/notify/model" />
+</Cards>

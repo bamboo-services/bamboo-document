@@ -1,0 +1,185 @@
+---
+title: 公共业务异常
+description: PublicExceptionHandler 处理框架定义的业务级异常，覆盖认证、权限、参数校验等场景
+icon: AlertTriangle
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# PublicExceptionHandler
+
+`PublicExceptionHandler` 继承自 `JavaBaseExceptionHandler`，负责处理框架层面定义的业务异常。这些异常通常由业务代码主动抛出，用于表达特定的业务错误语义。
+
+## 继承关系
+
+```
+JavaBaseExceptionHandler
+    └── PublicExceptionHandler   ← 当前层级
+        └── SystemExceptionHandler
+```
+
+## 处理的异常类型
+
+<TypeTable
+  type={{
+    BusinessException: {
+      description: '通用业务异常，携带 ErrorCode 和自定义错误消息。是最常用的业务异常类型',
+      type: 'ErrorCode（由异常实例决定）',
+      required: true,
+    },
+    PageNotFoundedException: {
+      description: '页面未找到异常',
+      type: 'ErrorCode.PAGE_NOT_FOUND',
+      required: true,
+    },
+    RequestHeaderNotMatchException: {
+      description: '请求头不匹配异常，必要的请求头缺失或格式错误',
+      type: 'ErrorCode.HEADER_ERROR',
+      required: true,
+    },
+    MailTemplateNotFoundException: {
+      description: '邮件模板未找到异常',
+      type: 'ErrorCode.SERVER_INTERNAL_ERROR',
+      required: true,
+    },
+    UserAuthenticationException: {
+      description: '用户认证异常，涵盖登录失败、令牌过期等场景',
+      type: 'ErrorCode.UNAUTHORIZED',
+      required: true,
+    },
+    BaseUserAuthenticationException: {
+      description: '基础用户认证异常，UserAuthenticationException 的父类',
+      type: 'ErrorCode.UNAUTHORIZED',
+      required: true,
+    },
+    ServerInternalErrorException: {
+      description: '服务器内部错误异常，用于包装不可预期的内部错误',
+      type: 'ErrorCode.SERVER_INTERNAL_ERROR',
+      required: true,
+    },
+    CheckFailureException: {
+      description: '校验失败异常，业务规则校验不通过时抛出',
+      type: 'ErrorCode.PARAMETER_ERROR',
+      required: true,
+    },
+    NoPermissionException: {
+      description: '无权限异常，用户无权执行当前操作',
+      type: 'ErrorCode.FORBIDDEN',
+      required: true,
+    },
+    SystemParameterErrorException: {
+      description: '系统参数错误异常，系统级配置参数有误',
+      type: 'ErrorCode.PARAMETER_ERROR',
+      required: true,
+    },
+    DeveloperException: {
+      description: '开发者异常，用于标记代码级别的逻辑错误（通常不应出现在生产环境）',
+      type: 'ErrorCode.SERVER_INTERNAL_ERROR',
+      required: true,
+    },
+    RequestException: {
+      description: '请求异常，通用的请求处理失败',
+      type: 'ErrorCode.REQUEST_ERROR',
+      required: true,
+    },
+    UnexpectedTypeException: {
+      description: '意外类型异常，参数校验时类型不匹配',
+      type: 'ErrorCode.PARAMETER_ERROR',
+      required: true,
+    },
+  }}
+/>
+
+## BusinessException 使用
+
+`BusinessException` 是最常用的业务异常，支持自定义 `ErrorCode` 和错误消息：
+
+```java title="UserService.java"
+@Service
+public class UserService {
+
+    public UserVO getUserById(Long id) {
+        UserEntity user = userMapper.selectById(id);
+        if (user == null) {
+            // [!code highlight:3]
+            // 抛出业务异常，指定错误码和错误消息
+            throw new BusinessException(
+                ErrorCode.PAGE_NOT_FOUND, "用户不存在"
+            );
+        }
+        return convertToVO(user);
+    }
+
+    public void updateEmail(Long id, String email) {
+        if (!isValidEmail(email)) {
+            // [!code highlight:2]
+            throw new BusinessException(
+                ErrorCode.PARAMETER_ERROR, "邮箱格式不正确"
+            );
+        }
+        // 业务逻辑...
+    }
+}
+```
+
+## 处理器结构
+
+```java title="PublicExceptionHandler.java"
+// [!code highlight:2]
+@RestControllerAdvice
+public class PublicExceptionHandler extends JavaBaseExceptionHandler {
+
+    @ExceptionHandler(BusinessException.class)
+    public ResponseEntity<BaseResponse<Void>> handleBusinessException(
+            BusinessException e) {
+        // [!code highlight:2]
+        // ErrorCode 由异常实例携带，支持灵活的错误码映射
+        return ResultUtil.error(e.getErrorCode(), e.getMessage(), null);
+    }
+
+    @ExceptionHandler(NoPermissionException.class)
+    public ResponseEntity<BaseResponse<Void>> handleNoPermission(
+            NoPermissionException e) {
+        return ResultUtil.error(ErrorCode.FORBIDDEN, e.getMessage(), null);
+    }
+
+    // ... 其他异常处理方法
+}
+```
+
+## 响应示例
+
+抛出 `BusinessException(ErrorCode.PAGE_NOT_FOUND, "用户不存在")` 时：
+
+```json title="response.json"
+{
+  "context": "550e8400-e29b-41d4-a716-446655440000",
+  "output": "PAGE_NOT_FOUND",
+  "code": 40400,
+  "message": null,
+  "error_message": "用户不存在",
+  "duration": 8,
+  "data": null
+}
+```
+
+HTTP 状态码为 `404`（40400 / 100）。
+
+## 异常选择指南
+
+| 场景 | 推荐异常 |
+|------|---------|
+| 通用业务错误 | `BusinessException` |
+| 资源不存在 | `PageNotFoundedException` 或 `BusinessException(PAGE_NOT_FOUND, ...)` |
+| 参数校验失败 | `CheckFailureException` |
+| 用户未登录/令牌过期 | `UserAuthenticationException` |
+| 权限不足 | `NoPermissionException` |
+| 开发阶段的逻辑标记 | `DeveloperException` |
+
+## 下一步
+
+<Cards>
+  <Card title="Spring MVC 异常" href="/docs/bamboo-base-java/mvc/exception/spring-boot" />
+  <Card title="用户认证异常" href="/docs/bamboo-base-java/mvc/exception/user-auth" />
+  <Card title="自定义异常处理" href="/docs/bamboo-base-java/mvc/exception/custom-system" />
+</Cards>

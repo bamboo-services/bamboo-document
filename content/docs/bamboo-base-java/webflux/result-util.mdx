@@ -1,0 +1,158 @@
+---
+title: ResultUtil
+description: 响应式 ResultUtil 工具类，基于 Reactor Context 构建标准化 Mono 响应
+icon: FileOutput
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# ResultUtil
+
+`ResultUtil` 是 `bamboo-webflux` 模块的响应构建工具类，所有方法均返回 `Mono<ResponseEntity<BaseResponse<T>>>` 类型，通过 Reactor Context 自动获取链路追踪标识与请求耗时信息。
+
+## 与 MVC 版本的核心差异
+
+在 `bamboo-mvc` 中，`ResultUtil` 的方法均为同步方法，直接返回 `ResponseEntity<BaseResponse<T>>`。而在 `bamboo-webflux` 中，由于需要从 Reactor Context 中异步获取上下文信息，所有方法均返回 `Mono` 类型。
+
+```java title="对比示例"
+// bamboo-mvc（同步）
+ResponseEntity<BaseResponse<Void>> result = ResultUtil.success("操作成功");
+
+// bamboo-webflux（响应式）
+// [!code highlight:2]
+// 返回 Mono，需要在响应式管道中订阅
+Mono<ResponseEntity<BaseResponse<Void>>> result = ResultUtil.success("操作成功");
+```
+
+## 方法一览
+
+### success
+
+构建成功响应，HTTP 状态码为 `200 OK`。
+
+```java title="ResultUtil.java"
+// [!code highlight:2]
+// 无数据载体的成功响应
+public static Mono<ResponseEntity<BaseResponse<Void>>> success(String message)
+
+// [!code highlight:2]
+// 携带数据载体的成功响应
+public static <T> Mono<ResponseEntity<BaseResponse<T>>> success(String message, T data)
+```
+
+**使用示例：**
+
+```java title="UserController.java"
+@GetMapping("/ping")
+public Mono<ResponseEntity<BaseResponse<Void>>> ping() {
+    return ResultUtil.success("服务正常");
+}
+
+@GetMapping("/{id}")
+public Mono<ResponseEntity<BaseResponse<UserDTO>>> getUser(@PathVariable Long id) {
+    return userService.getUserById(id)
+            .flatMap(user -> ResultUtil.success("获取成功", user));
+}
+```
+
+### error
+
+构建错误响应，HTTP 状态码根据 `ErrorCode` 自动推导。
+
+```java title="ResultUtil.java"
+// [!code highlight:2]
+// 构建携带错误信息与可选数据的错误响应
+public static <T> Mono<ResponseEntity<BaseResponse<T>>> error(
+        ErrorCode errorCode, String errorMessage, T data)
+```
+
+**使用示例：**
+
+```java title="UserController.java"
+@GetMapping("/{id}")
+public Mono<ResponseEntity<BaseResponse<UserDTO>>> getUser(@PathVariable Long id) {
+    return userService.getUserById(id)
+            .flatMap(user -> ResultUtil.success("获取成功", user))
+            // [!code highlight:2]
+            // 当服务层返回空值时，返回错误响应
+            .switchIfEmpty(ResultUtil.error(ErrorCode.RESOURCE_NOT_FOUND, "用户不存在", null));
+}
+```
+
+## 上下文信息注入
+
+`ResultUtil` 内部通过私有方法 `getContextInfo()` 从 Reactor Context 中提取链路信息：
+
+```java title="ResultUtil.java"
+// [!code highlight:5]
+// 使用 Mono.deferContextual 延迟访问 Reactor Context
+// 从中获取 contextId（链路追踪 UUID）和 duration（请求耗时）
+private static Mono<ContextInfo> getContextInfo() {
+    return Mono.deferContextual(ctx -> {
+        String contextId = ContextHolder.getContextId(ctx);
+        Long duration = ContextHolder.getDuration(ctx);
+        return Mono.just(new ContextInfo(contextId, duration));
+    });
+}
+```
+
+这意味着 `ResultUtil` 的正确工作依赖于 `ContextFilter` 在 Reactor Context 中注入的上下文数据。若未配置 `ContextFilter`，`contextId` 与 `duration` 将为默认值。
+
+## 响应示例
+
+### 成功响应
+
+```json title="response.json"
+{
+  "context": "550e8400-e29b-41d4-a716-446655440000",
+  "output": "SUCCESS",
+  "code": 20000,
+  "message": "获取成功",
+  "error_message": null,
+  "duration": 12,
+  "data": {
+    "id": 1,
+    "username": "xiao_lfeng"
+  }
+}
+```
+
+### 错误响应
+
+```json title="response.json"
+{
+  "context": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+  "output": "RESOURCE_NOT_FOUND",
+  "code": 40400,
+  "message": "资源不存在",
+  "error_message": "用户不存在",
+  "duration": 5,
+  "data": null
+}
+```
+
+## 在响应式管道中使用
+
+`ResultUtil` 返回的 `Mono` 可以自然地融入 Reactor 管道，支持各种响应式操作符组合：
+
+```java title="OrderController.java"
+@PostMapping
+public Mono<ResponseEntity<BaseResponse<OrderDTO>>> createOrder(
+        @RequestBody OrderCreateDTO dto) {
+    // [!code highlight:6]
+    // 完整的响应式链路：校验 -> 创建 -> 构建响应
+    return orderService.validate(dto)
+            .then(orderService.create(dto))
+            .flatMap(order -> ResultUtil.success("订单创建成功", order))
+            .onErrorResume(BusinessException.class, e ->
+                    ResultUtil.error(e.getErrorCode(), e.getMessage(), null));
+}
+```
+
+## 下一步
+
+<Cards>
+  <Card title="Reactor Context 上下文" href="/docs/bamboo-base-java/webflux/context-holder" />
+  <Card title="BaseResponse 响应体" href="/docs/bamboo-base-java/base/response/base-response" />
+  <Card title="ErrorCode 错误码" href="/docs/bamboo-base-java/base/response/error-code" />
+</Cards>

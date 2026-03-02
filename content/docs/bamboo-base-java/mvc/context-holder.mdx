@@ -1,0 +1,199 @@
+---
+title: ContextHolder
+description: 基于 ThreadLocal 的请求上下文管理器，提供上下文标识符与请求耗时追踪
+icon: Timer
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# ContextHolder
+
+`ContextHolder` 基于 `ThreadLocal` 实现请求级别的上下文管理。每个 HTTP 请求在进入过滤器时初始化上下文，在请求结束时清理，确保线程安全且无上下文泄漏。
+
+## 内部结构
+
+`ContextHolder` 内部使用 `RequestContext` 记录类存储上下文数据：
+
+```java title="ContextHolder.java"
+// [!code highlight:2]
+// 私有记录类，封装上下文标识与起始时间
+private record RequestContext(String contextId, long startTime) {}
+```
+
+<TypeTable
+  type={{
+    contextId: {
+      description: '请求的唯一标识符（UUID 格式），用于日志追踪和响应标识',
+      type: 'String',
+      required: true,
+    },
+    startTime: {
+      description: '请求开始的时间戳（毫秒），用于计算请求处理耗时',
+      type: 'long',
+      required: true,
+    },
+  }}
+/>
+
+## 生命周期
+
+```
+请求进入 → ContextFilter → initContext() → 业务处理 → ResultUtil（读取上下文）→ clear()
+```
+
+1. **初始化**：`ContextFilter` 在请求进入时调用 `initContext()` 生成上下文
+2. **使用**：业务代码和 `ResultUtil` 通过静态方法读取上下文信息
+3. **清理**：`ContextFilter` 在请求结束后调用 `clear()` 释放 ThreadLocal 资源
+
+## 方法详解
+
+### 初始化方法
+
+```java title="ContextHolder.java"
+// [!code highlight:2]
+// 自动生成 UUID 作为上下文标识
+public static void initContext()
+
+// [!code highlight:2]
+// 使用指定的上下文标识（适用于外部传入场景）
+public static void initContext(String contextId)
+```
+
+### 读取方法
+
+```java title="ContextHolder.java"
+// [!code highlight:2]
+// 获取当前请求的上下文标识符
+public static String getContextId()
+
+// [!code highlight:2]
+// 获取请求开始时间（毫秒时间戳）
+public static long getStartTime()
+
+// [!code highlight:2]
+// 获取从初始化到当前时刻的耗时（毫秒）
+public static long getDuration()
+
+// [!code highlight:2]
+// 判断当前线程是否已初始化上下文
+public static boolean hasContext()
+```
+
+### 清理方法
+
+```java title="ContextHolder.java"
+// [!code highlight:2]
+// 清理 ThreadLocal，防止内存泄漏
+public static void clear()
+```
+
+## 方法列表
+
+<TypeTable
+  type={{
+    'initContext()': {
+      description: '初始化上下文，自动生成 UUID 并记录当前时间戳',
+      type: 'void',
+      required: true,
+    },
+    'initContext(contextId)': {
+      description: '使用指定的上下文标识符初始化上下文。适用于从请求头中提取已有 UUID 的场景',
+      type: 'void',
+      required: true,
+    },
+    'getContextId()': {
+      description: '获取当前线程的上下文标识符。若未初始化，返回 null',
+      type: 'String',
+      required: true,
+    },
+    'getStartTime()': {
+      description: '获取上下文初始化时的毫秒时间戳',
+      type: 'long',
+      required: true,
+    },
+    'getDuration()': {
+      description: '计算从上下文初始化到调用时刻的耗时（毫秒）',
+      type: 'long',
+      required: true,
+    },
+    'hasContext()': {
+      description: '判断当前线程是否已初始化上下文',
+      type: 'boolean',
+      required: true,
+    },
+    'clear()': {
+      description: '清除 ThreadLocal 中的上下文数据。必须在请求结束时调用，防止线程池复用导致的内存泄漏',
+      type: 'void',
+      required: true,
+    },
+  }}
+/>
+
+## 使用示例
+
+### 手动管理上下文
+
+```java title="ManualContextExample.java"
+// [!code highlight:2]
+// 初始化上下文（通常由 ContextFilter 自动完成）
+ContextHolder.initContext();
+
+try {
+    // [!code highlight:2]
+    // 获取上下文标识
+    String contextId = ContextHolder.getContextId();
+    log.info("当前请求上下文: {}", contextId);
+
+    // 执行业务逻辑...
+
+    // [!code highlight:2]
+    // 获取请求耗时
+    long duration = ContextHolder.getDuration();
+    log.info("请求处理耗时: {}ms", duration);
+} finally {
+    // [!code highlight:2]
+    // 必须在 finally 块中清理，确保资源释放
+    ContextHolder.clear();
+}
+```
+
+### 使用外部传入的上下文标识
+
+```java title="ExternalContextExample.java"
+String externalUuid = request.getHeader("X-Context-UUID");
+if (externalUuid != null) {
+    // [!code highlight:2]
+    // 使用请求头中的 UUID 初始化上下文
+    ContextHolder.initContext(externalUuid);
+} else {
+    ContextHolder.initContext();
+}
+```
+
+### 条件判断
+
+```java title="ConditionalExample.java"
+// [!code highlight:2]
+// 在非 HTTP 请求场景中安全使用
+if (ContextHolder.hasContext()) {
+    String contextId = ContextHolder.getContextId();
+    log.info("请求 {} 处理中...", contextId);
+} else {
+    log.info("非 HTTP 请求环境，跳过上下文追踪");
+}
+```
+
+## 注意事项
+
+- **线程安全**：`ContextHolder` 基于 `ThreadLocal` 实现，每个线程拥有独立的上下文副本
+- **资源清理**：必须在请求结束时调用 `clear()` 方法。`ContextFilter` 已在内部处理此逻辑，无需手动调用
+- **异步场景**：若业务代码使用 `@Async` 或线程池，上下文不会自动传播至新线程。需在新线程中手动初始化
+- **与 ResultUtil 的协作**：`ResultUtil` 内部自动调用 `ContextHolder` 的方法注入响应字段，无需额外操作
+
+## 下一步
+
+<Cards>
+  <Card title="上下文过滤器" href="/docs/bamboo-base-java/mvc/filter/context" />
+  <Card title="ResultUtil" href="/docs/bamboo-base-java/mvc/result-util" />
+  <Card title="日志切面" href="/docs/bamboo-base-java/mvc/aspect/log" />
+</Cards>

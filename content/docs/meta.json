@@ -5,6 +5,8 @@
   "pages": [
     "guide",
     "---筱工具(Golang)---",
-    "bamboo-base-go"
+    "bamboo-base-go",
+    "---筱工具(Java)---",
+    "bamboo-base-java"
   ]
 }

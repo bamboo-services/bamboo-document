@@ -1,0 +1,94 @@
+---
+title: Dubbo Triple
+description: bamboo-triple 模块为 Dubbo Triple RPC 提供请求校验、上下文传播与统一响应能力
+icon: Radio
+---
+
+# Dubbo Triple
+
+**bamboo-triple** 是筱工具(Java) 的 RPC 层模块，专为 Apache Dubbo Triple 协议设计。该模块提供了请求/响应模型、AOP 切面、注解驱动的校验机制与异常处理器，实现 Dubbo 微服务间的标准化通信。
+
+## 核心能力
+
+| 能力 | 说明 |
+|------|------|
+| **请求模型** | `TripleRequest` 抽象类，定义请求基础结构与校验规范 |
+| **响应模型** | `TripleResponse<T>` 泛型响应体，统一 RPC 返回格式 |
+| **结果工厂** | `TripleResult` 静态工厂，快速构建成功/失败响应 |
+| **上下文传播** | `@DubboPersistentContext` 注解 + `DubboContextAspect` 切面 |
+| **请求校验** | `@TripleRequestCheck` 注解 + `TripleRequestCheckAspect` 切面 |
+| **异常兜底** | `DubboException` 与 `CustomExecutionException` 异常处理器 |
+
+## 适用场景
+
+当项目满足以下条件时，推荐引入 bamboo-triple 模块：
+
+- 使用 Apache Dubbo 3.x 作为 RPC 框架
+- 采用 Triple 协议进行服务间通信
+- 需要统一 RPC 请求/响应格式
+- 需要在 Dubbo 调用链中传播上下文信息（如链路追踪 ID）
+
+## Maven 依赖
+
+```xml title="pom.xml"
+<dependency>
+    <groupId>com.x-lf.utility</groupId>
+    <artifactId>bamboo-triple</artifactId>
+    <version>2.0.0-beta2</version>
+</dependency>
+```
+
+> bamboo-triple 依赖 `bamboo-base` 核心库，引入时将自动传递依赖。
+
+## 自动配置
+
+bamboo-triple 通过 `TripleAutoConfiguration` 实现 Spring Boot 自动配置。当 classpath 中存在 Dubbo 相关类时，以下组件将自动注册：
+
+```java title="TripleAutoConfiguration.java"
+// [!code highlight:5]
+// 条件化自动注册，仅在 Dubbo 环境下生效
+@Configuration
+public class TripleAutoConfiguration {
+    // DubboContextAspect     - 上下文传播切面
+    // DubboException         - RpcException 异常处理器
+    // CustomExecutionException - ExecutionException 异常处理器
+}
+```
+
+| 自动注册组件 | 条件 | 职责 |
+|-------------|------|------|
+| `DubboContextAspect` | Dubbo 类存在于 classpath | 上下文初始化与传播 |
+| `DubboException` | Dubbo 类存在于 classpath | 处理 `RpcException` |
+| `CustomExecutionException` | Dubbo 类存在于 classpath | 处理 `ExecutionException`（包装 `StatusRpcException`） |
+
+## 模块结构
+
+```
+bamboo-triple
+├── model
+│   ├── TripleRequest      (请求抽象基类)
+│   └── TripleResponse<T>  (响应泛型封装)
+├── factory
+│   └── TripleResult       (响应静态工厂)
+├── aspect
+│   ├── DubboContextAspect         (上下文传播切面)
+│   └── TripleRequestCheckAspect   (请求校验切面)
+├── annotation
+│   ├── @DubboPersistentContext    (上下文注解)
+│   └── @TripleRequestCheck        (校验注解)
+├── exception
+│   ├── DubboException             (RPC 异常处理)
+│   └── CustomExecutionException   (执行异常处理)
+└── config
+    └── TripleAutoConfiguration    (自动配置)
+```
+
+## 下一步
+
+<Cards>
+  <Card title="TripleRequest 请求模型" href="/docs/bamboo-base-java/triple/request" />
+  <Card title="TripleResponse 响应模型" href="/docs/bamboo-base-java/triple/response" />
+  <Card title="TripleResult 结果工厂" href="/docs/bamboo-base-java/triple/result" />
+  <Card title="AOP 切面" href="/docs/bamboo-base-java/triple/aspect" />
+  <Card title="注解" href="/docs/bamboo-base-java/triple/annotation" />
+</Cards>

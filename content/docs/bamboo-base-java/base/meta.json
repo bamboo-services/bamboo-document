@@ -1,0 +1,9 @@
+{
+  "title": "核心库",
+  "icon": "Blocks",
+  "pages": [
+    "index",
+    "response",
+    "snowflake"
+  ]
+}

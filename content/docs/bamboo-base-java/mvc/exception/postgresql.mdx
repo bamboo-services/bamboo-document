@@ -1,0 +1,137 @@
+---
+title: PostgreSQL 异常处理
+description: PostgreSqlExceptionHandler 捕获 PostgreSQL 数据库操作中的 SQL 异常与数据截断异常
+icon: Database
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# PostgreSqlExceptionHandler
+
+`PostgreSqlExceptionHandler` 专门处理 PostgreSQL 数据库操作过程中产生的异常。该处理器独立于主异常处理继承链，通过自动配置注册。
+
+## 处理的异常类型
+
+<TypeTable
+  type={{
+    SQLSyntaxErrorException: {
+      description: 'SQL 语法错误。动态 SQL 拼接或映射配置不正确时触发',
+      type: 'ErrorCode.SERVER_INTERNAL_ERROR',
+      required: true,
+    },
+    SQLException: {
+      description: '通用 SQL 异常。涵盖连接失败、事务异常、约束违反等场景',
+      type: 'ErrorCode.SERVER_INTERNAL_ERROR',
+      required: true,
+    },
+    PSQLException: {
+      description: 'PostgreSQL 专有异常。由 PostgreSQL JDBC 驱动抛出，包含详细的 PostgreSQL 错误信息和状态码',
+      type: 'ErrorCode.SERVER_INTERNAL_ERROR',
+      required: true,
+    },
+    DataTruncation: {
+      description: '数据截断异常。插入或更新的数据长度超出字段定义的最大长度',
+      type: 'ErrorCode.PARAMETER_ERROR',
+      required: true,
+    },
+  }}
+/>
+
+## 处理器结构
+
+```java title="PostgreSqlExceptionHandler.java"
+// [!code highlight:2]
+@RestControllerAdvice
+public class PostgreSqlExceptionHandler {
+
+    @ExceptionHandler(SQLSyntaxErrorException.class)
+    public ResponseEntity<BaseResponse<Void>> handleSqlSyntaxError(
+            SQLSyntaxErrorException e) {
+        return ResultUtil.error(
+            ErrorCode.SERVER_INTERNAL_ERROR, e.getMessage(), null
+        );
+    }
+
+    @ExceptionHandler(SQLException.class)
+    public ResponseEntity<BaseResponse<Void>> handleSqlException(
+            SQLException e) {
+        return ResultUtil.error(
+            ErrorCode.SERVER_INTERNAL_ERROR, e.getMessage(), null
+        );
+    }
+
+    // [!code highlight:3]
+    // PSQLException 是 PostgreSQL JDBC 驱动的专有异常类
+    @ExceptionHandler(PSQLException.class)
+    public ResponseEntity<BaseResponse<Void>> handlePsqlException(
+            PSQLException e) {
+        return ResultUtil.error(
+            ErrorCode.SERVER_INTERNAL_ERROR, e.getMessage(), null
+        );
+    }
+
+    // [!code highlight:3]
+    // 数据截断视为参数错误
+    @ExceptionHandler(DataTruncation.class)
+    public ResponseEntity<BaseResponse<Void>> handleDataTruncation(
+            DataTruncation e) {
+        return ResultUtil.error(
+            ErrorCode.PARAMETER_ERROR, e.getMessage(), null
+        );
+    }
+}
+```
+
+## 与 MySQL 处理器的差异
+
+| 对比项 | MySQL | PostgreSQL |
+|--------|-------|-----------|
+| 驱动专有异常 | `MysqlDataTruncation` | `PSQLException` |
+| 数据截断异常 | `MysqlDataTruncation` | `DataTruncation`（JDBC 标准） |
+| 错误信息格式 | MySQL 错误码 + 消息 | PostgreSQL 状态码 + 详细消息 |
+
+## 典型场景
+
+### PSQLException
+
+当 PostgreSQL 约束违反时（如唯一键冲突）：
+
+```json title="response.json"
+{
+  "context": "550e8400-e29b-41d4-a716-446655440000",
+  "output": "SERVER_INTERNAL_ERROR",
+  "code": 50000,
+  "message": null,
+  "error_message": "ERROR: duplicate key value violates unique constraint \"user_email_key\"",
+  "duration": 10,
+  "data": null
+}
+```
+
+### 数据截断
+
+当插入的数据超出字段长度限制时：
+
+```json title="response.json"
+{
+  "context": "550e8400-e29b-41d4-a716-446655440000",
+  "output": "PARAMETER_ERROR",
+  "code": 40000,
+  "message": null,
+  "error_message": "ERROR: value too long for type character varying(50)",
+  "duration": 6,
+  "data": null
+}
+```
+
+## 适用条件
+
+该异常处理器仅在项目使用 PostgreSQL 数据库时生效。若项目使用 MySQL，请参阅 MySQL 异常处理器。
+
+## 下一步
+
+<Cards>
+  <Card title="MySQL 异常处理" href="/docs/bamboo-base-java/mvc/exception/mysql" />
+  <Card title="异常处理概览" href="/docs/bamboo-base-java/mvc/exception" />
+  <Card title="用户认证异常" href="/docs/bamboo-base-java/mvc/exception/user-auth" />
+</Cards>

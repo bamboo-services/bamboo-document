@@ -1,0 +1,136 @@
+---
+title: HttpServletUtil
+description: Servlet 请求工具类，提供从 HttpServletRequest 解析 HandlerMethod 的能力
+icon: Workflow
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# HttpServletUtil
+
+`HttpServletUtil` 是一个静态工具类，提供从 `HttpServletRequest` 解析 Spring MVC `HandlerMethod` 的能力。该工具类主要在过滤器层使用，用于在请求到达 Controller 之前获取目标处理方法的元信息（如注解、参数类型等）。
+
+## 方法详解
+
+<TypeTable
+  type={{
+    'getHandlerMethod(request, handlerMapping)': {
+      description: '根据当前请求解析对应的 HandlerMethod 实例。HandlerMethod 包含目标 Controller 方法的完整元信息，包括方法签名、注解、参数类型等',
+      type: 'HandlerMethod',
+      required: true,
+    },
+  }}
+/>
+
+### 参数说明
+
+<TypeTable
+  type={{
+    request: {
+      description: '当前 HTTP 请求对象',
+      type: 'HttpServletRequest',
+      required: true,
+    },
+    handlerMapping: {
+      description: 'Spring MVC 的 HandlerMapping 实例，用于将请求 URL 映射到对应的 Handler',
+      type: 'HandlerMapping',
+      required: true,
+    },
+  }}
+/>
+
+### 返回值
+
+- 若请求 URL 匹配到有效的 Controller 方法，返回对应的 `HandlerMethod` 实例
+- 若无法匹配（如请求静态资源或 URL 不存在），返回 `null`
+
+## 使用场景
+
+### 在过滤器中检查注解
+
+`HttpServletUtil` 的典型使用场景是在过滤器层判断目标方法是否标注了特定注解：
+
+```java title="CustomFilter.java"
+public class CustomFilter extends OncePerRequestFilter {
+
+    private final HandlerMapping handlerMapping;
+
+    @Override
+    protected void doFilterInternal(
+            HttpServletRequest request,
+            HttpServletResponse response,
+            FilterChain filterChain) throws ServletException, IOException {
+
+        // [!code highlight:3]
+        // 解析目标 Handler 方法
+        HandlerMethod handlerMethod =
+            HttpServletUtil.getHandlerMethod(request, handlerMapping);
+
+        if (handlerMethod != null) {
+            // [!code highlight:3]
+            // 检查方法上是否标注了 @NeedPermission
+            NeedPermission annotation =
+                handlerMethod.getMethodAnnotation(NeedPermission.class);
+            if (annotation != null) {
+                // 执行权限校验逻辑...
+            }
+        }
+
+        filterChain.doFilter(request, response);
+    }
+}
+```
+
+### 在 ContextFilter 中使用
+
+`ContextFilter` 使用此工具检查 `@IgnoreContext` 注解：
+
+```java title="ContextFilter.java"
+// [!code highlight:2]
+HandlerMethod handler =
+    HttpServletUtil.getHandlerMethod(request, handlerMapping);
+
+if (handler != null) {
+    // [!code highlight:2]
+    // 检查是否标注 @IgnoreContext
+    IgnoreContext ignore = handler.getMethodAnnotation(IgnoreContext.class);
+    if (ignore != null) {
+        filterChain.doFilter(request, response);
+        return;
+    }
+}
+```
+
+### 获取方法元信息
+
+```java title="AuditFilter.java"
+HandlerMethod handlerMethod =
+    HttpServletUtil.getHandlerMethod(request, handlerMapping);
+
+if (handlerMethod != null) {
+    // [!code highlight:2]
+    // 获取 Controller 类名和方法名
+    String className = handlerMethod.getBeanType().getSimpleName();
+    String methodName = handlerMethod.getMethod().getName();
+    log.info("请求目标: {}.{}", className, methodName);
+
+    // [!code highlight:2]
+    // 获取方法参数类型
+    Class<?>[] parameterTypes = handlerMethod.getMethod().getParameterTypes();
+}
+```
+
+## 注意事项
+
+- 该方法可能返回 `null`，调用方必须进行空值判断
+- `HandlerMapping` 实例可通过 Spring 注入获取
+- 在高频调用场景中，`getHandlerMethod()` 的性能开销主要来自 `HandlerMapping` 的内部查找过程，Spring 内部已做缓存优化
+- 该工具类仅适用于 Servlet 环境（Spring MVC），不适用于响应式环境（Spring WebFlux）
+
+## 下一步
+
+<Cards>
+  <Card title="HeaderUtil" href="/docs/bamboo-base-java/mvc/util/header-util" />
+  <Card title="上下文过滤器" href="/docs/bamboo-base-java/mvc/filter/context" />
+  <Card title="权限过滤器" href="/docs/bamboo-base-java/mvc/filter/permission" />
+</Cards>

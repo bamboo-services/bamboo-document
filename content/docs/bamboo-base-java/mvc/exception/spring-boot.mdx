@@ -1,0 +1,186 @@
+---
+title: Spring MVC 异常
+description: SystemExceptionHandler 处理 Spring MVC 框架级异常，覆盖参数校验、请求方法不匹配等场景
+icon: Server
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# SystemExceptionHandler
+
+`SystemExceptionHandler` 是异常处理继承链的最顶层，继承自 `PublicExceptionHandler`，负责处理 Spring MVC 框架在请求处理过程中抛出的异常。项目中自定义异常处理器应继承此类。
+
+## 继承关系
+
+```
+JavaBaseExceptionHandler
+    └── PublicExceptionHandler
+        └── SystemExceptionHandler   ← 当前层级（推荐继承）
+```
+
+## 处理的异常类型
+
+<TypeTable
+  type={{
+    HttpRequestMethodNotSupportedException: {
+      description: '请求方法不被支持。例如 POST 接口收到 GET 请求',
+      type: 'ErrorCode.REQUEST_METHOD_NOT_ALLOWED',
+      required: true,
+    },
+    MissingRequestHeaderException: {
+      description: '缺少必要的请求头。使用 @RequestHeader 注解标注的参数未在请求中提供',
+      type: 'ErrorCode.HEADER_ERROR',
+      required: true,
+    },
+    MethodArgumentNotValidException: {
+      description: '方法参数校验失败。@Valid 或 @Validated 标注的参数未通过 Bean Validation 校验',
+      type: 'ErrorCode.PARAMETER_ERROR',
+      required: true,
+    },
+    NoResourceFoundException: {
+      description: '请求的资源不存在。URL 路径无法匹配到任何 Controller 端点',
+      type: 'ErrorCode.PAGE_NOT_FOUND',
+      required: true,
+    },
+    MissingServletRequestParameterException: {
+      description: '缺少必要的请求参数。@RequestParam(required=true) 标注的参数未提供',
+      type: 'ErrorCode.PARAMETER_ERROR',
+      required: true,
+    },
+    MissingServletRequestPartException: {
+      description: '缺少 Multipart 请求部分。文件上传接口中必要的 Part 缺失',
+      type: 'ErrorCode.PARAMETER_ERROR',
+      required: true,
+    },
+    HttpMessageNotReadableException: {
+      description: '请求体无法解析。JSON 格式错误或请求体为空',
+      type: 'ErrorCode.PARAMETER_ERROR',
+      required: true,
+    },
+  }}
+/>
+
+## 处理器结构
+
+```java title="SystemExceptionHandler.java"
+// [!code highlight:2]
+@RestControllerAdvice
+public class SystemExceptionHandler extends PublicExceptionHandler {
+
+    // [!code highlight:3]
+    // 请求方法不支持
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<BaseResponse<Void>> handleMethodNotSupported(
+            HttpRequestMethodNotSupportedException e) {
+        return ResultUtil.error(
+            ErrorCode.REQUEST_METHOD_NOT_ALLOWED, e.getMessage(), null
+        );
+    }
+
+    // [!code highlight:3]
+    // 参数校验失败（@Valid）
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<BaseResponse<Void>> handleValidationException(
+            MethodArgumentNotValidException e) {
+        return ResultUtil.error(
+            ErrorCode.PARAMETER_ERROR, e.getMessage(), null
+        );
+    }
+
+    // [!code highlight:3]
+    // 请求体无法解析
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<BaseResponse<Void>> handleNotReadable(
+            HttpMessageNotReadableException e) {
+        return ResultUtil.error(
+            ErrorCode.PARAMETER_ERROR, e.getMessage(), null
+        );
+    }
+
+    // ... 其他异常处理方法
+}
+```
+
+## 典型场景
+
+### 参数校验失败
+
+当使用 `@Valid` 进行参数校验时：
+
+```java title="UserController.java"
+@PostMapping("/register")
+public ResponseEntity<BaseResponse<Void>> register(
+        // [!code highlight:2]
+        // @Valid 触发 Bean Validation
+        @Valid @RequestBody RegisterDTO dto) {
+    userService.register(dto);
+    return ResultUtil.success("注册成功");
+}
+```
+
+```java title="RegisterDTO.java"
+public record RegisterDTO(
+    @NotBlank(message = "用户名不能为空")
+    String username,
+
+    @Email(message = "邮箱格式不正确")
+    String email,
+
+    @Size(min = 8, message = "密码长度不得少于 8 位")
+    String password
+) {}
+```
+
+校验失败时自动返回：
+
+```json title="response.json"
+{
+  "context": "550e8400-e29b-41d4-a716-446655440000",
+  "output": "PARAMETER_ERROR",
+  "code": 40000,
+  "message": null,
+  "error_message": "用户名不能为空",
+  "duration": 5,
+  "data": null
+}
+```
+
+### 请求方法不匹配
+
+当 POST 接口收到 GET 请求时：
+
+```json title="response.json"
+{
+  "context": "550e8400-e29b-41d4-a716-446655440000",
+  "output": "REQUEST_METHOD_NOT_ALLOWED",
+  "code": 40500,
+  "message": null,
+  "error_message": "Request method 'GET' is not supported",
+  "duration": 2,
+  "data": null
+}
+```
+
+### 资源未找到
+
+当请求的 URL 不存在时：
+
+```json title="response.json"
+{
+  "context": "550e8400-e29b-41d4-a716-446655440000",
+  "output": "PAGE_NOT_FOUND",
+  "code": 40400,
+  "message": null,
+  "error_message": "No static resource found",
+  "duration": 1,
+  "data": null
+}
+```
+
+## 下一步
+
+<Cards>
+  <Card title="自定义异常处理" href="/docs/bamboo-base-java/mvc/exception/custom-system" />
+  <Card title="MySQL 异常处理" href="/docs/bamboo-base-java/mvc/exception/mysql" />
+  <Card title="PostgreSQL 异常处理" href="/docs/bamboo-base-java/mvc/exception/postgresql" />
+</Cards>

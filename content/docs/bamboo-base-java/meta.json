@@ -1,0 +1,20 @@
+{
+  "title": "筱工具(Java)",
+  "description": "Java 语言基础组件库",
+  "icon": "Coffee",
+  "root": true,
+  "defaultOpen": true,
+  "pages": [
+    "index",
+    "quick-start",
+    "architecture",
+    "---核心库---",
+    "...base",
+    "---框架集成---",
+    "mvc",
+    "webflux",
+    "---可选模块---",
+    "notify",
+    "triple"
+  ]
+}

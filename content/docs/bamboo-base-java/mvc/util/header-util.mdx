@@ -1,0 +1,155 @@
+---
+title: HeaderUtil
+description: HTTP 请求头解析工具类，提供授权用户标识、Referer、User-Agent 等请求头的提取与校验
+icon: FileSearch
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# HeaderUtil
+
+`HeaderUtil` 是一个静态工具类，封装了 HTTP 请求头的常用提取和校验操作。所有方法均接收 `HttpServletRequest` 参数，返回对应请求头的解析结果。
+
+## 方法列表
+
+### 授权用户标识
+
+<TypeTable
+  type={{
+    'getAuthorizeUserUuid(request)': {
+      description: '从请求头中提取授权用户的 UUID 标识，返回 UUID 类型',
+      type: 'UUID',
+      required: true,
+    },
+    'getAuthorizeUserUuidString(request)': {
+      description: '从请求头中提取授权用户的 UUID 标识，返回 String 类型',
+      type: 'String',
+      required: true,
+    },
+  }}
+/>
+
+### Referer
+
+<TypeTable
+  type={{
+    'getReferer(request)': {
+      description: '获取请求的 Referer 头，返回来源 URL 字符串',
+      type: 'String',
+      required: true,
+    },
+    'hasReferer(request)': {
+      description: '判断请求是否携带 Referer 头',
+      type: 'boolean',
+      required: true,
+    },
+  }}
+/>
+
+### User-Agent
+
+<TypeTable
+  type={{
+    'getUserAgent(request)': {
+      description: '获取请求的 User-Agent 头，返回客户端标识字符串',
+      type: 'String',
+      required: true,
+    },
+    'hasUserAgent(request)': {
+      description: '判断请求是否携带 User-Agent 头',
+      type: 'boolean',
+      required: true,
+    },
+  }}
+/>
+
+### Host 与 Accept
+
+<TypeTable
+  type={{
+    'getHost(request)': {
+      description: '获取请求的 Host 头，返回主机名',
+      type: 'String',
+      required: true,
+    },
+    'hasHost(request)': {
+      description: '判断请求是否携带 Host 头',
+      type: 'boolean',
+      required: true,
+    },
+    'getAccept(request)': {
+      description: '获取请求的 Accept 头，返回客户端接受的内容类型',
+      type: 'String',
+      required: true,
+    },
+  }}
+/>
+
+## 使用示例
+
+### 获取授权用户
+
+```java title="UserController.java"
+@GetMapping("/profile")
+public ResponseEntity<BaseResponse<UserVO>> getProfile(
+        HttpServletRequest request) {
+    // [!code highlight:2]
+    // 从请求头中提取用户 UUID
+    UUID userId = HeaderUtil.getAuthorizeUserUuid(request);
+    UserVO user = userService.getById(userId);
+    return ResultUtil.success("查询成功", user);
+}
+```
+
+### 获取字符串格式的用户标识
+
+```java title="LogService.java"
+public void recordUserAction(HttpServletRequest request, String action) {
+    // [!code highlight:2]
+    // 使用字符串格式，避免 UUID 解析开销
+    String userId = HeaderUtil.getAuthorizeUserUuidString(request);
+    log.info("用户 {} 执行操作: {}", userId, action);
+}
+```
+
+### Referer 校验
+
+```java title="SecurityService.java"
+public void validateReferer(HttpServletRequest request) {
+    // [!code highlight:2]
+    if (!HeaderUtil.hasReferer(request)) {
+        throw new BusinessException(ErrorCode.FORBIDDEN, "缺少 Referer");
+    }
+
+    String referer = HeaderUtil.getReferer(request);
+    if (!isAllowedReferer(referer)) {
+        throw new BusinessException(ErrorCode.FORBIDDEN, "非法来源");
+    }
+}
+```
+
+### User-Agent 检测
+
+```java title="AnalyticsService.java"
+public void logClientInfo(HttpServletRequest request) {
+    // [!code highlight:3]
+    if (HeaderUtil.hasUserAgent(request)) {
+        String ua = HeaderUtil.getUserAgent(request);
+        log.info("客户端: {}", ua);
+    }
+}
+```
+
+## 注意事项
+
+- 所有方法均为静态方法，无需实例化
+- `getAuthorizeUserUuid()` 在解析失败时可能抛出异常，建议在调用前确认请求头存在
+- `has*()` 系列方法适合在条件判断中使用，避免空指针异常
+
+## 下一步
+
+<Cards>
+  <Card title="HttpServletUtil" href="/docs/bamboo-base-java/mvc/util/http-servlet-util" />
+  <Card title="上下文过滤器" href="/docs/bamboo-base-java/mvc/filter/context" />
+  <Card title="权限过滤器" href="/docs/bamboo-base-java/mvc/filter/permission" />
+</Cards>

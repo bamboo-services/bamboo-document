@@ -1,0 +1,20 @@
+{
+  "title": "Spring MVC",
+  "icon": "LayoutDashboard",
+  "pages": [
+    "index",
+    "result-util",
+    "---异常处理---",
+    "...exception",
+    "---切面处理---",
+    "...aspect",
+    "---过滤器---",
+    "...filter",
+    "---上下文---",
+    "context-holder",
+    "---工具类---",
+    "...util",
+    "---配置---",
+    "mybatis-plus"
+  ]
+}

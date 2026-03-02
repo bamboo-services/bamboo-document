@@ -1,0 +1,116 @@
+---
+title: MySQL 异常处理
+description: MysqlExceptionHandler 捕获 MySQL 数据库操作中的 SQL 语法错误与数据截断异常
+icon: Database
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# MysqlExceptionHandler
+
+`MysqlExceptionHandler` 专门处理 MySQL 数据库操作过程中产生的异常。该处理器独立于主异常处理继承链，通过自动配置注册。
+
+## 处理的异常类型
+
+<TypeTable
+  type={{
+    SQLSyntaxErrorException: {
+      description: 'SQL 语法错误。通常由动态 SQL 拼接错误或 MyBatis 映射配置不正确导致',
+      type: 'ErrorCode.SERVER_INTERNAL_ERROR',
+      required: true,
+    },
+    SQLException: {
+      description: '通用 SQL 异常。涵盖连接失败、事务异常、约束违反等场景',
+      type: 'ErrorCode.SERVER_INTERNAL_ERROR',
+      required: true,
+    },
+    MysqlDataTruncation: {
+      description: '数据截断异常。插入或更新的数据长度超出字段定义的最大长度',
+      type: 'ErrorCode.PARAMETER_ERROR',
+      required: true,
+    },
+  }}
+/>
+
+## 处理器结构
+
+```java title="MysqlExceptionHandler.java"
+// [!code highlight:2]
+@RestControllerAdvice
+public class MysqlExceptionHandler {
+
+    @ExceptionHandler(SQLSyntaxErrorException.class)
+    public ResponseEntity<BaseResponse<Void>> handleSqlSyntaxError(
+            SQLSyntaxErrorException e) {
+        // [!code highlight:2]
+        // SQL 语法错误映射为服务器内部错误，避免暴露 SQL 细节
+        return ResultUtil.error(
+            ErrorCode.SERVER_INTERNAL_ERROR, e.getMessage(), null
+        );
+    }
+
+    @ExceptionHandler(SQLException.class)
+    public ResponseEntity<BaseResponse<Void>> handleSqlException(
+            SQLException e) {
+        return ResultUtil.error(
+            ErrorCode.SERVER_INTERNAL_ERROR, e.getMessage(), null
+        );
+    }
+
+    // [!code highlight:3]
+    // 数据截断视为参数错误（客户端提交的数据不符合规范）
+    @ExceptionHandler(MysqlDataTruncation.class)
+    public ResponseEntity<BaseResponse<Void>> handleDataTruncation(
+            MysqlDataTruncation e) {
+        return ResultUtil.error(
+            ErrorCode.PARAMETER_ERROR, e.getMessage(), null
+        );
+    }
+}
+```
+
+## 典型场景
+
+### SQL 语法错误
+
+当 MyBatis 动态 SQL 生成了无效的 SQL 语句时：
+
+```json title="response.json"
+{
+  "context": "550e8400-e29b-41d4-a716-446655440000",
+  "output": "SERVER_INTERNAL_ERROR",
+  "code": 50000,
+  "message": null,
+  "error_message": "You have an error in your SQL syntax",
+  "duration": 12,
+  "data": null
+}
+```
+
+### 数据截断
+
+当插入的数据超出字段长度限制时（例如 `VARCHAR(50)` 字段写入 100 字符）：
+
+```json title="response.json"
+{
+  "context": "550e8400-e29b-41d4-a716-446655440000",
+  "output": "PARAMETER_ERROR",
+  "code": 40000,
+  "message": null,
+  "error_message": "Data truncation: Data too long for column 'username'",
+  "duration": 8,
+  "data": null
+}
+```
+
+## 适用条件
+
+该异常处理器仅在项目使用 MySQL 数据库时生效。若项目使用 PostgreSQL，请参阅 PostgreSQL 异常处理器。
+
+## 下一步
+
+<Cards>
+  <Card title="PostgreSQL 异常处理" href="/docs/bamboo-base-java/mvc/exception/postgresql" />
+  <Card title="异常处理概览" href="/docs/bamboo-base-java/mvc/exception" />
+  <Card title="自定义异常处理" href="/docs/bamboo-base-java/mvc/exception/custom-system" />
+</Cards>

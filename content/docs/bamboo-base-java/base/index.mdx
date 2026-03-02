@@ -1,0 +1,42 @@
+---
+title: 核心库
+description: bamboo-base 核心库提供通用响应体、错误码与雪花算法
+icon: Blocks
+---
+
+# 核心库
+
+**bamboo-base** 是筱工具(Java) 的基础层模块，不依赖任何 Web 框架，提供三大核心能力：
+
+- **通用响应体** - `BaseResponse<E>` 泛型响应结构，标准化 API 输出
+- **错误码枚举** - `ErrorCode` 包含 70+ 预定义错误码，覆盖全场景
+- **雪花算法** - 分布式 ID 生成、解析与验证
+
+## Maven 依赖
+
+```xml title="pom.xml"
+<dependency>
+    <groupId>com.x-lf.utility</groupId>
+    <artifactId>bamboo-base</artifactId>
+    <version>2.0.0-beta2</version>
+</dependency>
+```
+
+## 包结构
+
+| 包路径 | 说明 |
+|-------|------|
+| `com.xlf.utility` | BaseResponse、ErrorCode 核心类 |
+| `com.xlf.utility.utility` | SnowflakeUtil 工具类 |
+| `com.xlf.utility.incrementer` | SnowflakeIdGenerator 生成器 |
+| `com.xlf.utility.models.dto` | SnowflakeInfoDTO 数据传输对象 |
+| `com.xlf.utility.exception.library` | 预定义异常类 |
+| `com.xlf.utility.constant` | 常量定义 |
+
+## 下一步
+
+<Cards>
+  <Card title="BaseResponse" href="/docs/bamboo-base-java/base/response/base-response" />
+  <Card title="ErrorCode" href="/docs/bamboo-base-java/base/response/error-code" />
+  <Card title="雪花算法" href="/docs/bamboo-base-java/base/snowflake" />
+</Cards>

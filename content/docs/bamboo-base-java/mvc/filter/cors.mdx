@@ -1,0 +1,143 @@
+---
+title: CORS 跨域过滤器
+description: AllowCorsFilterHandler 实现可配置的 CORS 跨域请求处理，支持域名、方法和请求头白名单
+icon: Globe
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# AllowCorsFilterHandler
+
+`AllowCorsFilterHandler` 提供可配置的 CORS（Cross-Origin Resource Sharing）跨域请求处理。该过滤器通过构造函数接收域名白名单、允许的 HTTP 方法和请求头列表，在请求处理前校验 Host 并设置相应的 CORS 响应头。
+
+## 构造函数
+
+```java title="AllowCorsFilterHandler.java"
+// [!code highlight:4]
+public AllowCorsFilterHandler(
+    String[] domains,
+    String[] methods,
+    String[] headers
+)
+```
+
+<TypeTable
+  type={{
+    domains: {
+      description: '允许的域名白名单。过滤器将校验请求的 Host 头是否匹配此列表中的任意域名',
+      type: 'String[]',
+      required: true,
+    },
+    methods: {
+      description: '允许的 HTTP 方法列表，设置为 Access-Control-Allow-Methods 响应头',
+      type: 'String[]',
+      required: true,
+    },
+    headers: {
+      description: '允许的请求头列表，设置为 Access-Control-Allow-Headers 响应头',
+      type: 'String[]',
+      required: true,
+    },
+  }}
+/>
+
+## 工作流程
+
+```
+请求进入
+    │
+    ▼
+提取 Host 请求头
+    │
+    ▼
+校验 Host 是否在 domains 白名单中
+    │
+    ├── 匹配 → 设置 CORS 响应头 → 放行
+    └── 不匹配 → 直接放行（不设置 CORS 头）
+```
+
+## 设置的响应头
+
+当 Host 校验通过时，过滤器设置以下 CORS 响应头：
+
+| 响应头 | 值 |
+|--------|-----|
+| `Access-Control-Allow-Origin` | 请求的 Origin |
+| `Access-Control-Allow-Methods` | 构造函数传入的 methods |
+| `Access-Control-Allow-Headers` | 构造函数传入的 headers |
+| `Access-Control-Allow-Credentials` | `true` |
+
+## 注册示例
+
+```java title="FilterConfig.java"
+@Configuration
+public class FilterConfig {
+
+    @Bean
+    public FilterRegistrationBean<AllowCorsFilterHandler> corsFilter() {
+        FilterRegistrationBean<AllowCorsFilterHandler> registration =
+            new FilterRegistrationBean<>();
+
+        // [!code highlight:5]
+        registration.setFilter(new AllowCorsFilterHandler(
+            new String[]{"example.com", "api.example.com", "localhost"},
+            new String[]{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+            new String[]{"Authorization", "Content-Type", "X-Requested-With"}
+        ));
+
+        registration.addUrlPatterns("/*");
+        registration.setOrder(1);
+        return registration;
+    }
+}
+```
+
+## 与 AllowOptionFilterHandler 配合
+
+通常 CORS 过滤器与 OPTIONS 过滤器配合使用：
+
+```java title="FilterConfig.java"
+@Configuration
+public class FilterConfig {
+
+    @Bean
+    public FilterRegistrationBean<AllowCorsFilterHandler> corsFilter() {
+        // [!code highlight:2]
+        // CORS 过滤器优先执行，设置跨域响应头
+        FilterRegistrationBean<AllowCorsFilterHandler> registration =
+            new FilterRegistrationBean<>();
+        registration.setFilter(new AllowCorsFilterHandler(
+            new String[]{"example.com"},
+            new String[]{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+            new String[]{"Authorization", "Content-Type"}
+        ));
+        registration.setOrder(1);
+        return registration;
+    }
+
+    @Bean
+    public FilterRegistrationBean<AllowOptionFilterHandler> optionFilter() {
+        // [!code highlight:2]
+        // OPTIONS 过滤器随后执行，直接响应预检请求
+        FilterRegistrationBean<AllowOptionFilterHandler> registration =
+            new FilterRegistrationBean<>();
+        registration.setFilter(new AllowOptionFilterHandler());
+        registration.setOrder(2);
+        return registration;
+    }
+}
+```
+
+## 注意事项
+
+- 域名校验基于请求的 `Host` 头，而非 `Origin` 头
+- 若 Host 不在白名单中，过滤器不会阻止请求，仅不设置 CORS 响应头（浏览器将拒绝跨域响应）
+- 该过滤器需手动注册为 Bean，不在自动配置范围内
+
+## 下一步
+
+<Cards>
+  <Card title="OPTIONS 过滤器" href="/docs/bamboo-base-java/mvc/filter/options" />
+  <Card title="上下文过滤器" href="/docs/bamboo-base-java/mvc/filter/context" />
+  <Card title="过滤器概览" href="/docs/bamboo-base-java/mvc/filter" />
+</Cards>

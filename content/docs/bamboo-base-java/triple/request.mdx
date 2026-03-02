@@ -1,0 +1,155 @@
+---
+title: TripleRequest
+description: TripleRequest 抽象类定义 Dubbo Triple RPC 请求的基础结构与校验规范
+icon: ArrowUpFromLine
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# TripleRequest
+
+`TripleRequest` 是 Dubbo Triple RPC 请求的抽象基类，定义了请求元数据结构与校验规范。所有 Triple 服务的请求参数均应继承该类，实现 `validate()` 与 `getSummary()` 抽象方法。
+
+## 类定义
+
+```java title="TripleRequest.java"
+package com.xlf.utility.triple;
+
+import lombok.experimental.SuperBuilder;
+import java.io.Serializable;
+
+// [!code highlight:3]
+// 抽象请求基类，使用 @SuperBuilder 支持子类继承 Builder
+@SuperBuilder
+public abstract class TripleRequest implements Serializable {
+    private String ctx;
+    private Long timestamp;
+    private String source;
+    private String version;
+
+    public <T extends TripleRequest> T init(String source) { ... }
+
+    public abstract boolean validate();
+    public abstract String getSummary();
+}
+```
+
+## 字段说明
+
+<TypeTable
+  type={{
+    ctx: {
+      description: '上下文标识，UUID 格式。用于全链路追踪，由 DubboContextAspect 自动提取并注入至 ContextHolder 与 MDC。',
+      type: 'String',
+      required: true,
+    },
+    timestamp: {
+      description: '请求时间戳，Unix 毫秒。记录请求发起时刻，用于超时判断与日志审计。',
+      type: 'Long',
+      required: false,
+    },
+    source: {
+      description: '请求来源标识。标记发起调用的服务或客户端名称，便于链路溯源。',
+      type: 'String',
+      required: false,
+    },
+    version: {
+      description: 'API 版本号。用于接口多版本管理与兼容性校验。',
+      type: 'String',
+      required: false,
+    },
+  }}
+/>
+
+## 抽象方法
+
+### validate()
+
+校验请求参数的合法性。由 `TripleRequestCheckAspect` 在方法执行前自动调用。
+
+```java title="TripleRequest.java"
+// [!code highlight:3]
+// 返回 true 表示校验通过，false 将触发 BusinessException
+public abstract boolean validate();
+```
+
+### getSummary()
+
+返回请求的摘要描述，可用于日志记录与调试输出。
+
+```java title="TripleRequest.java"
+public abstract String getSummary();
+```
+
+## init() 方法
+
+`init()` 方法用于初始化请求元数据，设置 `ctx`（UUID）、`timestamp`（当前时间戳）与 `source` 字段，并返回当前实例以支持链式调用。
+
+```java title="InitExample.java"
+// [!code highlight:2]
+// 初始化请求元数据
+UserQueryRequest request = UserQueryRequest.builder()
+        .userId(10001L)
+        .build()
+        .init("order-service");
+```
+
+## 自定义请求类
+
+继承 `TripleRequest` 并实现两个抽象方法：
+
+```java title="UserQueryRequest.java"
+import com.xlf.utility.triple.TripleRequest;
+import lombok.Data;
+import lombok.EqualsAndHashCode;
+import lombok.experimental.SuperBuilder;
+
+@Data
+@SuperBuilder
+@EqualsAndHashCode(callSuper = true)
+public class UserQueryRequest extends TripleRequest {
+    private Long userId;
+    private String username;
+
+    // [!code highlight:8]
+    // 实现参数校验逻辑
+    @Override
+    public boolean validate() {
+        return userId != null && userId > 0;
+    }
+
+    @Override
+    public String getSummary() {
+        return "查询用户 [userId=" + userId + ", username=" + username + "]";
+    }
+}
+```
+
+## 完整使用示例
+
+```java title="UserTripleService.java"
+import org.apache.dubbo.config.annotation.DubboService;
+
+@DubboService
+public class UserTripleServiceImpl implements UserTripleService {
+
+    @DubboPersistentContext
+    @TripleRequestCheck(message = "用户查询参数无效", errorCode = "USER_QUERY_INVALID")
+    @Override
+    public TripleResponse<UserDTO> queryUser(UserQueryRequest request) {
+        // [!code highlight:3]
+        // 此处 request 已通过 validate() 校验
+        // ctx 已由 DubboContextAspect 提取并注入上下文
+        UserDTO user = userService.getById(request.getUserId());
+        return TripleResult.success(user, "查询成功");
+    }
+}
+```
+
+## 下一步
+
+<Cards>
+  <Card title="TripleResponse 响应模型" href="/docs/bamboo-base-java/triple/response" />
+  <Card title="TripleResult 结果工厂" href="/docs/bamboo-base-java/triple/result" />
+  <Card title="注解" href="/docs/bamboo-base-java/triple/annotation" />
+</Cards>

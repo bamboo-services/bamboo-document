@@ -1,0 +1,201 @@
+---
+title: SnowflakeUtil
+description: 雪花算法静态工具类，提供 ID 生成、解析与验证能力
+icon: Wrench
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# SnowflakeUtil
+
+`SnowflakeUtil` 是雪花算法的静态工具类，位于 `com.xlf.utility.utility` 包下。封装了 `SnowflakeIdGenerator` 的能力，提供简洁的静态方法用于 ID 生成、解析与验证。
+
+## 初始化
+
+`SnowflakeUtil` 在使用前必须完成初始化。在 Spring Boot 环境中，框架通过 `SnowflakeUtilInitializer` 自动完成；在非 Spring 环境中，需手动调用：
+
+```java title="Example.java"
+import com.xlf.utility.utility.SnowflakeUtil;
+import com.xlf.utility.incrementer.SnowflakeIdGenerator;
+
+// [!code highlight:3]
+// 创建生成器并初始化工具类
+SnowflakeIdGenerator generator = new SnowflakeIdGenerator(1, 1, 1690214400000L);
+SnowflakeUtil.initialize(generator);
+```
+
+## 方法列表
+
+### initialize
+
+<TypeTable
+  type={{
+    initialize: {
+      description: '初始化工具类，注入生成器实例。在整个应用生命周期中只需调用一次。重复调用将覆盖已有实例。',
+      type: '(SnowflakeIdGenerator generator) void',
+      required: true,
+      parameters: [
+        { name: 'generator', description: 'SnowflakeIdGenerator 实例' },
+      ],
+    },
+  }}
+/>
+
+### 生成方法
+
+<TypeTable
+  type={{
+    generate: {
+      description: '生成标准雪花 ID，基因位固定为 0。线程安全，可在并发环境中直接调用。',
+      type: '() long',
+      returns: '64 位雪花 ID',
+    },
+    generateWithGene: {
+      description: '生成携带基因位的雪花 ID。基因值嵌入 ID 的基因段，适用于分库分表路由场景。',
+      type: '(int gene) long',
+      parameters: [
+        { name: 'gene', description: '基因值，范围 0~7' },
+      ],
+      returns: '携带基因位的 64 位雪花 ID',
+    },
+  }}
+/>
+
+### 解析方法
+
+<TypeTable
+  type={{
+    parse: {
+      description: '完整解析雪花 ID，返回包含所有段信息的 DTO 对象。',
+      type: '(long id) SnowflakeInfoDTO',
+      parameters: [
+        { name: 'id', description: '待解析的雪花 ID' },
+      ],
+      returns: 'SnowflakeInfoDTO 包含时间戳、数据中心 ID、机器 ID、基因位、序列号等完整信息',
+    },
+    parseTimestamp: {
+      description: '从雪花 ID 中提取生成时间戳（毫秒级）。',
+      type: '(long id) long',
+      parameters: [
+        { name: 'id', description: '待解析的雪花 ID' },
+      ],
+      returns: '生成时的 Unix 时间戳（毫秒）',
+    },
+    parseDatacenterId: {
+      description: '从雪花 ID 中提取数据中心 ID。',
+      type: '(long id) long',
+      parameters: [
+        { name: 'id', description: '待解析的雪花 ID' },
+      ],
+      returns: '数据中心 ID（0~7）',
+    },
+    parseMachineId: {
+      description: '从雪花 ID 中提取机器 ID。',
+      type: '(long id) long',
+      parameters: [
+        { name: 'id', description: '待解析的雪花 ID' },
+      ],
+      returns: '机器 ID（0~15）',
+    },
+    parseSequence: {
+      description: '从雪花 ID 中提取序列号。',
+      type: '(long id) long',
+      parameters: [
+        { name: 'id', description: '待解析的雪花 ID' },
+      ],
+      returns: '序列号（0~4095）',
+    },
+  }}
+/>
+
+### 验证方法
+
+<TypeTable
+  type={{
+    isValid: {
+      description: '验证给定的长整型值是否为合法的雪花 ID。检查符号位、时间戳范围、各段取值范围等。',
+      type: '(long id) boolean',
+      parameters: [
+        { name: 'id', description: '待验证的 ID 值' },
+      ],
+      returns: '合法返回 true，否则返回 false',
+    },
+  }}
+/>
+
+## 使用示例
+
+### ID 生成
+
+```java title="UserService.java"
+import com.xlf.utility.utility.SnowflakeUtil;
+
+public class UserService {
+
+    public Long createUser(UserDTO dto) {
+        // [!code highlight:2]
+        // 生成用户唯一 ID
+        long userId = SnowflakeUtil.generate();
+        // 保存用户...
+        return userId;
+    }
+}
+```
+
+### 基因模式生成
+
+```java title="OrderService.java"
+import com.xlf.utility.utility.SnowflakeUtil;
+
+public class OrderService {
+
+    public Long createOrder(Long userId) {
+        // [!code highlight:3]
+        // 使用用户 ID 的哈希值作为基因，确保同一用户的订单路由至同一分片
+        int gene = (int) (userId % 8);
+        long orderId = SnowflakeUtil.generateWithGene(gene);
+        return orderId;
+    }
+}
+```
+
+### ID 解析
+
+```java title="Example.java"
+import com.xlf.utility.utility.SnowflakeUtil;
+import com.xlf.utility.models.dto.SnowflakeInfoDTO;
+
+long id = 123456789012345678L;
+
+// [!code highlight:2]
+// 完整解析
+SnowflakeInfoDTO info = SnowflakeUtil.parse(id);
+System.out.println("生成时间: " + info.getGeneratedAt());
+System.out.println("数据中心: " + info.getDatacenterId());
+System.out.println("机器 ID: " + info.getMachineId());
+System.out.println("序列号: " + info.getSequence());
+
+// [!code highlight:2]
+// 单独提取时间戳
+long timestamp = SnowflakeUtil.parseTimestamp(id);
+```
+
+### ID 验证
+
+```java title="Example.java"
+import com.xlf.utility.utility.SnowflakeUtil;
+
+// [!code highlight:2]
+// 验证 ID 合法性
+boolean valid = SnowflakeUtil.isValid(123456789012345678L);
+if (!valid) {
+    throw new BusinessException(ErrorCode.PARAMETER_INVALID, "无效的 ID 格式");
+}
+```
+
+## 下一步
+
+<Cards>
+  <Card title="SnowflakeIdGenerator" href="/docs/bamboo-base-java/base/snowflake/generator" />
+  <Card title="SnowflakeInfoDTO" href="/docs/bamboo-base-java/base/snowflake/info-dto" />
+</Cards>

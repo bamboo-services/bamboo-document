@@ -1,0 +1,229 @@
+---
+title: 注解
+description: "@DubboPersistentContext 与 @TripleRequestCheck 注解驱动上下文传播与请求校验"
+icon: Tag
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# 注解
+
+bamboo-triple 提供两个核心注解，分别用于声明式的上下文传播与请求参数校验。通过在 Dubbo 服务方法上标注注解，即可自动触发对应的 AOP 切面逻辑。
+
+## @DubboPersistentContext
+
+`@DubboPersistentContext` 用于声明 Dubbo Triple 服务方法需要进行上下文传播。标注该注解后，`DubboContextAspect` 将自动从请求参数中提取 `ctx` 并初始化 `ContextHolder` 与 `MDC`。
+
+### 定义
+
+```java title="DubboPersistentContext.java"
+package com.xlf.utility.triple;
+
+import java.lang.annotation.*;
+
+// [!code highlight:4]
+// 可标注于方法或类型上
+@Target({ElementType.METHOD, ElementType.TYPE})
+@Retention(RetentionPolicy.RUNTIME)
+@Documented
+public @interface DubboPersistentContext {
+}
+```
+
+### 作用范围
+
+| 标注位置 | 效果 |
+|----------|------|
+| 方法级别 | 仅该方法触发上下文传播 |
+| 类级别 | 该类所有方法均触发上下文传播 |
+
+### 使用示例
+
+#### 方法级别标注
+
+```java title="UserTripleServiceImpl.java"
+@DubboService
+public class UserTripleServiceImpl implements UserTripleService {
+
+    // [!code highlight:2]
+    // 仅 queryUser 方法触发上下文传播
+    @DubboPersistentContext
+    @Override
+    public TripleResponse<UserDTO> queryUser(UserQueryRequest request) {
+        UserDTO user = userService.getById(request.getUserId());
+        return TripleResult.success(user);
+    }
+
+    // 此方法不触发上下文传播
+    @Override
+    public TripleResponse<Void> ping() {
+        return TripleResult.success();
+    }
+}
+```
+
+#### 类级别标注
+
+```java title="OrderTripleServiceImpl.java"
+// [!code highlight:2]
+// 类级别标注，所有方法均触发上下文传播
+@DubboPersistentContext
+@DubboService
+public class OrderTripleServiceImpl implements OrderTripleService {
+
+    @Override
+    public TripleResponse<OrderDTO> queryOrder(OrderQueryRequest request) {
+        return TripleResult.success(orderService.getById(request.getOrderId()));
+    }
+
+    @Override
+    public TripleResponse<Void> cancelOrder(OrderCancelRequest request) {
+        orderService.cancel(request.getOrderId());
+        return TripleResult.success();
+    }
+}
+```
+
+### 前置条件
+
+使用 `@DubboPersistentContext` 时，方法参数需满足以下条件：
+
+- 至少有一个参数对象提供 `getCtx()` 方法
+- 通常该参数为 `TripleRequest` 的子类
+- `ctx` 字段需在调用方通过 `init()` 方法初始化
+
+## @TripleRequestCheck
+
+`@TripleRequestCheck` 用于声明 Dubbo Triple 服务方法需要进行请求参数校验。标注该注解后，`TripleRequestCheckAspect` 将自动提取 `TripleRequest` 参数并调用其 `validate()` 方法。
+
+### 定义
+
+```java title="TripleRequestCheck.java"
+package com.xlf.utility.triple;
+
+import java.lang.annotation.*;
+
+// [!code highlight:3]
+// 仅可标注于方法上
+@Target(ElementType.METHOD)
+@Retention(RetentionPolicy.RUNTIME)
+@Documented
+public @interface TripleRequestCheck {
+    String message() default "请求参数校验失败";
+    String errorCode() default "VALIDATION_ERROR";
+}
+```
+
+### 属性说明
+
+<TypeTable
+  type={{
+    message: {
+      description: '校验失败时的错误提示信息。将作为 BusinessException 的消息内容。',
+      type: 'String',
+      default: '"请求参数校验失败"',
+    },
+    errorCode: {
+      description: '校验失败时的错误码。将作为 BusinessException 的错误码，便于调用方识别具体的校验错误类型。',
+      type: 'String',
+      default: '"VALIDATION_ERROR"',
+    },
+  }}
+/>
+
+### 使用示例
+
+#### 基本用法
+
+```java title="BasicCheckExample.java"
+@DubboPersistentContext
+// [!code highlight:2]
+// 使用默认错误消息与错误码
+@TripleRequestCheck
+@Override
+public TripleResponse<UserDTO> queryUser(UserQueryRequest request) {
+    return TripleResult.success(userService.getById(request.getUserId()));
+}
+```
+
+#### 自定义消息与错误码
+
+```java title="CustomCheckExample.java"
+@DubboPersistentContext
+// [!code highlight:2]
+// 自定义校验失败的错误消息与错误码
+@TripleRequestCheck(message = "订单创建参数无效", errorCode = "ORDER_CREATE_INVALID")
+@Override
+public TripleResponse<OrderDTO> createOrder(OrderCreateRequest request) {
+    OrderDTO order = orderService.create(request);
+    return TripleResult.success(order, "订单创建成功");
+}
+```
+
+### 校验流程
+
+```
+方法调用
+    │
+    ▼
+TripleRequestCheckAspect 拦截
+    │
+    ├── 遍历方法参数，查找 TripleRequest 类型
+    │
+    ├── 未找到 → 直接放行
+    │
+    ├── 找到 → 调用 validate()
+    │       │
+    │       ├── true  → 放行，执行目标方法
+    │       │
+    │       └── false → 抛出 BusinessException
+    │                    ├── message = @TripleRequestCheck.message()
+    │                    └── errorCode = @TripleRequestCheck.errorCode()
+    │
+    ▼
+目标方法执行或异常抛出
+```
+
+## 组合使用
+
+在实际业务中，通常将两个注解组合使用，确保上下文传播与参数校验同时生效：
+
+```java title="CombinedExample.java"
+@DubboService
+public class ProductTripleServiceImpl implements ProductTripleService {
+
+    // [!code highlight:3]
+    // 组合使用：先传播上下文，再校验请求参数
+    @DubboPersistentContext
+    @TripleRequestCheck(message = "商品查询参数无效", errorCode = "PRODUCT_QUERY_INVALID")
+    @Override
+    public TripleResponse<ProductDTO> queryProduct(ProductQueryRequest request) {
+        ProductDTO product = productService.getById(request.getProductId());
+        if (product == null) {
+            return TripleResult.error(ErrorCode.REQUEST_RESOURCE_NOT_FOUND, "商品不存在");
+        }
+        return TripleResult.success(product, "查询成功");
+    }
+}
+```
+
+调用方构建请求：
+
+```java title="ProductClient.java"
+// [!code highlight:5]
+// 调用方需通过 init() 初始化请求元数据
+ProductQueryRequest request = ProductQueryRequest.builder()
+        .productId(20001L)
+        .build()
+        .init("gateway-service");
+
+TripleResponse<ProductDTO> response = productTripleService.queryProduct(request);
+```
+
+## 下一步
+
+<Cards>
+  <Card title="AOP 切面" href="/docs/bamboo-base-java/triple/aspect" />
+  <Card title="TripleRequest 请求模型" href="/docs/bamboo-base-java/triple/request" />
+  <Card title="Dubbo Triple 概述" href="/docs/bamboo-base-java/triple" />
+</Cards>

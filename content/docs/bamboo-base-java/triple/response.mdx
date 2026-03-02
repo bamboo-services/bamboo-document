@@ -1,0 +1,162 @@
+---
+title: TripleResponse
+description: TripleResponse<T> 泛型响应体，统一 Dubbo Triple RPC 返回格式
+icon: ArrowDownToLine
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# TripleResponse
+
+`TripleResponse<T>` 是 Dubbo Triple RPC 的统一响应封装，采用泛型设计承载业务数据。所有 Triple 服务方法均应返回该类型，确保微服务间通信格式一致。
+
+## 类定义
+
+```java title="TripleResponse.java"
+package com.xlf.utility.triple;
+
+import lombok.experimental.SuperBuilder;
+import java.io.Serializable;
+
+// [!code highlight:2]
+// 泛型响应体，T 为业务数据类型
+@SuperBuilder
+public class TripleResponse<T> implements Serializable {
+    private String context;
+    private Boolean success;
+    private String code;
+    private String message;
+    private T data;
+    private Long duration;
+    private Long timestamp;
+}
+```
+
+## 字段说明
+
+<TypeTable
+  type={{
+    context: {
+      description: '链路追踪标识，UUID 格式。与请求的 ctx 字段对应，由 ContextHolder 自动填充。',
+      type: 'String',
+      required: true,
+    },
+    success: {
+      description: '请求是否成功。true 表示业务处理正常，false 表示出现业务错误或系统异常。',
+      type: 'Boolean',
+      required: true,
+    },
+    code: {
+      description: '状态码。来源于 ErrorCode 枚举，用于标识具体的响应类型。',
+      type: 'String',
+      required: true,
+    },
+    message: {
+      description: '响应消息。成功时为业务描述，失败时为错误提示。',
+      type: 'String',
+      required: true,
+    },
+    data: {
+      description: '泛型数据载体。承载业务响应数据，失败时通常为 null。',
+      type: 'T',
+      required: false,
+    },
+    duration: {
+      description: '请求耗时，单位为毫秒。由 ContextHolder 自动计算，记录从请求接收到响应构建的时间差。',
+      type: 'Long',
+      required: false,
+    },
+    timestamp: {
+      description: '响应时间戳，Unix 毫秒。记录响应生成的时刻。',
+      type: 'Long',
+      required: false,
+    },
+  }}
+/>
+
+## 响应示例
+
+### 成功响应
+
+```json title="success-response.json"
+{
+  "context": "550e8400-e29b-41d4-a716-446655440000",
+  "success": true,
+  "code": "SUCCESS",
+  "message": "查询成功",
+  "data": {
+    "userId": 10001,
+    "username": "xiao_lfeng",
+    "email": "test@example.com"
+  },
+  "duration": 23,
+  "timestamp": 1772620800000
+}
+```
+
+### 失败响应
+
+```json title="error-response.json"
+{
+  "context": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+  "success": false,
+  "code": "PARAMETER_ERROR",
+  "message": "用户 ID 不能为空",
+  "data": null,
+  "duration": 2,
+  "timestamp": 1772620800000
+}
+```
+
+### 异常响应
+
+```json title="exception-response.json"
+{
+  "context": "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+  "success": false,
+  "code": "SERVER_INTERNAL_ERROR",
+  "message": "服务内部异常",
+  "data": null,
+  "duration": 156,
+  "timestamp": 1772620800000
+}
+```
+
+## 与 BaseResponse 的区别
+
+| 维度 | `BaseResponse<E>` | `TripleResponse<T>` |
+|------|-------------------|---------------------|
+| 适用场景 | HTTP REST API | Dubbo Triple RPC |
+| 状态码类型 | `Integer`（5 位数字码） | `String`（枚举名称） |
+| 序列化 | Jackson JSON | Dubbo 序列化（Protobuf / Hessian2） |
+| 上下文来源 | MVC ContextHolder | Dubbo ContextHolder |
+| 成功标志 | 依据 code 判断 | 显式 `success` 布尔值 |
+
+## 构建方式
+
+通常不直接构建 `TripleResponse`，而是通过 `TripleResult` 静态工厂方法创建：
+
+```java title="TripleResponseBuild.java"
+// [!code highlight:2]
+// 推荐：使用 TripleResult 工厂方法
+TripleResponse<UserDTO> response = TripleResult.success(userDTO, "查询成功");
+
+// 直接 Builder 构建（不推荐，需手动填充上下文信息）
+TripleResponse<UserDTO> response = TripleResponse.<UserDTO>builder()
+        .context(ContextHolder.getContextId())
+        .success(true)
+        .code("SUCCESS")
+        .message("查询成功")
+        .data(userDTO)
+        .duration(ContextHolder.getDuration())
+        .timestamp(System.currentTimeMillis())
+        .build();
+```
+
+## 下一步
+
+<Cards>
+  <Card title="TripleResult 结果工厂" href="/docs/bamboo-base-java/triple/result" />
+  <Card title="TripleRequest 请求模型" href="/docs/bamboo-base-java/triple/request" />
+  <Card title="AOP 切面" href="/docs/bamboo-base-java/triple/aspect" />
+</Cards>

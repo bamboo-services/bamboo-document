@@ -1,0 +1,126 @@
+---
+title: 自动配置
+description: WebFluxSdkAutoConfiguration 自动装配与 ContextWebFluxProperties 配置属性
+icon: Settings
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# 自动配置
+
+`bamboo-webflux` 通过 Spring Boot 自动配置机制，在应用启动时自动注册所有基础设施组件。开发者只需引入 Maven 依赖，无需手动编写 `@Bean` 配置。
+
+## WebFluxSdkAutoConfiguration
+
+`WebFluxSdkAutoConfiguration` 是 `bamboo-webflux` 的自动配置入口类，通过条件注解确保仅在响应式 Web 应用中生效。
+
+```java title="WebFluxSdkAutoConfiguration.java"
+// [!code highlight:3]
+// 仅当应用类型为 REACTIVE 时激活
+@Configuration
+@ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.REACTIVE)
+public class WebFluxSdkAutoConfiguration {
+    // ...
+}
+```
+
+### 自动注册的组件
+
+| 组件 | 类型 | 说明 |
+|------|------|------|
+| `contextFilter` | WebFilter | 上下文注入过滤器，注入链路追踪 UUID 与开始时间 |
+| `logAspectHandler` | Aspect | 日志切面，记录请求/响应日志 |
+| `debugAspectHandler` | Aspect | 调试切面，控制调试接口的访问权限 |
+| `errorController` | Controller | 错误控制器 |
+| `mybatisPlusConfigHandler` | Configuration | MyBatis-Plus 配置（条件注册） |
+
+### 条件注册
+
+`mybatisPlusConfigHandler` 仅在类路径中存在 MyBatis-Plus 相关类时才会注册：
+
+```java title="WebFluxSdkAutoConfiguration.java"
+// [!code highlight:3]
+// 仅当 MyBatis-Plus 存在于类路径时注册
+@Bean
+@ConditionalOnClass(name = "com.baomidou.mybatisplus.core.MybatisPlusAutoConfiguration")
+public MybatisPlusConfigHandler mybatisPlusConfigHandler() {
+    return new MybatisPlusConfigHandler();
+}
+```
+
+## ContextWebFluxProperties
+
+`ContextWebFluxProperties` 是 `bamboo-webflux` 的配置属性类，绑定 `utility.context.webflux` 前缀。
+
+```java title="ContextWebFluxProperties.java"
+// [!code highlight:2]
+// 配置前缀为 utility.context.webflux
+@ConfigurationProperties("utility.context.webflux")
+public class ContextWebFluxProperties {
+    private boolean enableInput = true;
+    private boolean enableOutput = true;
+    private boolean gatewayMode = false;
+    private List<String> excludeUrls;
+}
+```
+
+### 属性说明
+
+<TypeTable
+  type={{
+    enableInput: {
+      description: '是否允许外部请求通过 Header 传入链路追踪 UUID。设为 true 时，若请求头中携带 Context UUID，将直接复用而非重新生成。适用于微服务间调用场景。',
+      type: 'boolean',
+      default: 'true',
+    },
+    enableOutput: {
+      description: '是否在响应头中输出链路追踪 UUID。设为 true 时，响应头将携带 Context UUID，便于客户端追踪与日志关联。',
+      type: 'boolean',
+      default: 'true',
+    },
+    gatewayMode: {
+      description: '是否启用网关模式。在网关模式下，上下文处理逻辑会适配网关场景的特殊需求，例如信任上游传递的上下文信息。',
+      type: 'boolean',
+      default: 'false',
+    },
+    excludeUrls: {
+      description: '排除的 URL 列表。匹配的请求路径将跳过上下文注入，不生成链路追踪信息。支持 Ant 风格路径匹配。',
+      type: 'List<String>',
+      default: '空列表',
+    },
+  }}
+/>
+
+### 配置示例
+
+```yaml title="application.yml"
+utility:
+  context:
+    webflux:
+      enable-input: true
+      enable-output: true
+      gateway-mode: false
+      exclude-urls:
+        - /actuator/**
+        - /health
+        - /favicon.ico
+```
+
+## 与 MVC 自动配置的对比
+
+`bamboo-mvc` 与 `bamboo-webflux` 的自动配置互斥，Spring Boot 会根据应用类型自动选择：
+
+| 条件 | 激活的配置 |
+|------|-----------|
+| `@ConditionalOnWebApplication(Type.SERVLET)` | `MvcSdkAutoConfiguration` |
+| `@ConditionalOnWebApplication(Type.REACTIVE)` | `WebFluxSdkAutoConfiguration` |
+
+因此在同一个 Spring Boot 应用中，不应同时引入 `bamboo-mvc` 与 `bamboo-webflux` 依赖。
+
+## 下一步
+
+<Cards>
+  <Card title="ContextFilter 过滤器" href="/docs/bamboo-base-java/webflux/filter/context" />
+  <Card title="日志切面" href="/docs/bamboo-base-java/webflux/aspect/log" />
+  <Card title="异常处理概览" href="/docs/bamboo-base-java/webflux/exception" />
+</Cards>

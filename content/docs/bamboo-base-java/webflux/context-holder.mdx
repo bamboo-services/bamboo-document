@@ -1,0 +1,168 @@
+---
+title: ContextHolder
+description: 基于 Reactor Context 的链路追踪上下文持有器
+icon: Link
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# ContextHolder
+
+`ContextHolder` 是 `bamboo-webflux` 模块的上下文持有器，基于 Reactor Context 机制实现请求级别的链路追踪信息传递。与 `bamboo-mvc` 中基于 `ThreadLocal` 的实现不同，该方案天然适配响应式编程的非阻塞线程模型。
+
+## 为何不使用 ThreadLocal
+
+在 Spring WebFlux 的事件循环模型中，一个请求可能在多个线程之间切换执行。`ThreadLocal` 绑定于特定线程，在线程切换时上下文信息会丢失。Reactor Context 是 Project Reactor 提供的订阅者级别上下文机制，它沿着响应式信号链向上游传播，不依赖于执行线程，因此是响应式场景下的正确选择。
+
+```
+ThreadLocal 方式（MVC）:
+  Thread-1: [请求开始] → [业务处理] → [响应构建] → [请求结束]
+            ↑ contextId 绑定在 Thread-1 上
+
+Reactor Context 方式（WebFlux）:
+  Signal Chain: [subscribe] ← [operator] ← [operator] ← [source]
+                ↑ contextId 沿信号链传播，与线程无关
+```
+
+## 上下文键定义
+
+`ContextHolder` 使用 `ContextConstant` 中定义的键存取上下文数据：
+
+<TypeTable
+  type={{
+    'ContextConstant.CONTEXT_KEY': {
+      description: '链路追踪标识键，值为 UUID 字符串。由 ContextFilter 在请求进入时生成并写入 Reactor Context。',
+      type: 'String',
+      required: true,
+    },
+    'ContextConstant.START_TIME_KEY': {
+      description: '请求开始时间戳键，值为毫秒级时间戳。用于计算请求耗时。',
+      type: 'String',
+      required: true,
+    },
+  }}
+/>
+
+## 响应式 API
+
+以下方法返回 `Mono` 类型，适用于响应式管道内部使用。
+
+### getContextId
+
+获取当前请求的链路追踪标识。
+
+```java title="ContextHolder.java"
+// [!code highlight:2]
+// 返回 Mono<String>，从 Reactor Context 中读取 UUID
+public static Mono<String> getContextId()
+```
+
+**使用示例：**
+
+```java title="SomeService.java"
+public Mono<Void> doSomething() {
+    return ContextHolder.getContextId()
+            .doOnNext(contextId -> log.info("当前链路: {}", contextId))
+            .then();
+}
+```
+
+### hasContext
+
+判断当前 Reactor Context 中是否存在链路追踪信息。
+
+```java title="ContextHolder.java"
+// [!code highlight:2]
+// 返回 Mono<Boolean>，判断上下文是否已注入
+public static Mono<Boolean> hasContext()
+```
+
+### getStartTime
+
+获取请求的开始时间戳。
+
+```java title="ContextHolder.java"
+// [!code highlight:2]
+// 返回 Mono<Long>，毫秒级时间戳
+public static Mono<Long> getStartTime()
+```
+
+### getDuration
+
+计算从请求开始到当前时刻的耗时。
+
+```java title="ContextHolder.java"
+// [!code highlight:2]
+// 返回 Mono<Long>，单位为毫秒
+public static Mono<Long> getDuration()
+```
+
+## 同步 API
+
+以下方法接受 `ContextView` 参数，适用于已持有 Reactor Context 视图的场景（如 `Mono.deferContextual` 内部）。
+
+### getContextId(ContextView)
+
+```java title="ContextHolder.java"
+// [!code highlight:2]
+// 同步方式从 ContextView 中读取链路追踪标识
+public static String getContextId(ContextView contextView)
+```
+
+### hasContext(ContextView)
+
+```java title="ContextHolder.java"
+// [!code highlight:2]
+// 同步方式判断 ContextView 中是否存在上下文
+public static boolean hasContext(ContextView contextView)
+```
+
+### getDuration(ContextView)
+
+```java title="ContextHolder.java"
+// [!code highlight:2]
+// 同步方式计算请求耗时
+public static Long getDuration(ContextView contextView)
+```
+
+**同步 API 使用示例：**
+
+```java title="CustomHandler.java"
+public Mono<String> buildResponse() {
+    // [!code highlight:5]
+    // 在 deferContextual 中使用同步 API，避免嵌套 Mono
+    return Mono.deferContextual(ctx -> {
+        String contextId = ContextHolder.getContextId(ctx);
+        Long duration = ContextHolder.getDuration(ctx);
+        return Mono.just("Context: " + contextId + ", Duration: " + duration + "ms");
+    });
+}
+```
+
+## 上下文写入时机
+
+`ContextHolder` 本身仅提供读取能力，上下文数据的写入由 `ContextFilter` 完成：
+
+```java title="ContextFilter.java"
+// [!code highlight:4]
+// ContextFilter 通过 contextWrite 将数据注入 Reactor Context
+return chain.filter(exchange)
+        .contextWrite(Context.of(
+                ContextConstant.CONTEXT_KEY, uuid,
+                ContextConstant.START_TIME_KEY, System.currentTimeMillis()
+        ));
+```
+
+## 注意事项
+
+1. **不可在非响应式代码中使用 `Mono` API** - 这些方法必须在 Reactor 管道中被订阅才能获取到上下文值。在同步代码块中调用 `getContextId()` 并执行 `.block()` 是错误做法。
+2. **上下文传播方向** - Reactor Context 从下游（订阅者）向上游传播。确保 `contextWrite` 操作位于管道的下游位置。
+3. **依赖 ContextFilter** - 若未注册 `ContextFilter`，所有读取操作将返回默认值或空值。
+
+## 下一步
+
+<Cards>
+  <Card title="ContextFilter 过滤器" href="/docs/bamboo-base-java/webflux/filter/context" />
+  <Card title="响应式 ResultUtil" href="/docs/bamboo-base-java/webflux/result-util" />
+  <Card title="自动配置" href="/docs/bamboo-base-java/webflux/auto-configuration" />
+</Cards>

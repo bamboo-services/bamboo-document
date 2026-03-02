@@ -1,0 +1,188 @@
+---
+title: ErrorCode
+description: ErrorCode 枚举定义 70+ 预定义错误码，覆盖通用、客户端与服务端全场景
+icon: AlertCircle
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# ErrorCode
+
+`ErrorCode` 是筱工具(Java) 的错误码枚举类，位于 `com.xlf.utility` 包下。每个枚举值包含英文标识、5 位数字响应码与中文描述，用于标准化 API 响应状态。
+
+## 枚举定义
+
+```java title="ErrorCode.java"
+package com.xlf.utility;
+
+public enum ErrorCode {
+    SUCCESS("SUCCESS", 20000, "操作成功"),
+    PARAMETER_ERROR("PARAMETER_ERROR", 40024, "参数错误"),
+    UNAUTHORIZED("UNAUTHORIZED", 40100, "未授权"),
+    // ... 70+ 预定义错误码
+
+    // [!code highlight:4]
+    private final String output;   // 英文标识
+    private final Integer code;    // 5 位数字响应码
+    private final String message;  // 中文描述
+}
+```
+
+## 枚举字段
+
+<TypeTable
+  type={{
+    output: {
+      description: '英文状态标识，全大写下划线命名。作为 BaseResponse 的 output 字段输出。',
+      type: 'String',
+      required: true,
+    },
+    code: {
+      description: '5 位数字响应码。前三位对应 HTTP 状态码，后两位为业务细分码。例如 40024 表示 HTTP 400 的第 24 号细分错误。',
+      type: 'Integer',
+      required: true,
+    },
+    message: {
+      description: '中文描述信息，作为 ErrorCode 的默认消息。可在构造 BaseResponse 时覆盖。',
+      type: 'String',
+      required: true,
+    },
+  }}
+/>
+
+## 响应码规则
+
+ErrorCode 的 5 位数字响应码遵循以下规则：
+
+```
+┌─────────────┬───────────────┐
+│  前 3 位     │  后 2 位       │
+│  HTTP 状态码  │  业务细分码    │
+└─────────────┴───────────────┘
+
+示例：40024 → HTTP 400 + 细分码 24
+      50001 → HTTP 500 + 细分码 01
+```
+
+HTTP 状态码可通过 `code / 100` 计算得出。例如 `40024 / 100 = 400`，`50001 / 100 = 500`。
+
+## 完整错误码列表
+
+### 2xx 成功
+
+| 枚举值 | output | code | 说明 |
+|--------|--------|------|------|
+| `SUCCESS` | SUCCESS | 20000 | 操作成功 |
+| `CREATED` | CREATED | 20100 | 创建成功 |
+
+### 400 请求错误
+
+| 枚举值 | output | code | 说明 |
+|--------|--------|------|------|
+| `PARAMETER_ERROR` | PARAMETER_ERROR | 40024 | 参数错误 |
+| `PARAMETER_INVALID` | PARAMETER_INVALID | 40025 | 参数无效 |
+| `PARAMETER_EMPTY` | PARAMETER_EMPTY | 40026 | 参数为空 |
+| `REQUEST_BODY_ERROR` | REQUEST_BODY_ERROR | 40027 | 请求体错误 |
+| `REQUEST_METHOD_NOT_ALLOWED` | REQUEST_METHOD_NOT_ALLOWED | 40028 | 请求方法不允许 |
+
+### 401 未授权
+
+| 枚举值 | output | code | 说明 |
+|--------|--------|------|------|
+| `UNAUTHORIZED` | UNAUTHORIZED | 40100 | 未授权 |
+| `TOKEN_EXPIRED` | TOKEN_EXPIRED | 40101 | 令牌过期 |
+| `LOGIN_EXPIRED` | LOGIN_EXPIRED | 40102 | 登录过期 |
+| `OPERATION_DENIED` | OPERATION_DENIED | 40103 | 操作被拒绝 |
+
+### 403 禁止访问
+
+| 枚举值 | output | code | 说明 |
+|--------|--------|------|------|
+| `FORBIDDEN` | FORBIDDEN | 40300 | 禁止访问 |
+| `PERMISSION_DENIED` | PERMISSION_DENIED | 40301 | 权限不足 |
+| `ACCESS_DENIED` | ACCESS_DENIED | 40302 | 访问被拒绝 |
+| `IP_BANNED` | IP_BANNED | 40303 | IP 被封禁 |
+
+### 404 资源不存在
+
+| 枚举值 | output | code | 说明 |
+|--------|--------|------|------|
+| `NOT_FOUND` | NOT_FOUND | 40400 | 未找到 |
+| `USER_NOT_FOUND` | USER_NOT_FOUND | 40401 | 用户不存在 |
+| `RESOURCE_NOT_FOUND` | RESOURCE_NOT_FOUND | 40402 | 资源不存在 |
+| `PAGE_NOT_FOUND` | PAGE_NOT_FOUND | 40403 | 页面不存在 |
+
+### 409 冲突
+
+| 枚举值 | output | code | 说明 |
+|--------|--------|------|------|
+| `EXISTED` | EXISTED | 40900 | 已存在 |
+| `CONFLICT` | CONFLICT | 40901 | 冲突 |
+| `DUPLICATE` | DUPLICATE | 40902 | 重复 |
+
+### 429 请求过多
+
+| 枚举值 | output | code | 说明 |
+|--------|--------|------|------|
+| `TOO_MANY_REQUESTS` | TOO_MANY_REQUESTS | 42900 | 请求过多 |
+| `RATE_LIMITED` | RATE_LIMITED | 42901 | 已限流 |
+| `RATE_LIMIT_EXCEEDED` | RATE_LIMIT_EXCEEDED | 42902 | 超过速率限制 |
+
+### 500 服务端错误
+
+| 枚举值 | output | code | 说明 |
+|--------|--------|------|------|
+| `SERVER_INTERNAL_ERROR` | SERVER_INTERNAL_ERROR | 50001 | 服务器内部错误 |
+| `DATABASE_ERROR` | DATABASE_ERROR | 50002 | 数据库错误 |
+| `CACHE_ERROR` | CACHE_ERROR | 50003 | 缓存错误 |
+
+## 使用方式
+
+### 构造 BaseResponse
+
+```java title="Example.java"
+import com.xlf.utility.BaseResponse;
+import com.xlf.utility.ErrorCode;
+
+// [!code highlight:2]
+// 使用预定义错误码构造标准响应
+BaseResponse<Void> response = new BaseResponse<>(ErrorCode.PARAMETER_ERROR, "用户名不能为空");
+```
+
+### 抛出业务异常
+
+```java title="UserService.java"
+import com.xlf.utility.ErrorCode;
+import com.xlf.utility.exception.library.BusinessException;
+
+public UserDTO getUserById(Long id) {
+    if (id == null) {
+        // [!code highlight:2]
+        // 抛出携带 ErrorCode 的业务异常，由全局异常处理器统一捕获
+        throw new BusinessException(ErrorCode.PARAMETER_EMPTY, "用户 ID 不能为空");
+    }
+    // ...
+}
+```
+
+### 条件判断
+
+```java title="AuthService.java"
+public void validateToken(String token) {
+    if (token == null || token.isEmpty()) {
+        throw new BusinessException(ErrorCode.UNAUTHORIZED, "令牌不能为空");
+    }
+    if (isTokenExpired(token)) {
+        // [!code highlight:2]
+        // 根据具体场景选择最精确的错误码
+        throw new BusinessException(ErrorCode.TOKEN_EXPIRED, "令牌已过期，请重新登录");
+    }
+}
+```
+
+## 下一步
+
+<Cards>
+  <Card title="BaseResponse" href="/docs/bamboo-base-java/base/response/base-response" />
+  <Card title="雪花算法" href="/docs/bamboo-base-java/base/snowflake" />
+</Cards>

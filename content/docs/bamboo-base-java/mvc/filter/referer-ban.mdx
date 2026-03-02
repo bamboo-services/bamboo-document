@@ -1,0 +1,95 @@
+---
+title: Referer 拦截过滤器
+description: BanEmptyReferer 拦截空 Referer 请求，防止 API 被非浏览器客户端直接调用
+icon: ShieldBan
+---
+
+# BanEmptyReferer
+
+`BanEmptyReferer` 过滤器用于拦截未携带 `Referer` 请求头的 HTTP 请求。该过滤器主要用于防止 API 被非浏览器客户端（如爬虫、自动化脚本）直接调用，提供基础的请求来源校验能力。
+
+## 工作原理
+
+```java title="BanEmptyReferer.java"
+public class BanEmptyReferer implements Filter {
+
+    @Override
+    public void doFilter(
+            ServletRequest request,
+            ServletResponse response,
+            FilterChain chain) throws IOException, ServletException {
+        HttpServletRequest httpRequest = (HttpServletRequest) request;
+        String referer = httpRequest.getHeader("Referer");
+
+        // [!code highlight:5]
+        // 若 Referer 为空，返回 403 JSON 响应
+        if (referer == null || referer.isEmpty()) {
+            HttpServletResponse httpResponse = (HttpServletResponse) response;
+            httpResponse.setStatus(HttpServletResponse.SC_FORBIDDEN);
+            httpResponse.setContentType("application/json;charset=UTF-8");
+            // 写入错误 JSON 响应体
+            return;
+        }
+
+        chain.doFilter(request, response);
+    }
+}
+```
+
+## 响应格式
+
+当请求未携带 `Referer` 时，返回 HTTP 403 和 JSON 格式的错误信息：
+
+```json title="response.json"
+{
+  "context": null,
+  "output": "FORBIDDEN",
+  "code": 40300,
+  "message": null,
+  "error_message": "请求来源不合法",
+  "duration": 0,
+  "data": null
+}
+```
+
+## 注册方式
+
+```java title="FilterConfig.java"
+@Configuration
+public class FilterConfig {
+
+    @Bean
+    public FilterRegistrationBean<BanEmptyReferer> refererFilter() {
+        FilterRegistrationBean<BanEmptyReferer> registration =
+            new FilterRegistrationBean<>();
+        // [!code highlight]
+        registration.setFilter(new BanEmptyReferer());
+        // [!code highlight:2]
+        // 仅对 API 路径生效
+        registration.addUrlPatterns("/api/*");
+        registration.setOrder(3);
+        return registration;
+    }
+}
+```
+
+## 适用场景
+
+- **Web 前端 API**：前端页面发出的请求通常携带 `Referer`，而直接调用 API 的工具不会
+- **防爬虫**：简单的反爬策略，阻止未设置 `Referer` 的请求
+- **内部 API 保护**：配合其他安全机制使用
+
+## 注意事项
+
+- `Referer` 头可被伪造，该过滤器仅提供基础防护，不应作为唯一的安全手段
+- 部分合法场景（如浏览器隐私设置、HTTPS 到 HTTP 的跳转）可能不携带 `Referer`
+- 建议仅在特定路径模式上注册（如 `/api/*`），避免影响静态资源和页面访问
+- 该过滤器需手动注册为 Bean，不在自动配置范围内
+
+## 下一步
+
+<Cards>
+  <Card title="权限过滤器" href="/docs/bamboo-base-java/mvc/filter/permission" />
+  <Card title="CORS 跨域过滤器" href="/docs/bamboo-base-java/mvc/filter/cors" />
+  <Card title="过滤器概览" href="/docs/bamboo-base-java/mvc/filter" />
+</Cards>

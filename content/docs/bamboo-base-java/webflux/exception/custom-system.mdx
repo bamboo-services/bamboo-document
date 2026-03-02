@@ -1,0 +1,125 @@
+---
+title: 自定义异常扩展
+description: 通过继承 SystemExceptionHandler 扩展响应式异常处理能力
+icon: Puzzle
+---
+
+# 自定义异常扩展
+
+`bamboo-webflux` 的异常处理器链采用继承设计，开发者可以通过继承 `SystemExceptionHandler` 来扩展异常处理能力，在保留框架内置处理逻辑的同时添加项目特定的异常处理。
+
+## 扩展方式
+
+创建自定义异常处理器类，使用 `@RestControllerAdvice` 注解并继承 `SystemExceptionHandler`：
+
+```java title="GlobalExceptionHandler.java"
+package com.example.demo.exception;
+
+import com.xlf.utility.BaseResponse;
+import com.xlf.utility.ErrorCode;
+import com.xlf.utility.webflux.ResultUtil;
+import com.xlf.utility.webflux.exception.SystemExceptionHandler;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+import reactor.core.publisher.Mono;
+
+// [!code highlight:3]
+// 继承 SystemExceptionHandler，自动获得所有内置异常处理能力
+@RestControllerAdvice
+public class GlobalExceptionHandler extends SystemExceptionHandler {
+
+    // [!code highlight:2]
+    // 添加项目特定的异常处理
+    @ExceptionHandler(CustomBusinessException.class)
+    public Mono<ResponseEntity<BaseResponse<Void>>> handleCustomBusiness(
+            CustomBusinessException e) {
+        return ResultUtil.error(ErrorCode.SERVER_INTERNAL_ERROR, e.getMessage(), null);
+    }
+}
+```
+
+## 继承后获得的能力
+
+继承 `SystemExceptionHandler` 后，自定义处理器自动具备以下所有异常处理能力：
+
+```
+GlobalExceptionHandler（自定义）
+└── SystemExceptionHandler
+    ├── MethodNotAllowedException
+    ├── MissingRequestValueException
+    ├── WebExchangeBindException
+    ├── ServerWebInputException
+    ├── UnsupportedMediaTypeStatusException
+    ├── NotAcceptableStatusException
+    └── ResponseStatusException
+    └── PublicExceptionHandler
+        ├── BusinessException
+        └── UserAuthenticationException
+        └── JavaBaseExceptionHandler
+            ├── NullPointerException
+            ├── IllegalArgumentException
+            ├── IllegalStateException
+            ├── ClassCastException
+            ├── UnsupportedOperationException
+            ├── ArithmeticException
+            └── ArrayIndexOutOfBoundsException
+```
+
+## 覆盖内置处理器
+
+如果需要修改某个内置异常的处理逻辑，可以在子类中重写对应的处理方法：
+
+```java title="GlobalExceptionHandler.java"
+@RestControllerAdvice
+public class GlobalExceptionHandler extends SystemExceptionHandler {
+
+    // [!code highlight:3]
+    // 覆盖内置的 NullPointerException 处理逻辑
+    @Override
+    @ExceptionHandler(NullPointerException.class)
+    public Mono<ResponseEntity<BaseResponse<Void>>> handleNullPointer(
+            NullPointerException e) {
+        // 自定义处理：记录更详细的日志
+        log.error("空指针异常，堆栈信息：", e);
+        return ResultUtil.error(
+                ErrorCode.SERVER_INTERNAL_ERROR,
+                "服务器内部错误，请联系管理员",
+                null
+        );
+    }
+}
+```
+
+## 携带数据的错误响应
+
+自定义异常处理器可以在错误响应中携带额外数据：
+
+```java title="GlobalExceptionHandler.java"
+@ExceptionHandler(ValidationException.class)
+public Mono<ResponseEntity<BaseResponse<Map<String, String>>>> handleValidation(
+        ValidationException e) {
+    // [!code highlight:4]
+    // 将校验失败的字段信息作为 data 返回
+    Map<String, String> errors = e.getFieldErrors().stream()
+            .collect(Collectors.toMap(
+                    FieldError::getField,
+                    FieldError::getDefaultMessage
+            ));
+    return ResultUtil.error(ErrorCode.PARAMETER_ERROR, "参数校验失败", errors);
+}
+```
+
+## 注意事项
+
+1. **不要在自定义处理器上使用 `@Order`** - `SystemExceptionHandler` 已设置 `@Order(-1)`，继承类自动沿用此优先级。
+2. **避免处理过于宽泛的异常** - 如 `Exception.class` 或 `Throwable.class`，这可能会掩盖框架层面的异常处理逻辑。
+3. **确保返回 `Mono` 类型** - 在 WebFlux 环境中，异常处理方法的返回类型必须是 `Mono<ResponseEntity<BaseResponse<T>>>`。
+
+## 下一步
+
+<Cards>
+  <Card title="MySQL 异常处理" href="/docs/bamboo-base-java/webflux/exception/mysql" />
+  <Card title="PostgreSQL 异常处理" href="/docs/bamboo-base-java/webflux/exception/postgresql" />
+  <Card title="异常处理概览" href="/docs/bamboo-base-java/webflux/exception" />
+</Cards>

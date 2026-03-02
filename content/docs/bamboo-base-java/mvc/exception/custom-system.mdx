@@ -1,0 +1,144 @@
+---
+title: 自定义异常处理
+description: 通过继承 SystemExceptionHandler 扩展异常处理能力，实现项目级异常捕获
+icon: Puzzle
+---
+
+# 自定义异常处理
+
+`bamboo-mvc` 的异常处理架构基于继承设计，开发者只需继承 `SystemExceptionHandler` 即可获得完整的内置异常处理能力，同时添加项目特有的异常处理逻辑。
+
+## 基本用法
+
+### 创建自定义异常处理器
+
+```java title="GlobalExceptionHandler.java"
+package com.example.demo.exception;
+
+import com.xlf.utility.BaseResponse;
+import com.xlf.utility.ErrorCode;
+import com.xlf.utility.mvc.ResultUtil;
+import com.xlf.utility.mvc.exception.SystemExceptionHandler;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+
+// [!code highlight:3]
+// 继承 SystemExceptionHandler 获得完整的异常处理链
+@RestControllerAdvice
+public class GlobalExceptionHandler extends SystemExceptionHandler {
+
+    // [!code highlight:3]
+    // 添加项目自定义异常处理
+    @ExceptionHandler(OrderNotFoundException.class)
+    public ResponseEntity<BaseResponse<Void>> handleOrderNotFound(
+            OrderNotFoundException e) {
+        return ResultUtil.error(
+            ErrorCode.PAGE_NOT_FOUND, e.getMessage(), null
+        );
+    }
+
+    @ExceptionHandler(InsufficientBalanceException.class)
+    public ResponseEntity<BaseResponse<Void>> handleInsufficientBalance(
+            InsufficientBalanceException e) {
+        return ResultUtil.error(
+            ErrorCode.OPERATION_FAILED, "余额不足: " + e.getMessage(), null
+        );
+    }
+}
+```
+
+### 定义自定义异常
+
+```java title="OrderNotFoundException.java"
+package com.example.demo.exception;
+
+public class OrderNotFoundException extends RuntimeException {
+
+    public OrderNotFoundException(String orderId) {
+        super("订单不存在: " + orderId);
+    }
+}
+```
+
+```java title="InsufficientBalanceException.java"
+package com.example.demo.exception;
+
+public class InsufficientBalanceException extends RuntimeException {
+
+    public InsufficientBalanceException(String message) {
+        super(message);
+    }
+}
+```
+
+## 携带数据的异常响应
+
+当异常响应需要附带额外信息时，可以使用 `ResultUtil.error()` 的泛型重载：
+
+```java title="GlobalExceptionHandler.java"
+@ExceptionHandler(ValidationException.class)
+public ResponseEntity<BaseResponse<Map<String, String>>> handleValidation(
+        ValidationException e) {
+    // [!code highlight:3]
+    // 将校验失败的字段信息作为响应数据返回
+    Map<String, String> errors = e.getFieldErrors();
+    return ResultUtil.error(
+        ErrorCode.PARAMETER_ERROR, "参数校验失败", errors
+    );
+}
+```
+
+## 覆盖内置处理器
+
+若需要修改内置异常的处理行为，可以在子类中覆盖父类的处理方法：
+
+```java title="GlobalExceptionHandler.java"
+@RestControllerAdvice
+public class GlobalExceptionHandler extends SystemExceptionHandler {
+
+    // [!code highlight:3]
+    // 覆盖父类的 NullPointerException 处理，添加日志记录
+    @Override
+    @ExceptionHandler(NullPointerException.class)
+    public ResponseEntity<BaseResponse<Void>> handleNullPointerException(
+            NullPointerException e) {
+        log.error("空指针异常发生", e);
+        return ResultUtil.error(
+            ErrorCode.SERVER_INTERNAL_ERROR, "系统内部错误，请稍后重试", null
+        );
+    }
+}
+```
+
+## 结合数据库异常处理器
+
+若项目使用 MySQL 或 PostgreSQL，可以同时引入对应的数据库异常处理器。数据库异常处理器独立于主继承链，通过 Bean 注册方式引入：
+
+```java title="GlobalExceptionHandler.java"
+@RestControllerAdvice
+public class GlobalExceptionHandler extends SystemExceptionHandler {
+
+    // 项目自定义异常处理...
+}
+```
+
+数据库异常处理器由自动配置注册，无需在自定义处理器中声明。
+
+## 异常处理优先级
+
+Spring MVC 在匹配 `@ExceptionHandler` 时遵循以下优先级规则：
+
+1. **精确匹配**：优先匹配异常类型完全一致的处理器
+2. **子类优先**：子类处理器优先于父类处理器
+3. **就近原则**：`@RestControllerAdvice` 中定义的处理器优先于全局默认
+
+因此，自定义异常处理器中声明的 `@ExceptionHandler` 方法会优先于 `SystemExceptionHandler` 中的同类型处理器。
+
+## 下一步
+
+<Cards>
+  <Card title="异常处理概览" href="/docs/bamboo-base-java/mvc/exception" />
+  <Card title="MySQL 异常处理" href="/docs/bamboo-base-java/mvc/exception/mysql" />
+  <Card title="PostgreSQL 异常处理" href="/docs/bamboo-base-java/mvc/exception/postgresql" />
+</Cards>

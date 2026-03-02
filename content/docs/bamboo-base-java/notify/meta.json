@@ -1,0 +1,11 @@
+{
+  "title": "通知服务",
+  "icon": "Bell",
+  "pages": [
+    "index",
+    "email",
+    "webhook",
+    "template",
+    "model"
+  ]
+}

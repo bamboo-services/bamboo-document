@@ -1,0 +1,84 @@
+---
+title: AllowCorsWebFilter
+description: 响应式 CORS 跨域过滤器，基于域名白名单校验请求来源
+icon: Globe
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# AllowCorsWebFilter
+
+`AllowCorsWebFilter` 是 `bamboo-webflux` 模块的 CORS 跨域过滤器，通过校验请求的 `Host` 头部与预配置的域名白名单进行匹配，对未授权的域名返回 `403 Forbidden` 响应。
+
+## 类定义
+
+```java title="AllowCorsWebFilter.java"
+// [!code highlight:4]
+// CORS 过滤器，最高优先级执行
+@Order(Ordered.HIGHEST_PRECEDENCE)
+public class AllowCorsWebFilter implements WebFilter {
+
+    @Override
+    public Mono<Void> filter(ServerWebExchange exchange, WebFilterChain chain) {
+        // ...
+    }
+}
+```
+
+## 工作原理
+
+1. 从 `ServerWebExchange` 中提取请求的 `Host` 头部
+2. 将 `Host` 值与预配置的域名白名单进行匹配
+3. 若匹配成功，设置 CORS 响应头并将请求传递至下一个过滤器
+4. 若匹配失败，直接返回 `403 Forbidden` 响应，终止请求处理链
+
+```java title="AllowCorsWebFilter.java"
+@Override
+public Mono<Void> filter(ServerWebExchange exchange, WebFilterChain chain) {
+    String host = exchange.getRequest().getHeaders().getHost().getHostString();
+
+    // [!code highlight:4]
+    // 校验域名是否在白名单中
+    if (!isAllowedDomain(host)) {
+        exchange.getResponse().setStatusCode(HttpStatus.FORBIDDEN);
+        return exchange.getResponse().setComplete();
+    }
+
+    // 设置 CORS 响应头
+    ServerHttpResponse response = exchange.getResponse();
+    response.getHeaders().add("Access-Control-Allow-Origin", "*");
+    response.getHeaders().add("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+    response.getHeaders().add("Access-Control-Allow-Headers", "*");
+
+    return chain.filter(exchange);
+}
+```
+
+## 设置的 CORS 响应头
+
+| 响应头 | 值 | 说明 |
+|--------|-----|------|
+| `Access-Control-Allow-Origin` | `*` 或具体域名 | 允许的请求来源 |
+| `Access-Control-Allow-Methods` | `GET, POST, PUT, DELETE, OPTIONS` | 允许的 HTTP 方法 |
+| `Access-Control-Allow-Headers` | `*` | 允许的请求头 |
+
+## 域名白名单配置
+
+域名白名单通过构造函数或配置属性注入。开发者需要根据项目需求配置允许的域名列表。
+
+## 与 MVC 版本的区别
+
+| 特性 | MVC AllowCorsFilter | WebFlux AllowCorsWebFilter |
+|------|---------------------|---------------------------|
+| 接口 | `javax.servlet.Filter` | `WebFilter` |
+| 请求对象 | `HttpServletRequest` | `ServerWebExchange` |
+| 拒绝响应 | `response.sendError(403)` | `exchange.getResponse().setStatusCode(HttpStatus.FORBIDDEN)` |
+| 异步支持 | 同步阻塞 | 返回 `Mono<Void>` |
+
+## 下一步
+
+<Cards>
+  <Card title="OPTIONS 过滤器" href="/docs/bamboo-base-java/webflux/filter/options" />
+  <Card title="ContextFilter" href="/docs/bamboo-base-java/webflux/filter/context" />
+  <Card title="WebFilter 概览" href="/docs/bamboo-base-java/webflux/filter" />
+</Cards>

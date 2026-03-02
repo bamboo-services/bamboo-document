@@ -1,0 +1,139 @@
+---
+title: 模板引擎
+description: TemplateEngine 接口提供通知内容的模板渲染与变量替换能力
+icon: FileCode
+---
+
+# 模板引擎
+
+`TemplateEngine` 是 bamboo-notify 模块的模板渲染接口，用于将通知内容中的占位变量替换为实际值。通过实现该接口，可对接 Thymeleaf、FreeMarker 等模板框架，或自行编写轻量级的变量替换逻辑。
+
+## 接口定义
+
+```java title="TemplateEngine.java"
+package com.xlf.utility.notify;
+
+public interface TemplateEngine {
+
+    // [!code highlight:3]
+    /**
+     * 渲染模板，将变量替换为实际值
+     */
+    String render(String templateName, Map<String, Object> variables);
+}
+```
+
+### 参数说明
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `templateName` | `String` | 模板名称或模板内容标识 |
+| `variables` | `Map<String, Object>` | 模板变量键值对 |
+
+### 返回值
+
+返回渲染完成后的完整字符串内容，可直接作为 `NotifyMessage` 的 `content` 使用。
+
+## 自定义实现
+
+### 简单变量替换
+
+以下示例演示了一个基于占位符的轻量级模板引擎实现：
+
+```java title="SimpleTemplateEngine.java"
+import com.xlf.utility.notify.TemplateEngine;
+import java.util.Map;
+
+@Component
+public class SimpleTemplateEngine implements TemplateEngine {
+
+    // [!code highlight:9]
+    // 基于 ${key} 占位符的简单替换实现
+    @Override
+    public String render(String templateName, Map<String, Object> variables) {
+        String template = this.loadTemplate(templateName);
+        for (Map.Entry<String, Object> entry : variables.entrySet()) {
+            template = template.replace(
+                    "${" + entry.getKey() + "}",
+                    String.valueOf(entry.getValue())
+            );
+        }
+        return template;
+    }
+
+    private String loadTemplate(String templateName) {
+        // 从文件系统、数据库或资源目录加载模板内容
+        return "尊敬的 ${username}，您的验证码为 ${code}，有效期 ${expiry} 分钟。";
+    }
+}
+```
+
+### 对接 Thymeleaf
+
+```java title="ThymeleafTemplateEngine.java"
+import com.xlf.utility.notify.TemplateEngine;
+import org.thymeleaf.context.Context;
+import org.thymeleaf.spring6.SpringTemplateEngine;
+import java.util.Map;
+
+@Component
+public class ThymeleafTemplateEngine implements TemplateEngine {
+    private final SpringTemplateEngine springTemplateEngine;
+
+    public ThymeleafTemplateEngine(SpringTemplateEngine springTemplateEngine) {
+        this.springTemplateEngine = springTemplateEngine;
+    }
+
+    // [!code highlight:6]
+    // 委托 Thymeleaf 引擎处理模板渲染
+    @Override
+    public String render(String templateName, Map<String, Object> variables) {
+        Context context = new Context();
+        context.setVariables(variables);
+        return springTemplateEngine.process(templateName, context);
+    }
+}
+```
+
+## 配合 NotifyMessage 使用
+
+`NotifyMessage` 的 `variables` 字段可直接传递模板变量，在通知服务内部调用 `TemplateEngine.render()` 完成内容渲染：
+
+```java title="TemplateNotifyExample.java"
+import java.util.Map;
+
+// [!code highlight:7]
+// 构建携带模板变量的通知消息
+NotifyMessage message = NotifyMessage.builder()
+        .to("user@example.com")
+        .subject("验证码通知")
+        .content("verification-code")
+        .type(NotifyType.EMAIL)
+        .variables(Map.of(
+                "username", "筱锋",
+                "code", "839201",
+                "expiry", 5
+        ))
+        .build();
+
+notifyService.send(message);
+```
+
+在上述示例中，`content` 字段值 `"verification-code"` 将作为 `templateName` 传入 `TemplateEngine.render()` 方法，配合 `variables` 完成变量替换后生成最终通知内容。
+
+## 设计建议
+
+| 建议 | 说明 |
+|------|------|
+| 模板与代码分离 | 将模板文件存放于 `resources/templates/` 目录下，避免硬编码 |
+| 缓存机制 | 对频繁使用的模板启用缓存，减少 I/O 开销 |
+| 异常处理 | 模板渲染失败时应抛出明确异常，避免发送空内容通知 |
+| 变量校验 | 渲染前校验必要变量是否齐全，防止占位符残留 |
+
+## 下一步
+
+<Cards>
+  <Card title="数据模型" href="/docs/bamboo-base-java/notify/model" />
+  <Card title="邮件通知" href="/docs/bamboo-base-java/notify/email" />
+  <Card title="Webhook 通知" href="/docs/bamboo-base-java/notify/webhook" />
+</Cards>

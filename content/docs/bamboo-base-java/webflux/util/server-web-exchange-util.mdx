@@ -1,0 +1,110 @@
+---
+title: ServerWebExchangeUtil
+description: ServerWebExchange 工具类，提供 Handler 解析与请求信息提取能力
+icon: Wrench
+---
+
+# ServerWebExchangeUtil
+
+`ServerWebExchangeUtil` 是 `bamboo-webflux` 模块提供的工具类，封装了从 `ServerWebExchange` 中提取常用信息的方法，包括 Handler Method 解析、客户端 IP 获取和 User-Agent 提取。
+
+## 方法说明
+
+### getHandlerMethod
+
+根据当前请求解析出对应的 `HandlerMethod` 对象。该方法主要供 `PermissionWebFilter` 等内部组件使用，用于获取目标 Controller 方法上的注解信息。
+
+```java title="ServerWebExchangeUtil.java"
+// [!code highlight:4]
+// 通过 RequestMappingHandlerMapping 解析目标 HandlerMethod
+// 返回 Mono<HandlerMethod>，若无法解析则返回空 Mono
+public static Mono<HandlerMethod> getHandlerMethod(
+        ServerWebExchange exchange,
+        RequestMappingHandlerMapping handlerMapping)
+```
+
+**使用示例：**
+
+```java title="CustomFilter.java"
+public Mono<Void> filter(ServerWebExchange exchange, WebFilterChain chain) {
+    return ServerWebExchangeUtil.getHandlerMethod(exchange, handlerMapping)
+            .flatMap(handlerMethod -> {
+                // [!code highlight:2]
+                // 获取目标方法上的自定义注解
+                MyAnnotation annotation = handlerMethod.getMethodAnnotation(MyAnnotation.class);
+                if (annotation != null) {
+                    // 执行自定义逻辑
+                }
+                return chain.filter(exchange);
+            })
+            .switchIfEmpty(chain.filter(exchange));
+}
+```
+
+### getClientIp
+
+从 `ServerWebExchange` 中提取客户端的真实 IP 地址。该方法会依次检查常见的代理头部（`X-Forwarded-For`、`X-Real-IP` 等），获取最终客户端 IP。
+
+```java title="ServerWebExchangeUtil.java"
+// [!code highlight:3]
+// 提取客户端真实 IP，支持代理头部解析
+public static String getClientIp(ServerWebExchange exchange)
+```
+
+IP 提取的优先级顺序：
+
+1. `X-Forwarded-For` 头部（取第一个非空值）
+2. `X-Real-IP` 头部
+3. `exchange.getRequest().getRemoteAddress()` 直接获取
+
+**使用示例：**
+
+```java title="AuditService.java"
+public Mono<Void> logAccess(ServerWebExchange exchange) {
+    // [!code highlight:2]
+    // 获取客户端 IP 用于审计日志
+    String clientIp = ServerWebExchangeUtil.getClientIp(exchange);
+    log.info("访问来源 IP: {}", clientIp);
+    return Mono.empty();
+}
+```
+
+### getUserAgent
+
+从 `ServerWebExchange` 中提取客户端的 User-Agent 信息。
+
+```java title="ServerWebExchangeUtil.java"
+// [!code highlight:2]
+// 提取请求头中的 User-Agent 值
+public static String getUserAgent(ServerWebExchange exchange)
+```
+
+**使用示例：**
+
+```java title="SecurityService.java"
+public Mono<Boolean> checkDevice(ServerWebExchange exchange) {
+    String userAgent = ServerWebExchangeUtil.getUserAgent(exchange);
+    // [!code highlight:2]
+    // 根据 User-Agent 判断设备类型
+    boolean isMobile = userAgent.contains("Mobile");
+    return Mono.just(isMobile);
+}
+```
+
+## 与 MVC 版本的对应关系
+
+在 `bamboo-mvc` 中，类似的功能通常直接通过 `HttpServletRequest` 的方法实现。`ServerWebExchangeUtil` 提供了对等的能力：
+
+| MVC 方式 | WebFlux 工具方法 |
+|----------|-----------------|
+| `request.getRemoteAddr()` | `ServerWebExchangeUtil.getClientIp(exchange)` |
+| `request.getHeader("User-Agent")` | `ServerWebExchangeUtil.getUserAgent(exchange)` |
+| `HandlerMapping.getHandler(request)` | `ServerWebExchangeUtil.getHandlerMethod(exchange, mapping)` |
+
+## 下一步
+
+<Cards>
+  <Card title="WebFilter 概览" href="/docs/bamboo-base-java/webflux/filter" />
+  <Card title="ContextHolder" href="/docs/bamboo-base-java/webflux/context-holder" />
+  <Card title="Spring WebFlux 概览" href="/docs/bamboo-base-java/webflux" />
+</Cards>

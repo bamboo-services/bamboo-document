@@ -31,13 +31,20 @@ export default function HomePage() {
             <ArrowRight className="size-5 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all" />
           </Link>
 
-          <div className="flex items-center justify-between p-4 border border-border rounded-lg opacity-50">
+          <Link
+            href="/docs/bamboo-base-java"
+            className="group flex items-center justify-between p-4 border border-border rounded-lg hover:border-primary transition-colors"
+          >
             <div>
-              <h3 className="font-medium">bamboo-base-java</h3>
-              <p className="text-sm text-muted-foreground">Java 组件库</p>
+              <h3 className="font-medium group-hover:text-primary transition-colors">
+                筱工具 (Java)
+              </h3>
+              <p className="text-sm text-muted-foreground">
+                Java 语言基础组件库，基于 Spring Boot 3
+              </p>
             </div>
-            <span className="text-xs text-muted-foreground">规划中</span>
-          </div>
+            <ArrowRight className="size-5 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all" />
+          </Link>
 
           <div className="flex items-center justify-between p-4 border border-border rounded-lg opacity-50">
             <div>

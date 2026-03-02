@@ -1,0 +1,129 @@
+---
+title: MyBatis-Plus 配置
+description: 自动注册 MyBatis-Plus 分页插件，支持多数据库类型自动适配
+icon: Database
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# MyBatis-Plus 配置
+
+`MybatisPlusConfiguration` 为 MyBatis-Plus 提供自动化的分页插件配置。该配置类通过读取应用属性自动识别数据库类型，并注册对应的分页拦截器。
+
+## 配置类
+
+```java title="MybatisPlusConfiguration.java"
+// [!code highlight:2]
+@Configuration
+public class MybatisPlusConfiguration {
+
+    // [!code highlight:3]
+    // 注册 MyBatis-Plus 分页拦截器
+    @Bean
+    public MybatisPlusInterceptor mybatisPlusInterceptor() {
+        MybatisPlusInterceptor interceptor = new MybatisPlusInterceptor();
+        // [!code highlight:2]
+        // 从 UtilityBaseProperties 获取数据库类型
+        interceptor.addInnerInterceptor(new PaginationInnerInterceptor(dbType));
+        return interceptor;
+    }
+}
+```
+
+## 数据库类型配置
+
+分页插件需要知晓当前使用的数据库类型，以生成正确的分页 SQL。数据库类型通过 `UtilityBaseProperties` 配置：
+
+```yaml title="application.yml"
+bamboo:
+  base:
+    db-type: POSTGRE_SQL
+```
+
+## 支持的数据库类型
+
+<TypeTable
+  type={{
+    MYSQL: {
+      description: 'MySQL 数据库',
+      type: 'DbType',
+    },
+    POSTGRE_SQL: {
+      description: 'PostgreSQL 数据库',
+      type: 'DbType',
+    },
+    ORACLE: {
+      description: 'Oracle 数据库',
+      type: 'DbType',
+    },
+    SQL_SERVER: {
+      description: 'SQL Server 数据库',
+      type: 'DbType',
+    },
+    MARIADB: {
+      description: 'MariaDB 数据库',
+      type: 'DbType',
+    },
+    H2: {
+      description: 'H2 内存数据库（常用于测试）',
+      type: 'DbType',
+    },
+  }}
+/>
+
+## 分页使用示例
+
+### Mapper 层
+
+```java title="UserMapper.java"
+public interface UserMapper extends BaseMapper<UserEntity> {
+
+    // [!code highlight:2]
+    // MyBatis-Plus 自动支持 IPage 参数的分页查询
+    IPage<UserEntity> selectPageVo(IPage<UserEntity> page, @Param("status") Integer status);
+}
+```
+
+### Service 层
+
+```java title="UserService.java"
+@Service
+@RequiredArgsConstructor
+public class UserService {
+
+    private final UserMapper userMapper;
+
+    public IPage<UserEntity> getUserList(int current, int size) {
+        // [!code highlight:2]
+        // 创建分页对象，分页插件自动处理 SQL
+        Page<UserEntity> page = new Page<>(current, size);
+        return userMapper.selectPage(page, null);
+    }
+}
+```
+
+### Controller 层
+
+```java title="UserController.java"
+@GetMapping("/list")
+public ResponseEntity<BaseResponse<IPage<UserVO>>> listUsers(
+        @RequestParam(defaultValue = "1") int page,
+        @RequestParam(defaultValue = "10") int size) {
+    IPage<UserVO> result = userService.getUserList(page, size);
+    return ResultUtil.success("查询成功", result);
+}
+```
+
+## 注意事项
+
+- 该配置类由 `BaseSdkAutoConfiguration` 自动注册，无需手动声明
+- 若项目未引入 MyBatis-Plus 依赖，该配置类不会生效
+- 分页插件仅影响包含 `IPage` 参数的查询，不影响普通查询
+
+## 下一步
+
+<Cards>
+  <Card title="ResultUtil" href="/docs/bamboo-base-java/mvc/result-util" />
+  <Card title="异常处理" href="/docs/bamboo-base-java/mvc/exception" />
+  <Card title="模块架构" href="/docs/bamboo-base-java/architecture" />
+</Cards>
