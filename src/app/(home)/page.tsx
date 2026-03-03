@@ -1,5 +1,6 @@
-import { ArrowRight, Bot } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import Link from 'next/link';
+import { AIPromptCard } from './ai-prompt-card';
 
 export default function HomePage() {
   return (
@@ -38,25 +39,7 @@ export default function HomePage() {
       </div>
 
       {/* AI Integration */}
-      <div className="mb-12 p-6 border border-border rounded-xl">
-        <div className="flex items-center gap-2 mb-3">
-          <Bot className="size-5 text-primary" />
-          <h2 className="text-xl font-semibold">AI 友好</h2>
-        </div>
-        <p className="text-muted-foreground mb-4">
-          本站支持 LLM 标准协议，你可以直接让 AI 助手（如 Claude、ChatGPT）读取文档内容。
-        </p>
-        <div className="space-y-3">
-          <div className="p-3 bg-muted/50 rounded-lg">
-            <p className="text-sm font-medium mb-1">获取文档索引：</p>
-            <code className="text-sm text-primary">/llms.txt</code>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            每个文档页面支持单页 MDX 模式，在 URL 后加 <code className="text-primary">.mdx</code> 即可获取原始内容，
-            例如 <code className="text-primary">/docs/bamboo-base-java/quick-start.mdx</code>
-          </p>
-        </div>
-      </div>
+      <AIPromptCard />
 
       {/* Libraries */}
       <div className="mb-12">
