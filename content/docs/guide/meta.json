@@ -7,6 +7,7 @@
   "pages": [
     "index",
     "ai-integration",
+    "claude-code",
     "navigation"
   ]
 }

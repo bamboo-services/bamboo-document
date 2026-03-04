@@ -48,6 +48,85 @@ https://doc.x-lf.com/llms.mdx/docs/bamboo-base-java/quick-start
 
 这样可以避免一次性加载全量文档，让 AI 只获取真正需要的内容。
 
+## Claude MCP 集成
+
+如果你使用 Claude Desktop，可以通过 MCP（Model Context Protocol）直接集成竹简文档，让 Claude 自动获取所需文档内容。
+
+### 安装 bamboo-document MCP 服务器
+
+<Callout type="info" title="选择适合你系统的安装方式">
+根据你的操作系统选择对应的安装方法。
+</Callout>
+
+**方式一：Homebrew（macOS / Linux）**
+
+```bash
+brew tap xiaolfeng/tap
+brew install bamboo-document
+```
+
+**方式二：PowerShell（Windows）**
+
+```powershell
+iwr -useb https://raw.githubusercontent.com/bamboo-services/bamboo-document-mcp/master/scripts/install.ps1 | iex
+```
+
+**方式三：手动构建**
+
+```bash
+git clone https://github.com/bamboo-services/bamboo-document-mcp.git
+cd bamboo-document-mcp
+make deps
+make build
+```
+
+### 配置 Claude Desktop
+
+编辑 Claude Desktop 配置文件：
+
+- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
+
+添加以下配置：
+
+```json
+{
+  "mcpServers": {
+    "bamboo": {
+      "command": "/path/to/bamboo-document",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+<Callout type="warn" title="注意">
+请将 `/path/to/bamboo-document` 替换为实际的安装路径。Homebrew 安装可通过 `which bamboo-document` 查看路径。
+</Callout>
+
+配置完成后重启 Claude Desktop，即可在对话中使用竹简文档。
+
+### 可用 MCP 工具
+
+bamboo-document MCP 服务器提供以下工具：
+
+| 工具名 | 功能 | 参数 |
+|--------|------|------|
+| `list` | 查看文档目录列表 | `sector`（板块标识）、`search`（可选关键词） |
+| `detail` | 获取文档完整内容 | `sector`（板块标识）、`path`（文档路径） |
+| `search` | 搜索文档内容 | `sector`、`path`、`keyword`（关键词）、`context_lines`（上下文行数） |
+
+### 可用板块
+
+当前支持的文档板块：
+
+- `bamboo-base-go` - Go 语言基础框架文档
+- `bamboo-base-java` - Java 语言基础框架文档
+
+<Callout type="tip" title="使用示例">
+在 Claude Desktop 中，直接提问即可。Claude 会自动调用 MCP 工具获取相关文档内容，例如："帮我查一下 bamboo-base-go 的快速开始指南"。
+</Callout>
+
 ## Agent Prompt 模板
 
 以下 prompt 可直接复制到任意支持网络请求的 AI Agent 中使用：

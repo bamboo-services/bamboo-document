@@ -1,0 +1,166 @@
+---
+title: Claude Code 集成
+description: 在 Claude Code 中使用竹简文档 MCP 服务
+icon: Terminal
+---
+
+# Claude Code 集成
+
+Claude Code 是 Anthropic 官方的命令行 AI 助手。通过集成竹简文档 MCP 服务，可以让 Claude Code 直接访问项目文档，获得更精准的代码辅助。
+
+<Callout type="info" title="什么是 MCP？">
+MCP（Model Context Protocol）是 Anthropic 提出的模型上下文协议，允许 AI 助手通过标准化接口访问外部数据源和工具。
+</Callout>
+
+## 安装 bamboo-document
+
+### 方式零：Claude Code Marketplace（推荐）
+
+在 Claude Code 中直接通过 Marketplace 安装：
+
+```bash
+# 添加竹简文档插件市场
+/plugin marketplace add bamboo-services/bamboo-document-mcp
+
+# 安装插件
+/plugin install bamboo-document
+```
+
+<Callout type="info" title="推荐方式">
+通过 Marketplace 安装会自动配置 MCP 服务器，安装后即可直接使用竹简文档工具。Marketplace 会读取项目的 `marketplace.json` 配置，自动完成 MCP 注册。
+</Callout>
+
+安装后，使用以下命令更新插件：
+
+```bash
+/plugin update bamboo-document
+```
+
+## 备选安装方式
+
+<Callout type="info" title="何时使用备选方式？">
+如果 Marketplace 不可用或需要本地开发调试，可选择以下备选安装方式手动安装二进制文件。
+</Callout>
+
+### 方式一：Homebrew（macOS / Linux）
+
+```bash
+brew tap xiaolfeng/tap
+brew install bamboo-document
+```
+
+### 方式二：PowerShell（Windows）
+
+```powershell
+iwr -useb https://raw.githubusercontent.com/bamboo-services/bamboo-document-mcp/master/scripts/install.ps1 | iex
+```
+
+### 方式三：手动构建
+
+```bash
+git clone https://github.com/bamboo-services/bamboo-document-mcp.git
+cd bamboo-document-mcp
+make deps
+make build
+```
+
+<Callout type="warn" title="注意">
+手动构建需要预先安装 Go 语言环境。构建完成后，可执行文件位于 `bin/` 目录下。
+</Callout>
+
+## 配置 Claude Code
+
+<Callout type="info" title="Marketplace 安装无需手动配置">
+通过 Marketplace 安装后，MCP 配置已自动完成，无需手动编辑 `settings.json`，可直接跳过此章节。
+</Callout>
+
+### 步骤一：查找安装路径
+
+Homebrew 安装可通过以下命令查看路径：
+
+```bash
+which bamboo-document
+```
+
+### 步骤二：编辑配置文件
+
+Claude Code 的 MCP 配置文件位于项目根目录的 `.claude/settings.json` 或全局配置 `~/.claude/settings.json`。
+
+添加以下配置：
+
+```json
+{
+  "mcpServers": {
+    "bamboo-document": {
+      "command": "/path/to/bamboo-document",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+<Callout type="warn" title="注意">
+请将 `/path/to/bamboo-document` 替换为实际的安装路径。
+</Callout>
+
+### 步骤三：重启 Claude Code
+
+配置完成后重启 Claude Code，MCP 服务将自动加载。
+
+## 可用 MCP 工具
+
+bamboo-document MCP 服务器提供以下工具：
+
+| 工具名 | 功能 | 参数 |
+|--------|------|------|
+| `sector` | 获取所有可用的文档板块列表 | 无 |
+| `list` | 查看指定板块的文档目录列表 | `sector`（必填）、`search`（可选关键词） |
+| `detail` | 获取指定文档的完整内容 | `sector`（板块标识）、`path`（文档路径） |
+| `search` | 在文档内容中搜索关键词 | `query`（必填）、`sector`（可选）、`path`（可选） |
+
+## 可用板块
+
+当前支持的文档板块：
+
+- `bamboo-base-go` - Go 语言基础框架文档
+- `bamboo-base-java` - Java 语言基础框架文档
+
+<Callout type="tip" title="查看完整板块列表">
+使用 `sector` 工具可随时获取最新的板块列表，新板块会持续添加。
+</Callout>
+
+## 数据源说明
+
+bamboo-document MCP 服务的数据来源于竹简文档站的 LLM 协议文件：
+
+| 功能 | 数据源 |
+|------|--------|
+| 文档索引 | `/llms.txt` |
+| 单页内容 | `/llms.mdx/docs/{sector}{path}` |
+
+<Callout type="info" title="文档访问基础路径">
+所有 LLM 可访问资源的根路径为：`https://doc.x-lf.com`
+</Callout>
+
+## 使用示例
+
+在 Claude Code 中，直接提问即可。Claude 会自动调用 MCP 工具获取相关文档内容：
+
+```
+帮我查一下 bamboo-base-go 的快速开始指南
+```
+
+```
+搜索 bamboo-base-java 中的业务异常处理方式
+```
+
+<Callout type="tip" title="最佳实践">
+让 Claude 知道你在使用哪个板块（如 `bamboo-base-go`），可以获得更精准的文档匹配结果。
+</Callout>
+
+## 相关链接
+
+- [AI 集成](./ai-integration) - 通用 AI 集成方式
+- [文档导航](./navigation) - 文档站使用指南
+- **bamboo-base-go 文档**: https://doc.x-lf.com/llms.txt
+- **项目仓库**: https://github.com/bamboo-services/bamboo-document-mcp
