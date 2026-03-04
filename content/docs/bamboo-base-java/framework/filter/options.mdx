@@ -1,0 +1,144 @@
+---
+title: OPTIONS 过滤器
+description: 快速响应 OPTIONS 预检请求，返回 200 OK
+icon: CircleCheckBig
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+# OPTIONS 过滤器
+
+OPTIONS 过滤器专门处理 HTTP OPTIONS 预检请求。当浏览器在发送跨域请求前发出 OPTIONS 预检请求时，该过滤器直接返回 `200 OK`，避免请求进入后续的 Controller 处理链。
+
+## MVC vs WebFlux 对比
+
+| 对比项 | MVC 版本 | WebFlux 版本 |
+|--------|---------|--------------|
+| 实现接口 | `Filter` | `WebFilter` |
+| 请求对象 | `ServletRequest` | `ServerWebExchange` |
+| 响应设置 | `HttpServletResponse.setStatus()` | `exchange.getResponse().setStatusCode()` |
+| 返回类型 | `void` | `Mono<Void>` |
+| 注册方式 | `FilterRegistrationBean` | `@Bean` 直接注册 |
+| Order 设置 | 通过 `FilterRegistrationBean.setOrder()` | `@Order(Ordered.HIGHEST_PRECEDENCE + 1)` |
+
+## 工作原理
+
+<Callout type="info" title="仅 MVC">
+```java title="AllowOptionFilterHandler.java"
+public class AllowOptionFilterHandler implements Filter {
+
+    @Override
+    public void doFilter(
+            ServletRequest request,
+            ServletResponse response,
+            FilterChain chain) throws IOException, ServletException {
+        HttpServletRequest httpRequest = (HttpServletRequest) request;
+
+        // [!code highlight:4]
+        // 仅拦截 OPTIONS 方法，其他方法直接放行
+        if ("OPTIONS".equalsIgnoreCase(httpRequest.getMethod())) {
+            HttpServletResponse httpResponse = (HttpServletResponse) response;
+            httpResponse.setStatus(HttpServletResponse.SC_OK);
+            return;
+        }
+
+        chain.doFilter(request, response);
+    }
+}
+```
+</Callout>
+
+<Callout type="info" title="仅 WebFlux">
+```java title="AllowOptionWebFilter.java"
+// [!code highlight:4]
+// OPTIONS 预检过滤器，优先级略低于 CORS 过滤器
+@Order(Ordered.HIGHEST_PRECEDENCE + 1)
+public class AllowOptionWebFilter implements WebFilter {
+
+    @Override
+    public Mono<Void> filter(ServerWebExchange exchange, WebFilterChain chain) {
+        // [!code highlight:5]
+        // 判断请求方法是否为 OPTIONS
+        if (exchange.getRequest().getMethod() == HttpMethod.OPTIONS) {
+            exchange.getResponse().setStatusCode(HttpStatus.OK);
+            return exchange.getResponse().setComplete();
+        }
+
+        // 非 OPTIONS 请求，继续传递至下一个过滤器
+        return chain.filter(exchange);
+    }
+}
+```
+</Callout>
+
+## 执行流程
+
+```
+浏览器跨域请求
+  │
+  ├── 预检请求 (OPTIONS /api/v1/user)
+  │     │
+  │     ├── CORS 过滤器 → 设置 CORS 头
+  │     │
+  │     └── OPTIONS 过滤器 → 返回 200 OK（终止链路）
+  │
+  └── 实际请求 (POST /api/v1/user)
+        │
+        ├── CORS 过滤器 → 设置 CORS 头
+        │
+        ├── OPTIONS 过滤器 → 非 OPTIONS，跳过
+        │
+        └── 继续执行后续过滤器 → Controller
+```
+
+## Order 说明
+
+WebFlux 版本的 Order 为 `HIGHEST_PRECEDENCE + 1`，比 CORS 过滤器（`HIGHEST_PRECEDENCE`）低一级。这确保了 CORS 响应头在 OPTIONS 请求返回之前已经被设置。
+
+## 注册方式
+
+<Callout type="info" title="仅 MVC">
+```java title="FilterConfig.java"
+@Configuration
+public class FilterConfig {
+
+    @Bean
+    public FilterRegistrationBean<AllowOptionFilterHandler> optionFilter() {
+        FilterRegistrationBean<AllowOptionFilterHandler> registration =
+            new FilterRegistrationBean<>();
+        // [!code highlight]
+        registration.setFilter(new AllowOptionFilterHandler());
+        registration.addUrlPatterns("/*");
+        registration.setOrder(2);
+        return registration;
+    }
+}
+```
+</Callout>
+
+<Callout type="info" title="仅 WebFlux">
+```java title="FilterConfig.java"
+@Configuration
+public class FilterConfig {
+
+    @Bean
+    public AllowOptionWebFilter optionWebFilter() {
+        return new AllowOptionWebFilter();
+    }
+}
+```
+</Callout>
+
+## 注意事项
+
+- 该过滤器仅处理 HTTP `OPTIONS` 方法，所有其他方法直接透传至后续过滤器链
+- 响应不包含任何响应体，仅设置 HTTP 状态码 200
+- 需配合 CORS 过滤器使用，否则浏览器无法获取 CORS 响应头
+
+## 下一步
+
+<Cards>
+  <Card title="CORS 跨域过滤器" href="/docs/bamboo-base-java/framework/filter/cors" />
+  <Card title="上下文过滤器" href="/docs/bamboo-base-java/framework/filter/context" />
+  <Card title="过滤器概览" href="/docs/bamboo-base-java/framework/filter" />
+</Cards>

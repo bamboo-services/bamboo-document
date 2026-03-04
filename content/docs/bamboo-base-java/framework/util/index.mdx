@@ -1,0 +1,67 @@
+---
+title: 工具类概览
+description: HTTP 请求工具类，提供 Header 解析、Handler 解析等能力
+icon: Wrench
+---
+
+# 工具类概览
+
+bamboo-base-java 提供一组 HTTP 请求工具类，用于在过滤器层和业务代码中获取请求信息。
+
+## 工具类列表
+
+| 工具类 | 框架 | 说明 |
+|--------|------|------|
+| `HttpServletUtil` | 仅 MVC | Servlet 请求工具，提供 HandlerMethod 解析能力 |
+| `HeaderUtil` | 仅 MVC | HTTP 请求头工具，提供 Token、User-Agent 等提取 |
+| `ServerWebExchangeUtil` | 仅 WebFlux | 响应式请求工具，提供 Handler 解析与请求信息提取 |
+
+## MVC vs WebFlux 对比
+
+| 功能 | MVC 工具 | WebFlux 工具 |
+|------|---------|--------------|
+| Handler 解析 | `HttpServletUtil.getHandlerMethod()` | `ServerWebExchangeUtil.getHandlerMethod()` |
+| 客户端 IP | `request.getRemoteAddr()` | `ServerWebExchangeUtil.getClientIp()` |
+| User-Agent | `request.getHeader()` | `ServerWebExchangeUtil.getUserAgent()` |
+| Token 提取 | `HeaderUtil.getAuthorizeUserUuid()` | 自行从 exchange 提取 |
+
+## 使用场景
+
+### 过滤器层
+
+在过滤器中检查目标方法的注解：
+
+```java title="CustomFilter.java"
+// MVC
+HandlerMethod handler = HttpServletUtil.getHandlerMethod(request, handlerMapping);
+NeedPermission annotation = handler.getMethodAnnotation(NeedPermission.class);
+
+// WebFlux
+return ServerWebExchangeUtil.getHandlerMethod(exchange, handlerMapping)
+        .flatMap(handler -> {
+            NeedPermission annotation = handler.getMethodAnnotation(NeedPermission.class);
+            // ...
+        });
+```
+
+### 业务代码
+
+在业务代码中提取请求信息：
+
+```java title="AuditService.java"
+// MVC
+UUID userId = HeaderUtil.getAuthorizeUserUuid(request);
+String clientIp = request.getRemoteAddr();
+
+// WebFlux
+String clientIp = ServerWebExchangeUtil.getClientIp(exchange);
+String userAgent = ServerWebExchangeUtil.getUserAgent(exchange);
+```
+
+## 下一步
+
+<Cards>
+  <Card title="HttpServletUtil（MVC）" href="/docs/bamboo-base-java/framework/util/http-servlet-util" />
+  <Card title="HeaderUtil（MVC）" href="/docs/bamboo-base-java/framework/util/header-util" />
+  <Card title="ServerWebExchangeUtil（WebFlux）" href="/docs/bamboo-base-java/framework/util/server-web-exchange-util" />
+</Cards>

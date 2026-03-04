@@ -1,9 +1,0 @@
-{
-  "title": "异常处理",
-  "icon": "ShieldAlert",
-  "pages": [
-    "index",
-    "spring-boot",
-    "custom-system"
-  ]
-}

@@ -1,0 +1,107 @@
+---
+title: 切面概览
+description: 基于 Spring AOP 的日志记录、调试保护等横切关注点处理
+icon: Layers
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+# 切面概览
+
+bamboo-base-java 提供基于 Spring AOP 的切面处理器，用于处理日志记录、调试保护等横切关注点。
+
+## 切面列表
+
+| 切面 | 职责 | 自动注册 |
+|------|------|----------|
+| `LogAspectHandler` | 日志切面，记录请求参数、返回值和执行耗时 | 是 |
+| `DebugAspectHandler` | 调试切面，控制调试接口的访问权限 | 是 |
+
+## MVC vs WebFlux 对比
+
+| 对比项 | MVC 版本 | WebFlux 版本 |
+|--------|---------|--------------|
+| 日志切点 | Controller + Service + Repository | 仅 Controller |
+| 响应式支持 | 无 | 支持 Mono/Flux 返回类型 |
+| 调试检查方式 | 仅同步 | 同步 + 响应式 |
+
+## LogAspectHandler
+
+日志切面拦截 Controller、Service 和 Repository 三层的方法调用，记录请求参数、返回值和执行耗时。
+
+### 切点定义
+
+| 注解 | 说明 | 日志级别 |
+|------|------|----------|
+| `@Controller` / `@RestController` | HTTP 请求处理方法 | INFO |
+| `@Service` | 业务逻辑方法 | DEBUG |
+| `@Repository` | 数据访问方法 | INFO |
+
+### 日志输出示例
+
+**Controller 层：**
+```
+[INFO] [HTTP] >> GET /api/v1/user/1
+[INFO] [HTTP] >> Headers: {Authorization: Bearer ***}
+[INFO] [HTTP] >> Parameters: {id: 1}
+[INFO] [HTTP] << 200 OK (15ms)
+```
+
+**Service 层：**
+```
+[DEBUG] [SERVICE] UserService.getUserById(id=1)
+[DEBUG] [SERVICE] UserService.getUserById -> UserVO{id=1, username='test'}
+```
+
+**Repository 层：**
+```
+[INFO] [DAO] UserMapper.selectById(1) -> completed in 3ms
+```
+
+## DebugAspectHandler
+
+调试切面用于保护调试专用的 Controller 接口。当应用运行在非调试模式时，该切面将拦截对调试接口的访问并抛出异常。
+
+### 使用方式
+
+```java title="DebugController.java"
+@RestController
+@RequestMapping("/debug")
+@RequiredArgsConstructor
+public class DebugController {
+
+    private final DebugAspectHandler debugAspectHandler;
+
+    @GetMapping("/cache/clear")
+    public ResponseEntity<BaseResponse<Void>> clearCache() {
+        // [!code highlight:2]
+        // 非调试模式下将返回 401 Unauthorized
+        debugAspectHandler.checkDebugController();
+
+        cacheService.clearAll();
+        return ResultUtil.success("缓存已清除");
+    }
+}
+```
+
+### 调试模式配置
+
+```yaml title="application.yml"
+# 开发环境
+spring:
+  profiles:
+    active: dev
+
+# 调试模式开关
+bamboo:
+  debug:
+    enabled: true
+```
+
+## 下一步
+
+<Cards>
+  <Card title="日志切面" href="/docs/bamboo-base-java/framework/aspect/log" />
+  <Card title="调试切面" href="/docs/bamboo-base-java/framework/aspect/debug" />
+  <Card title="异常处理概览" href="/docs/bamboo-base-java/framework/exception" />
+</Cards>

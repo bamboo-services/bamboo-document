@@ -1,0 +1,205 @@
+---
+title: 调试切面
+description: 在非调试模式下拦截调试接口的访问，返回未授权错误
+icon: Bug
+---
+
+import { TypeTable } from '@/components/type-table';
+import { Callout } from 'fumadocs-ui/components/callout';
+
+# DebugAspectHandler
+
+`DebugAspectHandler` 用于保护调试专用的 Controller 接口。当应用运行在非调试模式时，该切面将拦截对调试接口的访问并抛出 `BusinessException`，防止调试接口在生产环境中被意外暴露。
+
+## MVC vs WebFlux 对比
+
+| 特性 | MVC 版本 | WebFlux 版本 |
+|------|---------|-------------|
+| 请求对象 | `HttpServletRequest` | `ServerWebExchange` |
+| 权限检查方式 | 仅同步 | 同步 + 响应式 |
+| 管道集成 | 不适用 | `debugCheckTransformer()` |
+
+## 核心方法
+
+### checkDebugController
+
+同步方式检查调试接口的访问权限：
+
+```java title="DebugAspectHandler.java"
+@Aspect
+@Component
+public class DebugAspectHandler {
+
+    // [!code highlight:3]
+    // 检查当前是否为调试模式
+    public void checkDebugController() {
+        if (!isDebugMode()) {
+            // [!code highlight:2]
+            // 非调试模式下抛出未授权异常
+            throw new BusinessException("调试接口不可用", ErrorCode.UNAUTHORIZED);
+        }
+    }
+}
+```
+
+<TypeTable
+  type={{
+    checkDebugController: {
+      description: '检查当前应用是否运行在调试模式。若非调试模式，抛出 BusinessException("调试接口不可用", UNAUTHORIZED) 阻止接口访问',
+      type: 'void',
+      required: true,
+    },
+  }}
+/>
+
+### checkDebugControllerReactive（仅 WebFlux）
+
+响应式方式检查调试接口的访问权限：
+
+<Callout type="info" title="仅 WebFlux">
+```java title="DebugAspectHandler.java"
+// [!code highlight:3]
+// 响应式检查调试接口权限
+// 接受 ServerWebExchange 参数以获取请求信息
+public void checkDebugControllerReactive(ServerWebExchange exchange) {
+    // 从 exchange 中获取请求信息进行权限校验
+}
+```
+</Callout>
+
+### debugCheckTransformer（仅 WebFlux）
+
+提供响应式流转换器，用于在 `Mono` / `Flux` 管道中插入调试权限检查逻辑：
+
+<Callout type="info" title="仅 WebFlux">
+```java title="DebugAspectHandler.java"
+// [!code highlight:3]
+// 返回响应式转换器，可嵌入 Mono/Flux 管道
+public <T> Function<Mono<T>, Mono<T>> debugCheckTransformer() {
+    return mono -> mono.transformDeferredContextual((m, ctx) -> {
+        // 在响应式管道中执行调试权限检查
+        return m;
+    });
+}
+```
+
+**使用示例：**
+
+```java title="DebugController.java"
+@RestController
+@RequestMapping("/debug")
+public class DebugController {
+
+    private final DebugAspectHandler debugAspect;
+
+    @GetMapping("/info")
+    public Mono<ResponseEntity<BaseResponse<DebugInfo>>> getDebugInfo() {
+        // [!code highlight:3]
+        // 在响应式管道中使用 debugCheckTransformer 进行权限检查
+        return Mono.just(buildDebugInfo())
+                .transform(debugAspect.debugCheckTransformer())
+                .flatMap(info -> ResultUtil.success("调试信息", info));
+    }
+}
+```
+</Callout>
+
+## 使用方式
+
+### 标记调试接口
+
+在需要保护的调试 Controller 中调用 `checkDebugController()` 方法：
+
+```java title="DebugController.java"
+@RestController
+@RequestMapping("/debug")
+@RequiredArgsConstructor
+public class DebugController {
+
+    private final DebugAspectHandler debugAspectHandler;
+
+    @GetMapping("/cache/clear")
+    public ResponseEntity<BaseResponse<Void>> clearCache() {
+        // [!code highlight:2]
+        // 非调试模式下将返回 401 Unauthorized
+        debugAspectHandler.checkDebugController();
+
+        cacheService.clearAll();
+        return ResultUtil.success("缓存已清除");
+    }
+
+    @GetMapping("/config/reload")
+    public ResponseEntity<BaseResponse<Void>> reloadConfig() {
+        // [!code highlight]
+        debugAspectHandler.checkDebugController();
+
+        configService.reload();
+        return ResultUtil.success("配置已重载");
+    }
+}
+```
+
+### 非调试模式响应
+
+在生产环境中访问调试接口时，返回如下响应：
+
+```json title="response.json"
+{
+  "context": "550e8400-e29b-41d4-a716-446655440000",
+  "output": "UNAUTHORIZED",
+  "code": 40101,
+  "message": null,
+  "errorMessage": "调试接口不可用",
+  "duration": 1,
+  "data": null
+}
+```
+
+HTTP 状态码为 `401`。
+
+## 调试模式配置
+
+调试模式通常通过 Spring Profile 或应用属性控制：
+
+```yaml title="application.yml"
+# 开发环境
+spring:
+  profiles:
+    active: dev
+
+# 调试模式开关
+bamboo:
+  debug:
+    enabled: true
+```
+
+## 自动注册
+
+<Callout type="info" title="仅 MVC">
+`DebugAspectHandler` 由 `BaseSdkAutoConfiguration` 自动注册。
+</Callout>
+
+<Callout type="info" title="仅 WebFlux">
+`DebugAspectHandler` 由 `WebFluxSdkAutoConfiguration` 自动注册：
+
+```java title="WebFluxSdkAutoConfiguration.java"
+@Bean
+public DebugAspectHandler debugAspectHandler() {
+    return new DebugAspectHandler();
+}
+```
+</Callout>
+
+## 注意事项
+
+- 调试接口应始终添加 `checkDebugController()` 保护，避免生产环境暴露
+- 该切面由自动配置注册，开发者无需手动声明 Bean
+- 建议将所有调试接口集中在统一的 URL 前缀下（如 `/debug/**`），便于管理
+
+## 下一步
+
+<Cards>
+  <Card title="日志切面" href="/docs/bamboo-base-java/framework/aspect/log" />
+  <Card title="异常处理概览" href="/docs/bamboo-base-java/framework/exception" />
+  <Card title="过滤器概览" href="/docs/bamboo-base-java/framework/filter" />
+</Cards>

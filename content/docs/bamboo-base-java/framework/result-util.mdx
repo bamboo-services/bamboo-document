@@ -1,0 +1,120 @@
+---
+title: ResultUtil
+description: 统一响应构建工具类，支持 MVC 和 WebFlux 两种编程模型
+icon: PackageCheck
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# ResultUtil
+
+`ResultUtil` 是统一响应构建工具类，用于构建符合 `BaseResponse<T>` 规范的响应。根据使用的框架不同，返回类型有所差异：
+
+| 框架 | 包路径 | 返回类型 |
+|------|--------|----------|
+| **Spring MVC** | `com.xlf.utility.mvc` | `ResponseEntity<BaseResponse<T>>` |
+| **Spring WebFlux** | `com.xlf.utility.webflux` | `Mono<ResponseEntity<BaseResponse<T>>>` |
+
+## 方法签名
+
+两种框架的方法签名完全相同，仅返回类型不同：
+
+```java title="ResultUtil.java"
+public static XxxResponse success(String message)
+
+public static <T> XxxResponse success(String message, T data)
+
+public static <T> XxxResponse error(ErrorCode errorCode, String errorMessage, T data)
+```
+
+::: tip 返回类型说明
+- **MVC**: `XxxResponse` = `ResponseEntity<BaseResponse<T>>`
+- **WebFlux**: `XxxResponse` = `Mono<ResponseEntity<BaseResponse<T>>>`
+:::
+
+## 行为说明
+
+<TypeTable
+  type={{
+    'success(message)': {
+      description: '返回 HTTP 200，output 固定为 "Success"，data 为 null。',
+      type: 'XxxResponse',
+      required: true,
+    },
+    'success(message, data)': {
+      description: '返回 HTTP 200，output 固定为 "Success"，data 为传入对象。',
+      type: 'XxxResponse<T>',
+      required: true,
+    },
+    'error(errorCode, errorMessage, data)': {
+      description: '返回错误响应，HTTP 状态码按 errorCode.getCode()/100 计算。',
+      type: 'XxxResponse<T>',
+      required: true,
+    },
+  }}
+/>
+
+## 响应示例
+
+### 成功响应
+
+```json title="response.json"
+{
+  "context": "550e8400-e29b-41d4-a716-446655440000",
+  "output": "Success",
+  "code": 200,
+  "message": "操作成功",
+  "duration": 15,
+  "data": null
+}
+```
+
+### 错误响应
+
+```json title="response.json"
+{
+  "context": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+  "output": "Unauthorized",
+  "code": 40101,
+  "message": "未授权",
+  "errorMessage": "令牌已过期",
+  "duration": 5
+}
+```
+
+## 使用示例
+
+### Spring MVC（同步）
+
+```java title="UserController.java"
+@GetMapping("/{id}")
+public ResponseEntity<BaseResponse<UserVO>> getUser(@PathVariable Long id) {
+    UserVO user = userService.getUserById(id);
+    return ResultUtil.success("查询成功", user);
+}
+```
+
+### Spring WebFlux（响应式）
+
+```java title="UserController.java"
+@GetMapping("/{id}")
+public Mono<ResponseEntity<BaseResponse<UserDTO>>> getUser(@PathVariable Long id) {
+    return userService.getUserById(id)
+            .flatMap(user -> ResultUtil.success("获取成功", user))
+            .switchIfEmpty(ResultUtil.error(ErrorCode.RESOURCE_NOT_FOUND, "用户不存在", null));
+}
+```
+
+## 注意事项
+
+- `success` 系列方法中的 `code` 使用 `200`，不是 `ErrorCode` 中的业务码。
+- `error` 推荐在全局异常处理器中调用，业务层优先抛异常而不是直接返回错误响应。
+- 若请求未经过 `ContextFilter`，`context` 与 `duration` 可能为 `null`。
+
+## 下一步
+
+<Cards>
+  <Card title="上下文管理" href="/docs/bamboo-base-java/framework/context-holder" />
+  <Card title="异常处理概览" href="/docs/bamboo-base-java/base/exception" />
+  <Card title="ErrorCode" href="/docs/bamboo-base-java/base/response/error-code" />
+</Cards>

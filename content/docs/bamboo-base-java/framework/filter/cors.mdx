@@ -1,0 +1,171 @@
+---
+title: CORS 跨域过滤器
+description: 可配置的 CORS 跨域请求处理，支持域名、方法和请求头白名单
+icon: Globe
+---
+
+import { TypeTable } from '@/components/type-table';
+import { Callout } from 'fumadocs-ui/components/callout';
+
+# CORS 过滤器
+
+CORS（Cross-Origin Resource Sharing）过滤器通过校验请求的 `Host` 头部与预配置的域名白名单进行匹配，对授权域名设置 CORS 响应头。
+
+## MVC vs WebFlux 对比
+
+| 特性 | MVC AllowCorsFilterHandler | WebFlux AllowCorsWebFilter |
+|------|---------------------------|---------------------------|
+| 接口 | `javax.servlet.Filter` | `WebFilter` |
+| 请求对象 | `HttpServletRequest` | `ServerWebExchange` |
+| 注册方式 | `FilterRegistrationBean` | `@Bean` 直接注册 |
+| 拒绝响应 | 不设置 CORS 头，直接放行 | 返回 `403 Forbidden` |
+| 异步支持 | 同步阻塞 | 返回 `Mono<Void>` |
+
+## 工作流程
+
+```
+请求进入
+    │
+    ▼
+提取 Host 请求头
+    │
+    ▼
+校验 Host 是否在 domains 白名单中
+    │
+    ├── 匹配 → 设置 CORS 响应头 → 放行
+    └── 不匹配 → 直接放行（MVC）或返回 403（WebFlux）
+```
+
+## 设置的响应头
+
+当 Host 校验通过时，过滤器设置以下 CORS 响应头：
+
+| 响应头 | 值 | 说明 |
+|--------|-----|------|
+| `Access-Control-Allow-Origin` | 请求的 Origin 或 `*` | 允许的请求来源 |
+| `Access-Control-Allow-Methods` | 配置的方法列表 | 允许的 HTTP 方法 |
+| `Access-Control-Allow-Headers` | 配置的请求头列表 | 允许的请求头 |
+| `Access-Control-Allow-Credentials` | `true` | 允许携带凭证 |
+
+## 构造参数
+
+<TypeTable
+  type={{
+    domains: {
+      description: '允许的域名白名单。过滤器将校验请求的 Host 头是否匹配此列表中的任意域名',
+      type: 'String[]',
+      required: true,
+    },
+    methods: {
+      description: '允许的 HTTP 方法列表，设置为 Access-Control-Allow-Methods 响应头',
+      type: 'String[]',
+      required: true,
+    },
+    headers: {
+      description: '允许的请求头列表，设置为 Access-Control-Allow-Headers 响应头',
+      type: 'String[]',
+      required: true,
+    },
+  }}
+/>
+
+## 注册示例
+
+<Callout type="info" title="仅 MVC">
+```java title="FilterConfig.java"
+@Configuration
+public class FilterConfig {
+
+    @Bean
+    public FilterRegistrationBean<AllowCorsFilterHandler> corsFilter() {
+        FilterRegistrationBean<AllowCorsFilterHandler> registration =
+            new FilterRegistrationBean<>();
+
+        // [!code highlight:5]
+        registration.setFilter(new AllowCorsFilterHandler(
+            new String[]{"example.com", "api.example.com", "localhost"},
+            new String[]{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+            new String[]{"Authorization", "Content-Type", "X-Requested-With"}
+        ));
+
+        registration.addUrlPatterns("/*");
+        registration.setOrder(1);
+        return registration;
+    }
+}
+```
+</Callout>
+
+<Callout type="info" title="仅 WebFlux">
+```java title="FilterConfig.java"
+@Configuration
+public class FilterConfig {
+
+    @Bean
+    public AllowCorsWebFilter corsWebFilter() {
+        return new AllowCorsWebFilter(
+            new String[]{"example.com", "api.example.com", "localhost"}
+        );
+    }
+}
+```
+
+WebFlux 版本的过滤器实现：
+
+```java title="AllowCorsWebFilter.java"
+@Override
+public Mono<Void> filter(ServerWebExchange exchange, WebFilterChain chain) {
+    String host = exchange.getRequest().getHeaders().getHost().getHostString();
+
+    // [!code highlight:4]
+    // 校验域名是否在白名单中
+    if (!isAllowedDomain(host)) {
+        exchange.getResponse().setStatusCode(HttpStatus.FORBIDDEN);
+        return exchange.getResponse().setComplete();
+    }
+
+    // 设置 CORS 响应头
+    ServerHttpResponse response = exchange.getResponse();
+    response.getHeaders().add("Access-Control-Allow-Origin", "*");
+    response.getHeaders().add("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+    response.getHeaders().add("Access-Control-Allow-Headers", "*");
+
+    return chain.filter(exchange);
+}
+```
+</Callout>
+
+## 与 OPTIONS 过滤器的配合
+
+CORS 过滤器通常与 OPTIONS 过滤器配合使用：
+
+```
+浏览器发送 OPTIONS 预检请求
+    │
+    ▼
+AllowCorsFilter
+    │  设置 CORS 响应头
+    ▼
+AllowOptionFilter
+    │  检测到 OPTIONS 方法
+    │  直接返回 200 OK
+    ▼
+响应返回浏览器（不进入 Controller）
+```
+
+> 建议将 CORS 过滤器的 `order` 设为 1，OPTIONS 过滤器设为 2，确保 CORS 响应头在 OPTIONS 快速响应前已设置。
+
+## 注意事项
+
+- 域名校验基于请求的 `Host` 头，而非 `Origin` 头
+- MVC 版本：若 Host 不在白名单中，过滤器不会阻止请求，仅不设置 CORS 响应头（浏览器将拒绝跨域响应）
+- WebFlux 版本：若 Host 不在白名单中，直接返回 `403 Forbidden`
+- 该过滤器需手动注册为 Bean，不在自动配置范围内
+
+## 下一步
+
+<Cards>
+  <Card title="OPTIONS 过滤器" href="/docs/bamboo-base-java/framework/filter/options" />
+  <Card title="上下文过滤器" href="/docs/bamboo-base-java/framework/filter/context" />
+  <Card title="过滤器概览" href="/docs/bamboo-base-java/framework/filter" />
+</Cards>

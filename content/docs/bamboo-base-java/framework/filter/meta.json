@@ -1,0 +1,12 @@
+{
+  "title": "过滤器",
+  "icon": "Filter",
+  "pages": [
+    "index",
+    "cors",
+    "options",
+    "permission",
+    "context",
+    "referer-ban"
+  ]
+}

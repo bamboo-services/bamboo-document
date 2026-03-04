@@ -1,0 +1,142 @@
+---
+title: 过滤器概览
+description: 过滤器链提供上下文注入、跨域处理、安全校验等 HTTP 请求预处理能力
+icon: Funnel
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+# 过滤器概览
+
+bamboo-base-java 提供一组 HTTP 请求预处理过滤器，覆盖上下文注入、跨域处理、安全校验和权限控制等场景。
+
+## MVC vs WebFlux 对比
+
+| 对比项 | MVC 版本 | WebFlux 版本 |
+|--------|---------|--------------|
+| 接口 | `javax.servlet.Filter` | `WebFilter` |
+| 请求对象 | `HttpServletRequest` | `ServerWebExchange` |
+| 返回类型 | `void` | `Mono<Void>` |
+| 链路调用 | `FilterChain.doFilter()` | `WebFilterChain.filter()` |
+| 线程模型 | 阻塞式，一请求一线程 | 非阻塞式，事件循环 |
+
+## 过滤器列表
+
+| 过滤器 | 优先级 | 职责 | 类型 |
+|--------|--------|------|------|
+| `ContextFilter` | `HIGHEST_PRECEDENCE` | 请求上下文初始化，生成/提取 UUID，设置 MDC | 内置自动注册 |
+| `AllowCorsFilter` | 用户定义 | CORS 跨域请求处理 | 需手动配置 |
+| `AllowOptionFilter` | 用户定义 | OPTIONS 预检请求快速响应 | 需手动配置 |
+| `PermissionFilter` | 用户定义 | 权限校验（抽象类，需实现） | 需继承实现 |
+
+## 过滤器执行顺序
+
+```
+HTTP 请求
+    │
+    ▼
+ContextFilter (HIGHEST_PRECEDENCE)
+    │  生成/提取上下文 UUID
+    │  设置 MDC 日志追踪
+    │  初始化 ContextHolder
+    ▼
+AllowCorsFilter（可选）
+    │  校验 Origin/Host
+    │  设置 CORS 响应头
+    ▼
+AllowOptionFilter（可选）
+    │  OPTIONS 请求直接返回 200
+    ▼
+PermissionFilter（可选）
+    │  检查 @NeedPermission 注解
+    │  执行权限校验
+    ▼
+Spring DispatcherServlet / WebFilter Chain
+    │
+    ▼
+Controller → Service → Repository
+```
+
+## 注册方式
+
+### 自动注册
+
+`ContextFilter` 由自动配置以最高优先级自动注册，无需任何配置。
+
+### 手动注册
+
+<Callout type="info" title="仅 MVC">
+其他过滤器需要在配置类中手动注册为 `FilterRegistrationBean`：
+
+```java title="FilterConfig.java"
+@Configuration
+public class FilterConfig {
+
+    // [!code highlight:3]
+    // 注册 CORS 过滤器
+    @Bean
+    public FilterRegistrationBean<AllowCorsFilterHandler> corsFilter() {
+        FilterRegistrationBean<AllowCorsFilterHandler> registration =
+            new FilterRegistrationBean<>();
+        registration.setFilter(new AllowCorsFilterHandler(
+            new String[]{"example.com", "api.example.com"},
+            new String[]{"GET", "POST", "PUT", "DELETE"},
+            new String[]{"Authorization", "Content-Type"}
+        ));
+        registration.addUrlPatterns("/*");
+        registration.setOrder(1);
+        return registration;
+    }
+}
+```
+</Callout>
+
+<Callout type="info" title="仅 WebFlux">
+WebFlux 过滤器直接注册为 `@Bean`：
+
+```java title="FilterConfig.java"
+@Configuration
+public class FilterConfig {
+
+    @Bean
+    public AllowCorsWebFilter corsWebFilter() {
+        return new AllowCorsWebFilter(
+            new String[]{"example.com", "api.example.com"}
+        );
+    }
+}
+```
+</Callout>
+
+## 配置属性
+
+上下文过滤器支持通过 `application.yml` 配置：
+
+```yaml title="application.yml"
+bamboo:
+  context:
+    enable-input: true
+    exclude-urls:
+      - /actuator/**
+      - /health
+```
+
+## MVC 与 WebFlux 过滤器对照
+
+| MVC 过滤器 | WebFlux 过滤器 |
+|-----------|---------------|
+| `ContextFilter` (implements Filter) | `ContextFilter` (implements WebFilter) |
+| `AllowCorsFilterHandler` | `AllowCorsWebFilter` |
+| `AllowOptionFilterHandler` | `AllowOptionWebFilter` |
+| `PermissionFilterHandler` (abstract) | `PermissionWebFilter` (abstract) |
+
+两者在功能上完全对等，仅在接口实现与请求对象类型上有所不同。
+
+## 下一步
+
+<Cards>
+  <Card title="上下文过滤器" href="/docs/bamboo-base-java/framework/filter/context" />
+  <Card title="CORS 跨域" href="/docs/bamboo-base-java/framework/filter/cors" />
+  <Card title="OPTIONS 预检" href="/docs/bamboo-base-java/framework/filter/options" />
+  <Card title="权限过滤器" href="/docs/bamboo-base-java/framework/filter/permission" />
+</Cards>

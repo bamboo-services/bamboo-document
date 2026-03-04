@@ -1,0 +1,10 @@
+{
+  "title": "切面处理",
+  "icon": "SquareAsterisk",
+  "pages": [
+    "index",
+    "log",
+    "debug",
+    "business-log"
+  ]
+}

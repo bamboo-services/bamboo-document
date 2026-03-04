@@ -11,8 +11,7 @@
     "---核心库---",
     "...base",
     "---框架集成---",
-    "mvc",
-    "webflux",
+    "framework",
     "---可选模块---",
     "notify",
     "triple"

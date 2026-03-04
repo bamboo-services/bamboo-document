@@ -1,0 +1,124 @@
+---
+title: 框架集成
+description: 竹简框架的 Spring MVC 与 WebFlux 集成模块，提供统一的响应构建、上下文管理与异常处理能力
+icon: Layers
+---
+
+# 框架集成
+
+`bamboo-mvc` 与 `bamboo-webflux` 是竹简框架对 Spring 生态的两种集成方案，分别适用于传统的阻塞式架构和响应式架构。两个模块共享相同的设计理念，但在具体实现上针对各自的编程模型进行了优化。
+
+## 选择指南
+
+| 场景 | 推荐模块 | 说明 |
+|------|---------|------|
+| 传统 Spring Boot 应用 | `bamboo-mvc` | 基于 Servlet API，同步阻塞模型 |
+| 响应式 Spring Boot 应用 | `bamboo-webflux` | 基于 Reactive Streams，非阻塞模型 |
+| 高并发、低延迟场景 | `bamboo-webflux` | 充分利用异步非阻塞优势 |
+| 快速开发、团队熟悉度优先 | `bamboo-mvc` | 更广泛的社区支持和资料 |
+
+<Callout type="info" title="共享核心库">
+两个模块都依赖 `bamboo-base` 核心库，共享 `BaseResponse`、`ErrorCode`、`BusinessException` 等基础类型。详见 [核心库](/docs/bamboo-base-java/base)。
+</Callout>
+
+## Maven 依赖
+
+### bamboo-mvc
+
+```xml title="pom.xml"
+<dependency>
+    <groupId>com.x-lf.utility</groupId>
+    <artifactId>bamboo-mvc</artifactId>
+    <version>2.0.0-beta3</version>
+</dependency>
+```
+
+### bamboo-webflux
+
+```xml title="pom.xml"
+<dependency>
+    <groupId>com.x-lf.utility</groupId>
+    <artifactId>bamboo-webflux</artifactId>
+    <version>2.0.0-beta3</version>
+</dependency>
+```
+
+## 核心功能对比
+
+| 功能 | MVC 版本 | WebFlux 版本 |
+|------|---------|-------------|
+| 响应构建 | `ResultUtil` → `ResponseEntity<T>` | `ResultUtil` → `Mono<ResponseEntity<T>>` |
+| 上下文持有 | `ContextHolder` (ThreadLocal) | `ContextHolder` (Reactor Context) |
+| 过滤器 | `javax.servlet.Filter` | `WebFilter` |
+| 异常处理 | `@RestControllerAdvice` | `@RestControllerAdvice` |
+| 全局错误 | `ErrorController` | `ErrorWebExceptionHandler` |
+
+## 模块结构
+
+```
+framework/
+├── result-util.mdx        # 响应构建工具
+├── context-holder.mdx     # 上下文持有器
+├── global-error.mdx       # 全局错误处理
+├── filter/                # 过滤器
+│   ├── cors.mdx           # CORS 跨域
+│   ├── options.mdx        # OPTIONS 预检
+│   ├── permission.mdx     # 权限校验
+│   └── context.mdx        # 上下文注入
+├── aspect/                # 切面
+│   ├── log.mdx            # 日志切面
+│   └── debug.mdx          # 调试切面
+└── util/                  # 工具类
+    ├── http-servlet-util.mdx      # HttpServletRequest 工具（仅 MVC）
+    └── server-web-exchange-util.mdx # ServerWebExchange 工具（仅 WebFlux）
+```
+
+## 异常处理
+
+异常处理架构已归纳到核心库，MVC 和 WebFlux 共用相同的异常处理器继承链。详见 [异常处理架构](/docs/bamboo-base-java/base/exception)。
+
+框架特有的异常处理器：
+- [Spring MVC 异常](/docs/bamboo-base-java/framework/exception/spring-boot)
+- [Spring WebFlux 异常](/docs/bamboo-base-java/framework/exception/webflux-boot)
+
+## 快速开始
+
+### MVC 项目
+
+```java title="UserController.java"
+@RestController
+@RequestMapping("/api/v1/user")
+public class UserController {
+
+    @GetMapping("/{id}")
+    public ResponseEntity<BaseResponse<UserVO>> getUser(@PathVariable Long id) {
+        UserVO user = userService.getUserById(id);
+        return ResultUtil.success("查询成功", user);
+    }
+}
+```
+
+### WebFlux 项目
+
+```java title="UserController.java"
+@RestController
+@RequestMapping("/api/v1/user")
+public class UserController {
+
+    @GetMapping("/{id}")
+    public Mono<ResponseEntity<BaseResponse<UserDTO>>> getUser(@PathVariable Long id) {
+        return userService.getUserById(id)
+                .flatMap(user -> ResultUtil.success("查询成功", user))
+                .switchIfEmpty(ResultUtil.error(ErrorCode.RESOURCE_NOT_FOUND, "用户不存在", null));
+    }
+}
+```
+
+## 下一步
+
+<Cards>
+  <Card title="ResultUtil" href="/docs/bamboo-base-java/framework/result-util" />
+  <Card title="ContextHolder" href="/docs/bamboo-base-java/framework/context-holder" />
+  <Card title="过滤器" href="/docs/bamboo-base-java/framework/filter" />
+  <Card title="全局错误处理" href="/docs/bamboo-base-java/framework/global-error" />
+</Cards>

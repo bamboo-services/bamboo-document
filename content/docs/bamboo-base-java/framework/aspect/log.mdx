@@ -1,0 +1,213 @@
+---
+title: 日志切面
+description: 通过 AOP 自动记录 Controller、Service、Repository 三层的请求日志与性能指标
+icon: ScrollText
+---
+
+import { TypeTable } from '@/components/type-table';
+import { Callout } from 'fumadocs-ui/components/callout';
+
+# LogAspectHandler
+
+`LogAspectHandler` 是基于 Spring AOP 的日志切面处理器，通过 `@Around` 切点自动拦截方法调用，记录请求参数、返回值和执行耗时。
+
+## MVC vs WebFlux 对比
+
+| 对比项 | MVC 版本 | WebFlux 版本 |
+|--------|---------|--------------|
+| 切点范围 | Controller + Service + Repository | 仅 Controller |
+| 响应式支持 | 无 | 支持 Mono/Flux 返回类型 |
+| 自动配置类 | `BaseSdkAutoConfiguration` | `WebFluxSdkAutoConfiguration` |
+
+## 切点定义
+
+<TypeTable
+  type={{
+    '@Controller / @RestController': {
+      description: '拦截所有 HTTP 请求处理方法，记录请求路径、方法、参数和响应信息',
+      type: '@Around',
+      required: true,
+    },
+    '@Service': {
+      description: '（仅 MVC）拦截所有业务逻辑方法，以 DEBUG 级别记录调用链路',
+      type: '@Around',
+      required: false,
+    },
+    '@Repository': {
+      description: '（仅 MVC）拦截所有数据访问方法，记录执行耗时。支持 @IgnoreOutputDAO 注解跳过输出日志',
+      type: '@Around',
+      required: false,
+    },
+  }}
+/>
+
+## 切面结构
+
+<Callout type="info" title="仅 MVC">
+```java title="LogAspectHandler.java"
+// [!code highlight:2]
+@Aspect
+@Component
+public class LogAspectHandler {
+
+    // [!code highlight:3]
+    // Controller 层 — 记录 HTTP 请求完整信息
+    @Around("@within(org.springframework.stereotype.Controller) || " +
+            "@within(org.springframework.web.bind.annotation.RestController)")
+    public Object aroundController(ProceedingJoinPoint joinPoint) throws Throwable {
+        // 记录请求方法、路径、参数
+        // 执行目标方法
+        // 记录响应状态和耗时
+    }
+
+    // [!code highlight:3]
+    // Service 层 — DEBUG 级别调用链路记录
+    @Around("@within(org.springframework.stereotype.Service)")
+    public Object aroundService(ProceedingJoinPoint joinPoint) throws Throwable {
+        // 以 DEBUG 级别记录方法调用
+        // 执行目标方法
+    }
+
+    // [!code highlight:3]
+    // Repository 层 — DAO 执行耗时记录
+    @Around("@within(org.springframework.stereotype.Repository)")
+    public Object aroundRepository(ProceedingJoinPoint joinPoint) throws Throwable {
+        // 记录 DAO 方法执行耗时
+        // 支持 @IgnoreOutputDAO 跳过输出
+    }
+}
+```
+</Callout>
+
+<Callout type="info" title="仅 WebFlux">
+WebFlux 版本能够正确处理 `Mono` 与 `Flux` 响应式返回类型：
+
+```java title="LogAspectHandler.java"
+// [!code highlight:2]
+// 响应式日志切面，由自动配置注册
+@Aspect
+public class LogAspectHandler {
+
+    // [!code highlight:2]
+    // 匹配所有 @RestController 标注类的所有方法
+    @Around("@within(org.springframework.web.bind.annotation.RestController)")
+    public Object around(ProceedingJoinPoint joinPoint) throws Throwable {
+        // ...
+    }
+}
+```
+
+### 响应式返回类型处理
+
+```java title="LogAspectHandler.java"
+// [!code highlight:6]
+// 对于 Mono 返回类型，使用 doOnSuccess / doOnError 记录日志
+if (result instanceof Mono<?> mono) {
+    return mono
+            .doOnSuccess(value -> logResponse(joinPoint, value))
+            .doOnError(error -> logError(joinPoint, error));
+}
+
+// [!code highlight:5]
+// 对于 Flux 返回类型，使用 doOnComplete / doOnError 记录日志
+if (result instanceof Flux<?> flux) {
+    return flux
+            .doOnComplete(() -> logComplete(joinPoint))
+            .doOnError(error -> logError(joinPoint, error));
+}
+```
+
+### ServerWebExchange 提取
+
+```java title="LogAspectHandler.java"
+// [!code highlight:5]
+// 遍历方法参数，查找 ServerWebExchange 实例
+ServerWebExchange exchange = null;
+for (Object arg : joinPoint.getArgs()) {
+    if (arg instanceof ServerWebExchange) {
+        exchange = (ServerWebExchange) arg;
+        break;
+    }
+}
+```
+</Callout>
+
+## Controller 层日志
+
+Controller 层切面记录完整的 HTTP 请求信息：
+
+```
+[INFO] [HTTP] >> GET /api/v1/user/1
+[INFO] [HTTP] >> Headers: {Authorization: Bearer ***}
+[INFO] [HTTP] >> Parameters: {id: 1}
+[INFO] [HTTP] << 200 OK (15ms)
+```
+
+日志内容包括：
+
+- 请求方法（GET、POST 等）
+- 请求路径
+- 请求头（敏感信息自动脱敏）
+- 请求参数
+- 响应状态码
+- 处理耗时
+
+## Service 层日志（仅 MVC）
+
+Service 层使用 DEBUG 级别记录，仅在开发和调试阶段可见：
+
+```
+[DEBUG] [SERVICE] UserService.getUserById(id=1)
+[DEBUG] [SERVICE] UserService.getUserById -> UserVO{id=1, username='test'}
+```
+
+## Repository 层日志（仅 MVC）
+
+Repository 层记录 DAO 方法的执行耗时：
+
+```
+[INFO] [DAO] UserMapper.selectById(1) -> completed in 3ms
+```
+
+### @IgnoreOutputDAO
+
+对于返回大量数据的 DAO 方法，可使用 `@IgnoreOutputDAO` 注解跳过返回值日志输出：
+
+```java title="UserMapper.java"
+public interface UserMapper extends BaseMapper<UserEntity> {
+
+    // [!code highlight:3]
+    // 该方法的返回值不会被日志切面输出
+    @IgnoreOutputDAO
+    List<UserEntity> selectAllUsers();
+
+    // 普通方法仍会输出返回值
+    UserEntity selectById(Long id);
+}
+```
+
+## 日志输出内容（WebFlux）
+
+| 字段 | 说明 |
+|------|------|
+| 请求路径 | HTTP 请求的 URI |
+| 请求方法 | GET、POST、PUT、DELETE 等 |
+| 客户端 IP | 从 `ServerWebExchange` 中提取 |
+| 方法签名 | Controller 类名与方法名 |
+| 执行耗时 | 方法执行时间（毫秒） |
+| 响应状态 | 成功或异常 |
+
+## 注意事项
+
+- Controller 层日志始终以 INFO 级别输出，确保生产环境可见
+- Service 层日志以 DEBUG 级别输出，生产环境默认不可见
+- Repository 层支持 `@IgnoreOutputDAO` 注解，避免大数据量返回值污染日志
+- 该切面由自动配置注册，无需手动声明 Bean
+
+## 下一步
+
+<Cards>
+  <Card title="调试切面" href="/docs/bamboo-base-java/framework/aspect/debug" />
+  <Card title="异常处理概览" href="/docs/bamboo-base-java/framework/exception" />
+  <Card title="过滤器概览" href="/docs/bamboo-base-java/framework/filter" />
+</Cards>

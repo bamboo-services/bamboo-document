@@ -1,0 +1,235 @@
+---
+title: 权限过滤器
+description: 基于 @NeedPermission 注解的抽象权限校验过滤器
+icon: Lock
+---
+
+import { TypeTable } from '@/components/type-table';
+import { Callout } from 'fumadocs-ui/components/callout';
+
+# 权限过滤器
+
+权限过滤器是一个抽象过滤器类，提供基于 `@NeedPermission` 注解的权限校验框架。该过滤器在请求到达 Controller 之前检查目标方法是否标注了 `@NeedPermission` 注解，若标注则调用抽象方法执行实际的权限校验逻辑。
+
+## MVC vs WebFlux 对比
+
+| 对比项 | MVC 版本 | WebFlux 版本 |
+|--------|---------|--------------|
+| 实现接口 | `Filter` | `WebFilter` |
+| 类名 | `PermissionFilterHandler` | `PermissionWebFilter` |
+| 抽象方法 | `hasPermissionCheck(HttpServletRequest, String)` | `hasPermissionCheck(ServerWebExchange, String)` |
+| 返回类型 | `boolean` | `Mono<Void>` |
+| Handler 解析 | `HandlerMapping.getHandler()` | `ServerWebExchangeUtil.getHandlerMethod()` |
+
+## 工作流程
+
+```
+HTTP 请求进入
+    │
+    ▼
+解析目标 Handler 方法
+    │
+    ▼
+检查是否标注 @NeedPermission
+    │
+    ├── 未标注 → 直接放行
+    │
+    └── 已标注 → 调用 hasPermissionCheck()
+                │
+                ├── 校验通过 → 放行
+                └── 校验失败 → 返回 403 Forbidden
+```
+
+## @NeedPermission 注解
+
+```java title="NeedPermission.java"
+@Target({ElementType.METHOD, ElementType.TYPE})
+@Retention(RetentionPolicy.RUNTIME)
+public @interface NeedPermission {
+    // [!code highlight:2]
+    // 权限标识字符串
+    String value();
+}
+```
+
+## 抽象方法
+
+<Callout type="info" title="仅 MVC">
+```java title="PermissionFilterHandler.java"
+// [!code highlight:3]
+// 子类必须实现此方法，完成实际的权限校验逻辑
+protected abstract boolean hasPermissionCheck(
+    HttpServletRequest request, String permission);
+```
+
+<TypeTable
+  type={{
+    request: {
+      description: '当前 HTTP 请求对象，可从中获取请求头、参数等信息',
+      type: 'HttpServletRequest',
+      required: true,
+    },
+    permission: {
+      description: '@NeedPermission 注解中声明的权限标识字符串',
+      type: 'String',
+      required: true,
+    },
+  }}
+/>
+
+返回 `true` 表示放行，返回 `false` 表示拒绝访问。
+</Callout>
+
+<Callout type="info" title="仅 WebFlux">
+```java title="PermissionWebFilter.java"
+// [!code highlight:3]
+// 抽象方法，由子类实现具体的权限校验逻辑
+protected abstract Mono<Void> hasPermissionCheck(
+        ServerWebExchange exchange, String permission);
+```
+
+校验通过则正常完成 `Mono`，失败时应抛出异常或直接设置响应状态码。
+</Callout>
+
+## 实现示例
+
+<Callout type="info" title="仅 MVC">
+```java title="ApiPermissionFilter.java"
+public class ApiPermissionFilter extends PermissionFilterHandler {
+
+    private final PermissionService permissionService;
+
+    public ApiPermissionFilter(
+            HandlerMapping handlerMapping,
+            PermissionService permissionService) {
+        super(handlerMapping);
+        this.permissionService = permissionService;
+    }
+
+    // [!code highlight:3]
+    @Override
+    protected boolean hasPermissionCheck(
+            HttpServletRequest request, String permission) {
+        // 从请求头中获取用户身份
+        String token = request.getHeader("Authorization");
+        if (token == null) {
+            return false;
+        }
+
+        // [!code highlight:2]
+        // 委托给权限服务校验
+        String userId = tokenService.getUserId(token);
+        return permissionService.hasPermission(userId, permission);
+    }
+}
+```
+
+注册过滤器：
+
+```java title="FilterConfig.java"
+@Configuration
+@RequiredArgsConstructor
+public class FilterConfig {
+
+    private final HandlerMapping handlerMapping;
+    private final PermissionService permissionService;
+
+    @Bean
+    public FilterRegistrationBean<ApiPermissionFilter> permissionFilter() {
+        FilterRegistrationBean<ApiPermissionFilter> registration =
+            new FilterRegistrationBean<>();
+        // [!code highlight:2]
+        registration.setFilter(
+            new ApiPermissionFilter(handlerMapping, permissionService));
+        registration.addUrlPatterns("/api/*");
+        registration.setOrder(10);
+        return registration;
+    }
+}
+```
+</Callout>
+
+<Callout type="info" title="仅 WebFlux">
+```java title="CustomPermissionFilter.java"
+// [!code highlight:2]
+// 继承 PermissionWebFilter 并实现 hasPermissionCheck 方法
+@Component
+public class CustomPermissionFilter extends PermissionWebFilter {
+
+    private final PermissionService permissionService;
+
+    public CustomPermissionFilter(PermissionService permissionService,
+                                   RequestMappingHandlerMapping handlerMapping) {
+        super(handlerMapping);
+        this.permissionService = permissionService;
+    }
+
+    @Override
+    // [!code highlight:3]
+    // 实现具体的权限校验逻辑
+    // 返回 Mono<Void>，校验通过则正常完成，失败则抛出异常
+    protected Mono<Void> hasPermissionCheck(ServerWebExchange exchange, String permission) {
+        String token = exchange.getRequest().getHeaders().getFirst("Authorization");
+        return permissionService.checkPermission(token, permission)
+                .flatMap(hasPermission -> {
+                    if (!hasPermission) {
+                        exchange.getResponse().setStatusCode(HttpStatus.FORBIDDEN);
+                        return exchange.getResponse().setComplete();
+                    }
+                    return Mono.empty();
+                });
+    }
+}
+```
+</Callout>
+
+## 使用注解标记接口
+
+在 Controller 方法上标注 `@NeedPermission` 注解，声明该接口所需的权限：
+
+```java title="AdminController.java"
+@RestController
+@RequestMapping("/api/v1/admin")
+public class AdminController {
+
+    // [!code highlight:2]
+    // 需要 "admin:user:manage" 权限
+    @NeedPermission("admin:user:manage")
+    @GetMapping("/users")
+    public ResponseEntity<BaseResponse<List<UserVO>>> listUsers() {
+        return ResultUtil.success("查询成功", userService.listAll());
+    }
+
+    // [!code highlight:2]
+    // 需要 "admin:config:edit" 权限
+    @NeedPermission("admin:config:edit")
+    @PutMapping("/config")
+    public ResponseEntity<BaseResponse<Void>> updateConfig(
+            @RequestBody ConfigDTO dto) {
+        configService.update(dto);
+        return ResultUtil.success("更新成功");
+    }
+
+    // 未标注 @NeedPermission，无需权限校验
+    @GetMapping("/public/info")
+    public ResponseEntity<BaseResponse<InfoVO>> getPublicInfo() {
+        return ResultUtil.success("查询成功", infoService.getPublic());
+    }
+}
+```
+
+## 注意事项
+
+- 权限过滤器是抽象类，不能直接使用，必须实现抽象方法
+- 过滤器需要 `HandlerMapping` 实例来解析请求对应的 Handler 方法及其注解
+- 权限校验在 Filter 层执行，早于 Controller 的 AOP 切面
+- 建议将权限标识设计为层级格式（如 `module:resource:action`），便于管理
+- 该过滤器不由自动配置注册，需开发者自行将实现类注册为 Spring Bean
+
+## 下一步
+
+<Cards>
+  <Card title="上下文过滤器" href="/docs/bamboo-base-java/framework/filter/context" />
+  <Card title="CORS 跨域" href="/docs/bamboo-base-java/framework/filter/cors" />
+  <Card title="过滤器概览" href="/docs/bamboo-base-java/framework/filter" />
+</Cards>

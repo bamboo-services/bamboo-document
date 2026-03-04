@@ -1,0 +1,202 @@
+---
+title: ContextHolder
+description: 请求上下文管理器，支持 MVC（ThreadLocal）和 WebFlux（Reactor Context）两种实现
+icon: Timer
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# ContextHolder
+
+`ContextHolder` 是请求级别的上下文管理器，用于存储链路追踪标识（contextId）和请求开始时间（startTime）。根据使用的框架不同，有两种实现方式：
+
+| 框架 | 实现机制 | 包路径 |
+|------|----------|--------|
+| **Spring MVC** | `ThreadLocal` | `com.xlf.utility.mvc` |
+| **Spring WebFlux** | `Reactor Context` | `com.xlf.utility.webflux` |
+
+## 实现差异
+
+### 为何 MVC 和 WebFlux 实现不同？
+
+在 Spring MVC 的同步阻塞模型中，一个请求始终在同一个线程中处理，因此使用 `ThreadLocal` 可以安全地存储上下文。
+
+在 Spring WebFlux 的响应式模型中，一个请求可能在多个线程之间切换执行。`ThreadLocal` 绑定于特定线程，在线程切换时上下文信息会丢失。Reactor Context 沿着响应式信号链传播，不依赖于执行线程。
+
+```
+ThreadLocal 方式（MVC）:
+  Thread-1: [请求开始] → [业务处理] → [响应构建] → [请求结束]
+            ↑ contextId 绑定在 Thread-1 上
+
+Reactor Context 方式（WebFlux）:
+  Signal Chain: [subscribe] ← [operator] ← [operator] ← [source]
+                ↑ contextId 沿信号链传播，与线程无关
+```
+
+## Spring MVC（ThreadLocal 实现）
+
+### 内部结构
+
+```java title="ContextHolder.java"
+// 私有记录类，封装上下文标识与起始时间
+private record RequestContext(String contextId, long startTime) {}
+```
+
+### 方法列表
+
+<TypeTable
+  type={{
+    'initContext()': {
+      description: '初始化上下文，自动生成 UUID 并记录当前时间戳',
+      type: 'String',
+      required: true,
+    },
+    'initContext(contextId)': {
+      description: '使用指定的上下文标识符初始化上下文',
+      type: 'String',
+      required: true,
+    },
+    'getContextId()': {
+      description: '获取当前线程的上下文标识符。若未初始化，返回 null',
+      type: 'String',
+      required: true,
+    },
+    'getStartTime()': {
+      description: '获取上下文初始化时的毫秒时间戳。若未初始化返回 null',
+      type: 'Long',
+      required: true,
+    },
+    'getDuration()': {
+      description: '计算从上下文初始化到调用时刻的耗时（毫秒）',
+      type: 'Long',
+      required: true,
+    },
+    'hasContext()': {
+      description: '判断当前线程是否已初始化上下文',
+      type: 'boolean',
+      required: true,
+    },
+    'clear()': {
+      description: '清除 ThreadLocal 中的上下文数据。必须在请求结束时调用',
+      type: 'void',
+      required: true,
+    },
+  }}
+/>
+
+### 使用示例（MVC）
+
+```java title="ManualContextExample.java"
+// 初始化上下文（通常由 ContextFilter 自动完成）
+ContextHolder.initContext();
+
+try {
+    // 获取上下文标识
+    String contextId = ContextHolder.getContextId();
+    log.info("当前请求上下文: {}", contextId);
+
+    // 执行业务逻辑...
+
+    // 获取请求耗时
+    Long duration = ContextHolder.getDuration();
+    log.info("请求处理耗时: {}ms", duration);
+} finally {
+    // 必须在 finally 块中清理
+    ContextHolder.clear();
+}
+```
+
+## Spring WebFlux（Reactor Context 实现）
+
+### 响应式 API
+
+以下方法返回 `Mono` 类型，必须在 Reactor 管道中被订阅：
+
+```java title="ContextHolder.java"
+// 返回 Mono<String>，从 Reactor Context 中读取 UUID
+public static Mono<String> getContextId()
+
+// 返回 Mono<Boolean>，判断上下文是否已注入
+public static Mono<Boolean> hasContext()
+
+// 返回 Mono<Long>，毫秒级时间戳
+public static Mono<Long> getStartTime()
+
+// 返回 Mono<Long>，单位为毫秒
+public static Mono<Long> getDuration()
+```
+
+### 同步 API
+
+以下方法接受 `ContextView` 参数，适用于 `Mono.deferContextual` 内部：
+
+```java title="ContextHolder.java"
+// 同步方式从 ContextView 中读取链路追踪标识
+public static String getContextId(ContextView contextView)
+
+// 同步方式判断 ContextView 中是否存在上下文
+public static boolean hasContext(ContextView contextView)
+
+// 同步方式计算请求耗时
+public static Long getDuration(ContextView contextView)
+```
+
+### 使用示例（WebFlux）
+
+**响应式 API：**
+
+```java title="SomeService.java"
+public Mono<Void> doSomething() {
+    return ContextHolder.getContextId()
+            .doOnNext(contextId -> log.info("当前链路: {}", contextId))
+            .then();
+}
+```
+
+**同步 API（在 deferContextual 中使用）：**
+
+```java title="CustomHandler.java"
+public Mono<String> buildResponse() {
+    // 在 deferContextual 中使用同步 API，避免嵌套 Mono
+    return Mono.deferContextual(ctx -> {
+        String contextId = ContextHolder.getContextId(ctx);
+        Long duration = ContextHolder.getDuration(ctx);
+        return Mono.just("Context: " + contextId + ", Duration: " + duration + "ms");
+    });
+}
+```
+
+## 生命周期
+
+### MVC 生命周期
+
+```
+请求进入 → ContextFilter → initContext() → 业务处理 → ResultUtil（读取上下文）→ clear()
+```
+
+### WebFlux 生命周期
+
+```
+请求进入 → ContextFilter → contextWrite() → 业务处理 → ResultUtil（读取上下文）
+```
+
+## 注意事项
+
+### MVC 注意事项
+
+- **线程安全**：基于 `ThreadLocal` 实现，每个线程拥有独立的上下文副本
+- **资源清理**：必须在请求结束时调用 `clear()` 方法。`ContextFilter` 已在内部处理此逻辑
+- **异步场景**：若业务代码使用 `@Async` 或线程池，上下文不会自动传播至新线程
+
+### WebFlux 注意事项
+
+- **不可在非响应式代码中使用 `Mono` API**：必须在 Reactor 管道中被订阅
+- **上下文传播方向**：Reactor Context 从下游（订阅者）向上游传播
+- **依赖 ContextFilter**：若未注册 `ContextFilter`，所有读取操作将返回默认值或空值
+
+## 下一步
+
+<Cards>
+  <Card title="ContextFilter 过滤器" href="/docs/bamboo-base-java/framework/filter/context" />
+  <Card title="ResultUtil" href="/docs/bamboo-base-java/framework/result-util" />
+</Cards>

@@ -1,0 +1,104 @@
+---
+title: 异常处理概览
+description: 统一异常处理架构，提供从 Java 基础异常到业务异常的全面覆盖
+icon: ShieldAlert
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+# 异常处理概览
+
+bamboo-base-java 提供分层式异常处理架构，通过继承链实现从底层 Java 异常到上层业务异常的全面捕获。所有异常处理器均标注 `@RestControllerAdvice`，返回符合 `BaseResponse<T>` 规范的标准化响应。
+
+<Callout type="info" title="公共异常处理文档">
+Java 基础异常、MySQL/PostgreSQL 异常、业务异常等内容已归纳到 [核心库异常处理文档](/docs/bamboo-base-java/base/exception)，MVC 和 WebFlux 共用。
+</Callout>
+
+## 继承层级
+
+```
+JavaBaseExceptionHandler          ← Java 基础异常（IOException, NullPointerException 等）
+    └── PublicExceptionHandler    ← 公共业务异常（BusinessException, CheckFailureException 等）
+        └── SystemExceptionHandler ← Spring 框架异常（MethodArgumentNotValidException 等）
+```
+
+每一层处理器继承上一层的全部异常处理能力，并在此基础上扩展新的异常类型。项目中只需继承最顶层的 `SystemExceptionHandler` 即可获得完整的异常处理能力。
+
+## MVC vs WebFlux 对比
+
+| 对比项 | MVC 版本 | WebFlux 版本 |
+|--------|---------|--------------|
+| 返回类型 | `ResponseEntity<BaseResponse<T>>` | `Mono<ResponseEntity<BaseResponse<T>>>` |
+| 特有处理器 | `UserAuthExceptionHandler` | 无 |
+| 自动配置类 | `BaseSdkAutoConfiguration` | `WebFluxSdkAutoConfiguration` |
+
+## 响应式返回类型差异
+
+<Callout type="info" title="仅 WebFlux">
+WebFlux 的所有异常处理方法均返回 `Mono<ResponseEntity<BaseResponse<T>>>` 类型：
+
+```java title="ExceptionHandler.java"
+// bamboo-mvc
+@ExceptionHandler(BusinessException.class)
+public ResponseEntity<BaseResponse<Void>> handleBusinessException(BusinessException e) {
+    return ResultUtil.error(e.getErrorCode(), e.getMessage(), null);
+}
+
+// [!code highlight:4]
+// bamboo-webflux（响应式版本）
+@ExceptionHandler(BusinessException.class)
+public Mono<ResponseEntity<BaseResponse<Void>>> handleBusinessException(BusinessException e) {
+    return ResultUtil.error(e.getErrorCode(), e.getMessage(), null);
+}
+```
+</Callout>
+
+## 扩展方式
+
+在项目中创建自定义异常处理器，继承 `SystemExceptionHandler` 即可获得全部内置异常处理能力：
+
+<Callout type="info" title="仅 MVC">
+```java title="GlobalExceptionHandler.java"
+// [!code highlight:2]
+// 继承 SystemExceptionHandler 获得完整的异常处理链
+@RestControllerAdvice
+public class GlobalExceptionHandler extends SystemExceptionHandler {
+
+    // [!code highlight:2]
+    // 添加项目特有的异常处理
+    @ExceptionHandler(CustomBusinessException.class)
+    public ResponseEntity<BaseResponse<Void>> handleCustom(CustomBusinessException e) {
+        return ResultUtil.error(ErrorCode.OPERATION_FAILED, e.getMessage(), null);
+    }
+}
+```
+</Callout>
+
+<Callout type="info" title="仅 WebFlux">
+```java title="GlobalExceptionHandler.java"
+@RestControllerAdvice
+public class GlobalExceptionHandler extends SystemExceptionHandler {
+
+    @ExceptionHandler(CustomException.class)
+    public Mono<ResponseEntity<BaseResponse<Void>>> handleCustom(CustomException e) {
+        return ResultUtil.error(ErrorCode.SERVER_INTERNAL_ERROR, e.getMessage(), null);
+    }
+}
+```
+</Callout>
+
+## 框架特有处理器
+
+| 处理器 | 框架 | 职责 |
+|--------|------|------|
+| `SystemExceptionHandler` | 两者 | Spring 框架异常（MethodNotAllowedException 等） |
+| `UserAuthExceptionHandler` | 仅 MVC | 用户认证异常（UserAuthenticationException） |
+
+## 下一步
+
+<Cards>
+  <Card title="异常处理架构（公共）" href="/docs/bamboo-base-java/base/exception" />
+  <Card title="Spring 框架异常" href="/docs/bamboo-base-java/framework/exception/spring-boot" />
+  <Card title="用户认证异常（仅 MVC）" href="/docs/bamboo-base-java/framework/exception/user-auth" />
+  <Card title="自定义异常处理" href="/docs/bamboo-base-java/framework/exception/custom-system" />
+</Cards>

@@ -1,0 +1,292 @@
+---
+title: 上下文过滤器
+description: ContextFilter 以最高优先级为每个请求初始化上下文标识，支持 UUID 提取与 MDC 日志追踪
+icon: FingerprintPattern
+---
+
+import { TypeTable } from '@/components/type-table';
+import { Callout } from 'fumadocs-ui/components/callout';
+
+# ContextFilter
+
+`ContextFilter` 是优先级最高的过滤器（`@Order(HIGHEST_PRECEDENCE)`），负责在每个请求中注入链路追踪标识（UUID）与请求开始时间戳。这些信息将被 `ContextHolder`、`ResultUtil` 和日志切面等组件消费。
+
+## MVC vs WebFlux 对比
+
+| 对比项 | MVC 版本 | WebFlux 版本 |
+|--------|---------|--------------|
+| 接口 | `OncePerRequestFilter` | `WebFilter` |
+| 存储方式 | `ThreadLocal` | Reactor Context |
+| 请求对象 | `HttpServletRequest` | `ServerWebExchange` |
+| 清理方式 | `finally` 块手动清理 | Reactor 自动清理 |
+| 自动配置类 | `BaseSdkAutoConfiguration` | `WebFluxSdkAutoConfiguration` |
+
+## 存储方式的本质区别
+
+<Callout type="info" title="仅 MVC">
+MVC 版本使用 `ThreadLocal` 存储上下文信息：
+
+```java title="对比"
+// MVC 版本 - ThreadLocal
+public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain) {
+    ThreadLocal<String> contextId = new ThreadLocal<>();
+    contextId.set(UUID.randomUUID().toString());
+    chain.doFilter(request, response);
+    contextId.remove();
+}
+```
+</Callout>
+
+<Callout type="info" title="仅 WebFlux">
+WebFlux 版本使用 Reactor Context：
+
+```java title="对比"
+// [!code highlight:6]
+// WebFlux 版本 - Reactor Context
+public Mono<Void> filter(ServerWebExchange exchange, WebFilterChain chain) {
+    String uuid = UUID.randomUUID().toString();
+    return chain.filter(exchange)
+            .contextWrite(Context.of(
+                    ContextConstant.CONTEXT_KEY, uuid,
+                    ContextConstant.START_TIME_KEY, System.currentTimeMillis()
+            ));
+}
+```
+</Callout>
+
+## 执行流程
+
+```
+HTTP 请求进入
+    │
+    ▼
+检查请求方法是否为 OPTIONS → 是 → 跳过，直接放行
+    │
+    否
+    ▼
+检查 URL 是否在排除列表中 → 是 → 跳过，直接放行
+    │
+    否
+    ▼
+检查 Handler 是否标注 @IgnoreContext（仅 MVC）→ 是 → 跳过
+    │
+    否
+    ▼
+生成或提取 UUID
+    │
+    ▼
+设置 MDC（日志追踪）
+    │
+    ▼
+注入上下文（ThreadLocal / Reactor Context）
+    │
+    ▼
+执行后续过滤器链和业务逻辑
+    │
+    ▼
+清理上下文（仅 MVC，WebFlux 自动处理）
+```
+
+## 配置属性
+
+```yaml title="application.yml"
+bamboo:
+  context:
+    enable-input: true
+    exclude-urls:
+      - /actuator/**
+      - /health
+      - /favicon.ico
+```
+
+<TypeTable
+  type={{
+    'enable-input': {
+      description: '是否允许从请求头中提取外部传入的上下文 UUID。启用后，过滤器优先使用请求头中的 UUID；禁用则始终生成新的 UUID',
+      type: 'boolean',
+      default: 'true',
+    },
+    'exclude-urls': {
+      description: '排除的 URL 路径模式列表。匹配的请求将跳过上下文注入',
+      type: 'List<String>',
+      default: '[]',
+    },
+  }}
+/>
+
+<Callout type="info" title="仅 WebFlux">
+WebFlux 版本额外支持以下配置：
+
+<TypeTable
+  type={{
+    enableOutput: {
+      description: '是否在响应头中输出链路追踪 UUID',
+      type: 'boolean',
+      default: 'true',
+    },
+    gatewayMode: {
+      description: '是否启用网关模式',
+      type: 'boolean',
+      default: 'false',
+    },
+  }}
+/>
+</Callout>
+
+## UUID 获取策略
+
+```
+enable-input = true ?
+    │
+    ├── 是 → 检查请求头中是否存在 UUID
+    │       │
+    │       ├── 存在 → 使用请求头中的 UUID
+    │       └── 不存在 → 生成新的 UUID
+    │
+    └── 否 → 始终生成新的 UUID
+```
+
+当 `enable-input` 为 `true` 时，过滤器从请求头中提取 UUID；若请求头中无有效 UUID，则自动生成。这一机制适用于微服务场景中的链路追踪，上游服务可通过请求头传递上下文标识。
+
+## @IgnoreContext 注解（仅 MVC）
+
+<Callout type="info" title="仅 MVC">
+对于不需要上下文注入的 Handler 方法，可使用 `@IgnoreContext` 注解跳过：
+
+```java title="HealthController.java"
+@RestController
+public class HealthController {
+
+    // [!code highlight:3]
+    // 该方法不会触发上下文初始化
+    @IgnoreContext
+    @GetMapping("/health")
+    public String health() {
+        return "OK";
+    }
+}
+```
+</Callout>
+
+## 过滤器结构
+
+<Callout type="info" title="仅 MVC">
+```java title="ContextFilter.java"
+// [!code highlight:2]
+@Order(Ordered.HIGHEST_PRECEDENCE)
+public class ContextFilter extends OncePerRequestFilter {
+
+    private final ContextProperties properties;
+    private final HandlerMapping handlerMapping;
+
+    @Override
+    protected void doFilterInternal(
+            HttpServletRequest request,
+            HttpServletResponse response,
+            FilterChain filterChain) throws ServletException, IOException {
+
+        // [!code highlight:2]
+        // 跳过 OPTIONS 请求
+        if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
+        // [!code highlight:2]
+        // 跳过排除的 URL
+        if (isExcluded(request.getRequestURI())) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
+        // [!code highlight:2]
+        // 检查 @IgnoreContext 注解
+        HandlerMethod handler = HttpServletUtil.getHandlerMethod(
+            request, handlerMapping);
+        if (handler != null && hasIgnoreContext(handler)) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
+        try {
+            // [!code highlight:3]
+            // 生成或提取 UUID
+            String contextId = resolveContextId(request);
+            MDC.put("contextId", contextId);
+            ContextHolder.initContext(contextId);
+
+            filterChain.doFilter(request, response);
+        } finally {
+            // [!code highlight:2]
+            // 确保清理，防止线程池复用导致的上下文泄漏
+            ContextHolder.clear();
+            MDC.clear();
+        }
+    }
+}
+```
+</Callout>
+
+<Callout type="info" title="仅 WebFlux">
+```java title="ContextFilter.java"
+// [!code highlight:4]
+// 最高优先级的上下文注入过滤器
+@Order(Ordered.HIGHEST_PRECEDENCE)
+public class ContextFilter implements WebFilter {
+
+    @Override
+    public Mono<Void> filter(ServerWebExchange exchange, WebFilterChain chain) {
+        // [!code highlight:5]
+        // 检查请求头中是否携带外部 UUID
+        String externalContextId = exchange.getRequest().getHeaders()
+                .getFirst(ContextConstant.CONTEXT_KEY);
+        String uuid = (enableInput && externalContextId != null)
+                ? externalContextId
+                : UUID.randomUUID().toString();
+
+        // [!code highlight:2]
+        // 设置 MDC，使日志输出包含 contextId
+        MDC.put("contextId", uuid);
+
+        // [!code highlight:5]
+        // 通过 contextWrite 注入 Reactor Context
+        return chain.filter(exchange)
+                .contextWrite(Context.of(
+                        ContextConstant.CONTEXT_KEY, uuid,
+                        ContextConstant.START_TIME_KEY, System.currentTimeMillis()
+                ));
+    }
+}
+```
+</Callout>
+
+## MDC 集成
+
+过滤器将上下文标识写入 SLF4J 的 MDC，使日志框架自动携带追踪信息：
+
+```xml title="logback-spring.xml"
+<pattern>
+  %d{yyyy-MM-dd HH:mm:ss} [%thread] [%X{contextId}] %-5level %logger - %msg%n
+</pattern>
+```
+
+日志输出示例：
+
+```
+2026-01-15 10:00:00 [http-nio-8080-exec-1] [550e8400-e29b-41d4-a716-446655440000] INFO  UserController - 处理用户请求
+```
+
+## 注意事项
+
+- 该过滤器以 `HIGHEST_PRECEDENCE` 注册，确保在所有其他过滤器之前执行
+- MVC 版本：`finally` 块中的清理逻辑确保 ThreadLocal 和 MDC 不会泄漏至线程池中的其他请求
+- WebFlux 版本：Reactor Context 随响应式流自动传播和清理
+- 由自动配置类注册，无需手动声明
+
+## 下一步
+
+<Cards>
+  <Card title="ContextHolder" href="/docs/bamboo-base-java/framework/context-holder" />
+  <Card title="CORS 跨域过滤器" href="/docs/bamboo-base-java/framework/filter/cors" />
+  <Card title="过滤器概览" href="/docs/bamboo-base-java/framework/filter" />
+</Cards>
