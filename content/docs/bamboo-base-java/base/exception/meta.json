@@ -2,6 +2,11 @@
   "title": "异常处理",
   "icon": "TriangleAlert",
   "pages": [
-    "business"
+    "index",
+    "business",
+    "java-base",
+    "public",
+    "mysql",
+    "postgresql"
   ]
 }

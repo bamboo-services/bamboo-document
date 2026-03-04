@@ -1,0 +1,101 @@
+---
+title: 异常处理架构
+description: 竹简框架分层异常处理架构，提供从 Java 基础异常到业务异常的全面覆盖
+icon: ShieldAlert
+---
+
+# 异常处理架构
+
+竹简框架提供分层式异常处理架构，通过继承链实现从底层 Java 异常到上层业务异常的全面捕获。所有异常处理器均标注 `@RestControllerAdvice`，返回符合 `BaseResponse<T>` 规范的标准化响应。
+
+<Callout type="info" title="MVC 与 WebFlux">
+本文档描述的异常处理架构在 MVC 和 WebFlux 中概念相同。主要差异是返回类型：
+- MVC: `ResponseEntity<BaseResponse<T>>`
+- WebFlux: `Mono<ResponseEntity<BaseResponse<T>>>`
+</Callout>
+
+## 继承层级
+
+```
+JavaBaseExceptionHandler          ← Java 基础异常（IOException, NullPointerException 等）
+    └── PublicExceptionHandler    ← 公共业务异常（BusinessException, CheckFailureException 等）
+        └── SystemExceptionHandler ← Spring 框架异常（MethodArgumentNotValidException 等）
+```
+
+每一层处理器继承上一层的全部异常处理能力，并在此基础上扩展新的异常类型。项目中只需继承最顶层的 `SystemExceptionHandler` 即可获得完整的异常处理能力。
+
+## 处理器职责
+
+| 处理器 | 层级 | 职责 | 典型异常 |
+|--------|------|------|---------|
+| `JavaBaseExceptionHandler` | 基础层 | Java 标准库异常 | `NullPointerException`、`IOException` |
+| `PublicExceptionHandler` | 业务层 | 框架定义的业务异常 | `BusinessException`、`CheckFailureException` |
+| `SystemExceptionHandler` | 框架层 | Spring 框架异常 | `MethodArgumentNotValidException` |
+| `MysqlExceptionHandler` | 数据库层 | MySQL 相关异常 | `SQLException`、`MysqlDataTruncation` |
+| `PostgreSqlExceptionHandler` | 数据库层 | PostgreSQL 相关异常 | `PSQLException`、`DataTruncation` |
+
+<Callout type="info" title="数据库异常处理器">
+数据库异常处理器（`MysqlExceptionHandler` / `PostgreSqlExceptionHandler`）不在继承链中，需根据项目实际使用的数据库单独引入。
+</Callout>
+
+## 异常处理流程
+
+```
+Controller 抛出异常
+    │
+    ▼
+Spring 异常解析器
+    │
+    ▼
+匹配 @ExceptionHandler
+    │
+    ├── 匹配 SystemExceptionHandler？ → 处理 Spring 框架异常
+    ├── 匹配 PublicExceptionHandler？  → 处理业务异常
+    ├── 匹配 JavaBaseExceptionHandler？→ 处理 Java 基础异常
+    └── 未匹配 → 返回 500 默认响应
+    │
+    ▼
+ResultUtil.error() 构建标准响应
+```
+
+## MVC 与 WebFlux 的差异
+
+异常处理架构在 MVC 和 WebFlux 中概念相同，主要差异在于返回类型：
+
+| 框架 | 返回类型 |
+|------|---------|
+| `bamboo-mvc` | `ResponseEntity<BaseResponse<T>>` |
+| `bamboo-webflux` | `Mono<ResponseEntity<BaseResponse<T>>>` |
+
+<Callout type="tip" title="选择正确的文档">
+- 查看 **MVC 版本** 的具体实现：[Spring MVC 异常处理](/docs/bamboo-base-java/mvc/exception/spring-boot)
+- 查看 **WebFlux 版本** 的具体实现：[Spring WebFlux 异常处理](/docs/bamboo-base-java/webflux/exception/spring-boot)
+</Callout>
+
+## 扩展方式
+
+在项目中创建自定义异常处理器，继承 `SystemExceptionHandler` 即可获得全部内置异常处理能力：
+
+```java title="GlobalExceptionHandler.java"
+// [!code highlight:2]
+// 继承 SystemExceptionHandler 获得完整的异常处理链
+@RestControllerAdvice
+public class GlobalExceptionHandler extends SystemExceptionHandler {
+
+    // [!code highlight:2]
+    // 添加项目特有的异常处理
+    @ExceptionHandler(CustomBusinessException.class)
+    public ResponseEntity<BaseResponse<Void>> handleCustom(CustomBusinessException e) {
+        return ResultUtil.error(ErrorCode.OPERATION_FAILED, e.getMessage(), null);
+    }
+}
+```
+
+## 下一步
+
+<Cards>
+  <Card title="Java 基础异常" href="/docs/bamboo-base-java/base/exception/java-base" />
+  <Card title="公共业务异常" href="/docs/bamboo-base-java/base/exception/public" />
+  <Card title="MySQL 异常" href="/docs/bamboo-base-java/base/exception/mysql" />
+  <Card title="PostgreSQL 异常" href="/docs/bamboo-base-java/base/exception/postgresql" />
+</Cards>

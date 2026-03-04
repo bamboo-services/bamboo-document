@@ -8,6 +8,10 @@ icon: ShieldAlert
 
 `bamboo-webflux` 提供了一套多层级的响应式异常处理器链，基于 Spring 的 `@RestControllerAdvice` 机制，将各类异常统一转换为标准化的 `Mono<ResponseEntity<BaseResponse<T>>>` 响应。
 
+<Callout type="info" title="公共异常处理文档">
+Java 基础异常、MySQL/PostgreSQL 异常、公共业务异常的映射表已归纳到核心库文档，详见 [异常处理架构](/docs/bamboo-base-java/base/exception)。
+</Callout>
+
 ## 处理器层级
 
 异常处理器按照继承关系与职责划分为以下层级：
@@ -24,12 +28,11 @@ SystemExceptionHandler (@Order(-1), 最高优先级)
 | `PublicExceptionHandler` | 业务异常 | BusinessException、UserAuthenticationException 等 |
 | `JavaBaseExceptionHandler` | Java 标准库异常 | NullPointerException、IllegalArgumentException 等 |
 
-此外还有两个独立的数据库异常处理器：
+## WebFlux 特有处理器
 
-| 处理器 | 职责 |
-|--------|------|
-| `MysqlExceptionHandler` | MySQL 数据库异常 |
-| `PostgreSqlExceptionHandler` | PostgreSQL 数据库异常 |
+| 处理器 | 职责 | 说明 |
+|--------|------|------|
+| `SystemExceptionHandler` | Spring WebFlux 框架异常 | 仅 WebFlux 版本，处理 `MethodNotAllowedException` 等 |
 
 ## 响应式返回类型
 
@@ -50,10 +53,6 @@ public Mono<ResponseEntity<BaseResponse<Void>>> handleBusinessException(Business
 }
 ```
 
-## 优先级机制
-
-`SystemExceptionHandler` 通过 `@Order(-1)` 注解获得最高优先级。当多个异常处理器可以处理同一异常时，高优先级的处理器优先生效。异常处理器的继承关系确保了更具体的处理器优先于更通用的处理器。
-
 ## 扩展方式
 
 开发者可以通过继承 `SystemExceptionHandler` 来扩展异常处理能力：
@@ -72,8 +71,7 @@ public class GlobalExceptionHandler extends SystemExceptionHandler {
 ## 下一步
 
 <Cards>
-  <Card title="Java 基础异常" href="/docs/bamboo-base-java/webflux/exception/java-base" />
-  <Card title="业务异常" href="/docs/bamboo-base-java/webflux/exception/public" />
-  <Card title="Spring WebFlux 异常" href="/docs/bamboo-base-java/webflux/exception/spring-boot" />
+  <Card title="异常处理架构（公共）" href="/docs/bamboo-base-java/base/exception" />
+  <Card title="Spring WebFlux 异常（仅 WebFlux）" href="/docs/bamboo-base-java/webflux/exception/spring-boot" />
   <Card title="自定义扩展" href="/docs/bamboo-base-java/webflux/exception/custom-system" />
 </Cards>

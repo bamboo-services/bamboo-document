@@ -3,11 +3,7 @@
   "icon": "ShieldAlert",
   "pages": [
     "index",
-    "java-base",
-    "public",
     "spring-boot",
-    "custom-system",
-    "mysql",
-    "postgresql"
+    "custom-system"
   ]
 }

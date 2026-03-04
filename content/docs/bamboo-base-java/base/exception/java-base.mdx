@@ -6,9 +6,15 @@ icon: Bug
 
 import { TypeTable } from '@/components/type-table';
 
-# JavaBaseExceptionHandler
+# Java 基础异常
 
 `JavaBaseExceptionHandler` 是异常处理链的最底层，负责捕获 Java 标准库中的常见异常。该处理器标注 `@RestControllerAdvice`，所有异常均转换为标准化的 `BaseResponse<T>` 响应。
+
+<Callout type="info" title="MVC 与 WebFlux">
+本文档描述的异常映射表在 MVC 和 WebFlux 中完全一致。主要差异是返回类型：
+- MVC: `ResponseEntity<BaseResponse<T>>`
+- WebFlux: `Mono<ResponseEntity<BaseResponse<T>>>`
+</Callout>
 
 ## 处理的异常类型
 
@@ -77,50 +83,6 @@ import { TypeTable } from '@/components/type-table';
     },
   }}
 />
-
-## 处理器结构
-
-```java title="JavaBaseExceptionHandler.java"
-@RestControllerAdvice
-class JavaBaseExceptionHandler implements IJavaException {
-
-    protected static final Logger log = LoggerFactory.getLogger(JavaBaseExceptionHandler.class);
-
-    // [!code highlight:4]
-    @ExceptionHandler(NullPointerException.class)
-    public ResponseEntity<BaseResponse<Object>> handleNullPointerException(NullPointerException e) {
-        log.error("空指针异常 | {}", e.getMessage(), e);
-        Map<String, String> errorData = Map.of(
-            "message", e.getMessage() != null ? e.getMessage() : "null pointer"
-        );
-        return ResultUtil.error(ErrorCode.SERVER_INTERNAL_ERROR, "空指针异常", errorData);
-    }
-
-    // [!code highlight:3]
-    @ExceptionHandler(IllegalArgumentException.class)
-    public ResponseEntity<BaseResponse<IllegalArgumentException>> handleIllegalArgumentException(IllegalArgumentException e) {
-        log.warn("非法参数 | {}", e.getMessage());
-        return ResultUtil.error(ErrorCode.PARAMETER_ERROR, "非法参数: " + e.getMessage(), null);
-    }
-
-    // [!code highlight:3]
-    @ExceptionHandler(TimeoutException.class)
-    public ResponseEntity<BaseResponse<TimeoutException>> handleTimeoutException(TimeoutException e) {
-        log.warn("操作超时异常 | {}", e.getMessage());
-        return ResultUtil.error(ErrorCode.TIMEOUT, "操作超时: " + e.getMessage(), null);
-    }
-
-    // [!code highlight:3]
-    // 兜底处理器：捕获所有未被显式处理的异常
-    @ExceptionHandler(Exception.class)
-    public ResponseEntity<BaseResponse<Exception>> handleException(Exception e) {
-        log.error("未定义输出异常 | {}", e.getMessage(), e);
-        return ResultUtil.error(ErrorCode.SERVER_INTERNAL_ERROR, "未定义输出异常", e);
-    }
-
-    // ... 其他异常处理方法
-}
-```
 
 ## 日志级别
 
@@ -193,7 +155,7 @@ HTTP 状态码为 `400`（40000 / 100）。
 ## 下一步
 
 <Cards>
-  <Card title="公共业务异常" href="/docs/bamboo-base-java/mvc/exception/public" />
-  <Card title="Spring MVC 异常" href="/docs/bamboo-base-java/mvc/exception/spring-boot" />
-  <Card title="异常处理概览" href="/docs/bamboo-base-java/mvc/exception" />
+  <Card title="公共业务异常" href="/docs/bamboo-base-java/base/exception/public" />
+  <Card title="MySQL 异常" href="/docs/bamboo-base-java/base/exception/mysql" />
+  <Card title="异常处理架构" href="/docs/bamboo-base-java/base/exception" />
 </Cards>

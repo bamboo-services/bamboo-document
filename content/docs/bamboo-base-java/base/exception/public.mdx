@@ -6,9 +6,15 @@ icon: TriangleAlert
 
 import { TypeTable } from '@/components/type-table';
 
-# PublicExceptionHandler
+# 公共业务异常
 
 `PublicExceptionHandler` 继承自 `JavaBaseExceptionHandler`，负责处理框架层面定义的业务异常。这些异常通常由业务代码主动抛出，用于表达特定的业务错误语义。
+
+<Callout type="info" title="MVC 与 WebFlux">
+本文档描述的异常映射表在 MVC 和 WebFlux 中完全一致。主要差异是返回类型：
+- MVC: `ResponseEntity<BaseResponse<T>>`
+- WebFlux: `Mono<ResponseEntity<BaseResponse<T>>>`
+</Callout>
 
 ## 继承关系
 
@@ -122,31 +128,6 @@ public class UserService {
 }
 ```
 
-## 处理器结构
-
-```java title="PublicExceptionHandler.java"
-// [!code highlight:2]
-@RestControllerAdvice
-public class PublicExceptionHandler extends JavaBaseExceptionHandler {
-
-    @ExceptionHandler(BusinessException.class)
-    public ResponseEntity<BaseResponse<Void>> handleBusinessException(
-            BusinessException e) {
-        // [!code highlight:2]
-        // ErrorCode 由异常实例携带，支持灵活的错误码映射
-        return ResultUtil.error(e.getErrorCode(), e.getMessage(), null);
-    }
-
-    @ExceptionHandler(NoPermissionException.class)
-    public ResponseEntity<BaseResponse<Void>> handleNoPermission(
-            NoPermissionException e) {
-        return ResultUtil.error(ErrorCode.FORBIDDEN, e.getMessage(), null);
-    }
-
-    // ... 其他异常处理方法
-}
-```
-
 ## 响应示例
 
 抛出 `BusinessException("用户不存在", ErrorCode.PAGE_NOT_FOUND)` 时：
@@ -179,7 +160,7 @@ HTTP 状态码为 `404`（40403 / 100）。
 ## 下一步
 
 <Cards>
-  <Card title="Spring MVC 异常" href="/docs/bamboo-base-java/mvc/exception/spring-boot" />
-  <Card title="用户认证异常" href="/docs/bamboo-base-java/mvc/exception/user-auth" />
-  <Card title="自定义异常处理" href="/docs/bamboo-base-java/mvc/exception/custom-system" />
+  <Card title="Java 基础异常" href="/docs/bamboo-base-java/base/exception/java-base" />
+  <Card title="异常处理架构" href="/docs/bamboo-base-java/base/exception" />
+  <Card title="BusinessException" href="/docs/bamboo-base-java/base/exception/business" />
 </Cards>

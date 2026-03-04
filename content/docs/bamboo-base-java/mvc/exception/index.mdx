@@ -8,6 +8,10 @@ icon: ShieldAlert
 
 `bamboo-mvc` 提供分层式异常处理架构，通过继承链实现从底层 Java 异常到上层业务异常的全面捕获。所有异常处理器均标注 `@RestControllerAdvice`，返回符合 `BaseResponse<T>` 规范的标准化响应。
 
+<Callout type="info" title="公共异常处理文档">
+Java 基础异常、MySQL/PostgreSQL 异常、业务异常等内容已归纳到 [核心库异常处理文档](/docs/bamboo-base-java/base/exception)，MVC 和 WebFlux 共用。
+</Callout>
+
 ## 继承层级
 
 ```
@@ -18,36 +22,12 @@ JavaBaseExceptionHandler          ← Java 基础异常（IOException, NullPoint
 
 每一层处理器继承上一层的全部异常处理能力，并在此基础上扩展新的异常类型。项目中只需继承最顶层的 `SystemExceptionHandler` 即可获得完整的异常处理能力。
 
-## 处理器职责
+## MVC 特有处理器
 
-| 处理器 | 层级 | 职责 | 典型异常 |
-|--------|------|------|---------|
-| `JavaBaseExceptionHandler` | 基础层 | Java 标准库异常 | `NullPointerException`、`IOException` |
-| `PublicExceptionHandler` | 业务层 | 框架定义的业务异常 | `BusinessException`、`CheckFailureException` |
-| `SystemExceptionHandler` | 框架层 | Spring MVC 框架异常 | `MethodArgumentNotValidException` |
-| `MysqlExceptionHandler` | 数据库层 | MySQL 相关异常 | `SQLException`、`MysqlDataTruncation` |
-| `PostgreSqlExceptionHandler` | 数据库层 | PostgreSQL 相关异常 | `PSQLException`、`DataTruncation` |
-| `UserAuthExceptionHandler` | 认证层 | 用户认证与授权异常 | `UserAuthenticationException` |
-
-## 异常处理流程
-
-```
-Controller 抛出异常
-    │
-    ▼
-Spring MVC 异常解析器
-    │
-    ▼
-匹配 @ExceptionHandler
-    │
-    ├── 匹配 SystemExceptionHandler？ → 处理 Spring MVC 异常
-    ├── 匹配 PublicExceptionHandler？  → 处理业务异常
-    ├── 匹配 JavaBaseExceptionHandler？→ 处理 Java 基础异常
-    └── 未匹配 → 返回 500 默认响应
-    │
-    ▼
-ResultUtil.error() 构建标准响应
-```
+| 处理器 | 职责 | 说明 |
+|--------|------|------|
+| `SystemExceptionHandler` | Spring MVC 框架异常 | 仅 MVC，处理 `HttpRequestMethodNotSupportedException` 等 |
+| `UserAuthExceptionHandler` | 用户认证异常 | 仅 MVC，处理 `UserAuthenticationException` |
 
 ## 扩展方式
 
@@ -68,13 +48,11 @@ public class GlobalExceptionHandler extends SystemExceptionHandler {
 }
 ```
 
-> 数据库异常处理器（`MysqlExceptionHandler` / `PostgreSqlExceptionHandler`）和用户认证异常处理器不在继承链中，需根据项目实际使用的数据库和认证方案单独引入。
-
 ## 下一步
 
 <Cards>
-  <Card title="Java 基础异常" href="/docs/bamboo-base-java/mvc/exception/java-base" />
-  <Card title="公共业务异常" href="/docs/bamboo-base-java/mvc/exception/public" />
-  <Card title="Spring MVC 异常" href="/docs/bamboo-base-java/mvc/exception/spring-boot" />
+  <Card title="异常处理架构（公共）" href="/docs/bamboo-base-java/base/exception" />
+  <Card title="Spring MVC 异常（仅 MVC）" href="/docs/bamboo-base-java/mvc/exception/spring-boot" />
+  <Card title="用户认证异常（仅 MVC）" href="/docs/bamboo-base-java/mvc/exception/user-auth" />
   <Card title="自定义异常处理" href="/docs/bamboo-base-java/mvc/exception/custom-system" />
 </Cards>

@@ -134,6 +134,20 @@ public class FilterConfig {
 - 若 Host 不在白名单中，过滤器不会阻止请求，仅不设置 CORS 响应头（浏览器将拒绝跨域响应）
 - 该过滤器需手动注册为 Bean，不在自动配置范围内
 
+## 与 WebFlux 版本的区别
+
+| 特性 | MVC AllowCorsFilterHandler | WebFlux AllowCorsWebFilter |
+|------|---------------------------|---------------------------|
+| 接口 | `javax.servlet.Filter` | `WebFilter` |
+| 请求对象 | `HttpServletRequest` | `ServerWebExchange` |
+| 注册方式 | `FilterRegistrationBean` | `@Bean` 直接注册 |
+| 拒绝响应 | 不设置 CORS 头，直接放行 | 返回 `403 Forbidden` |
+| 异步支持 | 同步阻塞 | 返回 `Mono<Void>` |
+
+<Callout type="info" title="查看 WebFlux 版本">
+WebFlux 版本的 CORS 过滤器请参阅 [AllowCorsWebFilter](/docs/bamboo-base-java/webflux/filter/cors)。
+</Callout>
+
 ## 下一步
 
 <Cards>

@@ -6,9 +6,15 @@ icon: Database
 
 import { TypeTable } from '@/components/type-table';
 
-# MysqlExceptionHandler
+# MySQL 异常处理
 
 `MysqlExceptionHandler` 专门处理 MySQL 数据库操作过程中产生的异常。该处理器独立于主异常处理继承链，通过自动配置注册。
+
+<Callout type="info" title="MVC 与 WebFlux">
+本文档描述的异常映射表在 MVC 和 WebFlux 中完全一致。主要差异是返回类型：
+- MVC: `ResponseEntity<BaseResponse<T>>`
+- WebFlux: `Mono<ResponseEntity<BaseResponse<T>>>`
+</Callout>
 
 ## 处理的异常类型
 
@@ -105,12 +111,11 @@ public class MysqlExceptionHandler {
 
 ## 适用条件
 
-该异常处理器仅在项目使用 MySQL 数据库时生效。若项目使用 PostgreSQL，请参阅 PostgreSQL 异常处理器。
+该异常处理器仅在项目使用 MySQL 数据库时生效。若项目使用 PostgreSQL，请参阅 [PostgreSQL 异常处理](/docs/bamboo-base-java/base/exception/postgresql)。
 
 ## 下一步
 
 <Cards>
-  <Card title="PostgreSQL 异常处理" href="/docs/bamboo-base-java/mvc/exception/postgresql" />
-  <Card title="异常处理概览" href="/docs/bamboo-base-java/mvc/exception" />
-  <Card title="自定义异常处理" href="/docs/bamboo-base-java/mvc/exception/custom-system" />
+  <Card title="PostgreSQL 异常处理" href="/docs/bamboo-base-java/base/exception/postgresql" />
+  <Card title="异常处理架构" href="/docs/bamboo-base-java/base/exception" />
 </Cards>
