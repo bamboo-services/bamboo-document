@@ -11,7 +11,7 @@
     "---核心库---",
     "...base",
     "---框架集成---",
-    "framework",
+    "...framework",
     "---可选模块---",
     "notify",
     "triple"

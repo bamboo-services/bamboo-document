@@ -8,13 +8,11 @@
     "global-error",
     "mybatis-plus",
     "auto-configuration",
-    "---异常处理---",
+    "---扩展---",
     "exception",
-    "---过滤器---",
     "filter",
-    "---切面---",
     "aspect",
     "---工具类---",
-    "util"
+    "...util"
   ]
 }
