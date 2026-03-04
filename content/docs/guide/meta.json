@@ -6,8 +6,9 @@
   "defaultOpen": true,
   "pages": [
     "index",
+    "navigation",
+    "---AI 使用---",
     "ai-integration",
-    "claude-code",
-    "navigation"
+    "claude-code"
   ]
 }

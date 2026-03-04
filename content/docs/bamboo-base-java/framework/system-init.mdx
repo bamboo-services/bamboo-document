@@ -1,0 +1,508 @@
+---
+title: 系统初始化
+description: 基于 InitSystemStartupHandler 实现系统启动初始化
+icon: Rocket
+---
+
+import { TypeTable } from '@/components/type-table';
+import { Callout } from 'fumadocs-ui/components/callout';
+
+# 系统初始化
+
+`bamboo-base` 提供 `InitSystemStartupHandler` 抽象类，用于在 Spring Boot 启动时执行系统初始化逻辑。
+支持数据库表结构检查、初始数据填充、数据库迁移等功能，并确保初始化过程的幂等性。
+
+## 初始化流程
+
+```
+1. Spring Boot 启动
+   ↓
+2. ApplicationContextAware.setApplicationContext()
+   - SnowflakeUtilInitializer 执行（雪花算法初始化）
+   ↓
+3. @PostConstruct 方法执行
+   - 子类的 init() 方法执行
+   - 数据库表结构检查
+   - 初始数据填充
+   ↓
+4. CommandLineRunner.run() 执行
+   - initFinal() 打印启动完成 Banner
+```
+
+## InitSystemStartupHandler
+
+`InitSystemStartupHandler` 是系统初始化的入口抽象类，定义了初始化的生命周期方法：
+
+```java title="InitSystemStartupHandler.java"
+public abstract class InitSystemStartupHandler {
+
+    /**
+     * 抽象初始化方法（子类必须实现）
+     */
+    public abstract void init();
+
+    /**
+     * 初始化结束标志
+     */
+    @Bean
+    public CommandLineRunner initFinal() {
+        return args -> {
+            log.info("=========== End of Initialization ===========");
+            // 打印 Banner
+        };
+    }
+
+    /**
+     * 数据库准备（子类可覆盖）
+     */
+    public void prepareDatabase() {
+        log.debug("准备数据库「当前无数据库需要检查」");
+    }
+
+    /**
+     * 数据库迁移
+     */
+    public void databaseMigrate(String schema, @NotNull InitPrepareAlgorithmHandler prepareAlgorithmHandler) {
+        // 扫描 migrate/*.sql 文件并执行
+    }
+}
+```
+
+<TypeTable
+  type={{
+    'init()': {
+      description: '抽象方法，子类实现具体初始化逻辑',
+      type: 'void',
+    },
+    'initFinal()': {
+      description: '返回 CommandLineRunner，在所有初始化完成后打印 Banner',
+      type: 'CommandLineRunner',
+    },
+    'prepareDatabase()': {
+      description: '检查数据库表结构，子类可覆盖',
+      type: 'void',
+    },
+    'databaseMigrate()': {
+      description: '执行数据库迁移，扫描并执行 migrate/*.sql 文件',
+      type: 'void',
+    },
+  }}
+/>
+
+## 最佳实践
+
+### 主入口类
+
+创建 `SystemInit` 类继承 `InitSystemStartupHandler`，作为系统初始化的主入口：
+
+```java title="SystemInit.java"
+@Slf4j
+@Configuration
+@RequiredArgsConstructor
+public class SystemInit extends InitSystemStartupHandler {
+
+    // 依赖注入
+    private final JdbcTemplate jdbcTemplate;
+    private final TableHandlerDAO tableDAO;
+    private final MigrateHandlerDAO migrateHandlerDAO;
+    private final TransactionTemplate transactionTemplate;
+    private final PermissionDAO permissionDAO;
+    private final RoleDAO roleDAO;
+    private final SystemDAO systemDAO;
+    private final UserDAO userDAO;
+    private final UserRoleDAO userRoleDAO;
+
+    private InitAlgorithm prepare;
+
+    @Override
+    @PostConstruct
+    public void init() {
+        log.info("系统开始进行初始化");
+
+        // 1. 创建算法处理器实例
+        prepare = new InitAlgorithm(jdbcTemplate, tableDAO, migrateHandlerDAO,
+                transactionTemplate, permissionDAO, roleDAO, systemDAO);
+
+        // 2. 检查数据库表结构
+        this.prepareDatabase();
+
+        // 3. 按顺序初始化数据（注意依赖顺序）
+        new SystemPrepare(prepare);           // 系统配置
+        new PermissionPrepare(prepare);       // 权限数据
+        new RolePrepare(prepare);             // 角色数据
+        new UserPrepare(prepare, userDAO, systemDAO, userRoleDAO); // 超级管理员
+
+        // 4. 执行数据库迁移
+        this.databaseMigrate("your_schema", prepare);
+    }
+
+    @Override
+    public CommandLineRunner initFinal() {
+        return args -> {
+            log.info("=========== End of Initialization ===========");
+            // 打印 ASCII Art Banner
+        };
+    }
+
+    @Override
+    public void prepareDatabase() {
+        // 按依赖关系分层创建表：基础表 → 一级依赖表 → 二级依赖表
+        prepare.checkTable("your_schema", "t_user");
+        prepare.checkTable("your_schema", "t_system");
+        prepare.checkTable("your_schema", "t_permission");
+        prepare.checkTable("your_schema", "t_role");
+        prepare.checkTable("your_schema", "t_user_role");
+    }
+}
+```
+
+### InitAlgorithm 算法处理器
+
+`InitAlgorithm` 继承 `InitPrepareAlgorithmHandler`，封装数据库操作和幂等性检查逻辑：
+
+```java title="InitAlgorithm.java"
+public class InitAlgorithm extends InitPrepareAlgorithmHandler {
+
+    private final PermissionDAO permissionDAO;
+    private final RoleDAO roleDAO;
+    private final SystemDAO systemDAO;
+
+    public InitAlgorithm(JdbcTemplate jdbcTemplate, TableHandlerDAO tableDAO,
+            MigrateHandlerDAO migrateHandlerDAO, TransactionTemplate transactionTemplate,
+            PermissionDAO permissionDAO, RoleDAO roleDAO, SystemDAO systemDAO) {
+        super(jdbcTemplate, tableDAO, migrateHandlerDAO, transactionTemplate);
+        this.permissionDAO = permissionDAO;
+        this.roleDAO = roleDAO;
+        this.systemDAO = systemDAO;
+    }
+
+    /**
+     * 幂等性设计：存在则返回已有ID，不存在则创建
+     */
+    public String prepareDatabaseForPermission(@NotNull PermissionEntity entity) {
+        return permissionDAO.lambdaQuery()
+                .eq(PermissionEntity::getCode, entity.getCode())
+                .last("limit 1")
+                .oneOpt()
+                .map(e -> String.valueOf(e.getId()))
+                .orElseGet(() -> {
+                    permissionDAO.save(entity);
+                    return String.valueOf(entity.getId());
+                });
+    }
+
+    public String prepareDatabaseForRole(@NotNull RoleEntity entity) {
+        return roleDAO.lambdaQuery()
+                .eq(RoleEntity::getCode, entity.getCode())
+                .last("limit 1")
+                .oneOpt()
+                .map(e -> String.valueOf(e.getId()))
+                .orElseGet(() -> {
+                    roleDAO.save(entity);
+                    return String.valueOf(entity.getId());
+                });
+    }
+}
+```
+
+### Prepare 类模式
+
+使用「构造函数即执行」模式，每个 Prepare 类负责一类数据的初始化：
+
+```java title="PermissionPrepare.java"
+@Slf4j
+public class PermissionPrepare {
+
+    public PermissionPrepare(@NotNull InitAlgorithm prepare) {
+        log.debug("开始初始化权限数据");
+
+        // 一级权限（顶级）
+        String systemPermissionId = prepare.prepareDatabaseForPermission(
+                PermissionEntity.builder()
+                        .code("system")
+                        .name("系统管理")
+                        .description("系统级管理权限")
+                        .build()
+        );
+
+        // 二级权限（带父级ID）
+        prepare.prepareDatabaseForPermission(
+                PermissionEntity.builder()
+                        .parentId(systemPermissionId)
+                        .code("system:user")
+                        .name("用户管理")
+                        .description("用户管理权限")
+                        .build()
+        );
+
+        prepare.prepareDatabaseForPermission(
+                PermissionEntity.builder()
+                        .parentId(systemPermissionId)
+                        .code("system:role")
+                        .name("角色管理")
+                        .description("角色管理权限")
+                        .build()
+        );
+    }
+}
+```
+
+```java title="UserPrepare.java"
+@Slf4j
+public class UserPrepare {
+
+    public UserPrepare(@NotNull InitAlgorithm prepare, UserDAO userDAO,
+            SystemDAO systemDAO, UserRoleDAO userRoleDAO) {
+        log.debug("开始初始化用户数据");
+
+        // 检查超级管理员是否存在
+        UserEntity admin = userDAO.lambdaQuery()
+                .eq(UserEntity::getUsername, "admin")
+                .one();
+
+        if (admin == null) {
+            // 创建超级管理员
+            admin = UserEntity.builder()
+                    .username("admin")
+                    .password("encrypted_password")
+                    .build();
+            userDAO.save(admin);
+        }
+
+        // 关联默认角色
+        // ...
+    }
+}
+```
+
+### 数据库表分层创建
+
+按照外键依赖关系分层创建表，确保依赖表先创建：
+
+```java title="SystemInit.java"
+@Override
+public void prepareDatabase() {
+    // 第一层：无外键依赖的基础表
+    prepare.checkTable("your_schema", "t_system");
+
+    // 第二层：依赖基础表的表
+    prepare.checkTable("your_schema", "t_user");
+    prepare.checkTable("your_schema", "t_permission");
+    prepare.checkTable("your_schema", "t_role");
+
+    // 第三层：多对多关联表（依赖第二层）
+    prepare.checkTable("your_schema", "t_user_role");
+    prepare.checkTable("your_schema", "t_role_permission");
+}
+```
+
+## 数据库自动迁移
+
+系统初始化支持两类数据库操作：表结构定义（`database/`）和数据迁移（`migrate/`）。
+
+### 目录结构
+
+```
+src/main/resources/
+├── database/           # 表结构定义
+│   ├── t_user.sql      # 用户表
+│   ├── t_role.sql      # 角色表
+│   └── t_order.sql     # 订单表
+│
+└── migrate/            # 数据库迁移脚本
+    ├── 2025_01_15_10_00_add_user_status.sql
+    └── 2025_02_20_14_30_modify_order_type.sql
+```
+
+### 表结构定义（database 目录）
+
+`database/` 目录存放建表 SQL 文件，按依赖关系分层创建表。
+
+**文件命名规范**：`t_{表名}.sql`
+
+```sql title="database/t_user.sql"
+-- ====================
+-- 表名：用户表
+-- 时间：2025-01-15
+-- 说明：存储系统用户信息
+-- ====================
+CREATE TABLE IF NOT EXISTS `t_user`
+(
+    `id`         BIGINT UNSIGNED NOT NULL PRIMARY KEY COMMENT '用户ID',
+    `nickname`   VARCHAR(64)     NOT NULL COMMENT '用户昵称',
+    `role_id`    BIGINT UNSIGNED NOT NULL COMMENT '角色ID',
+    `status`     BOOLEAN         NOT NULL DEFAULT TRUE COMMENT '用户状态',
+    `created_at` TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `updated_at` TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `version`    BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '乐观锁版本号',
+    `delete`     BOOLEAN         NOT NULL DEFAULT FALSE COMMENT '删除标志'
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4
+  COLLATE = utf8mb4_unicode_ci COMMENT ='用户表';
+
+-- 索引
+ALTER TABLE `t_user`
+    ADD INDEX `idx_user_role_id` (`role_id`);
+```
+
+**在代码中调用**：
+
+```java title="SystemInit.java"
+@Override
+public void prepareDatabase() {
+    // 按依赖关系分层创建表
+
+    // 基础表（无外部外键依赖）
+    prepare.checkTable("your_schema", "t_user");
+    prepare.checkTable("your_schema", "t_role");
+    prepare.checkTable("your_schema", "t_system");
+
+    // 一级依赖表（依赖基础表）
+    prepare.checkTable("your_schema", "t_order");
+    prepare.checkTable("your_schema", "t_permission");
+}
+```
+
+**checkTable 工作原理**：
+
+1. 检查表是否存在（查询 `information_schema.TABLES`）
+2. 不存在时从 `classpath:/database/` 读取对应的 SQL 文件
+3. 在事务中执行 SQL 创建表
+
+### 数据迁移（migrate 目录）
+
+`migrate/` 目录存放增量迁移脚本，用于修改现有表结构或数据。
+
+**文件命名规范**：`YYYY_MM_DD_HH_mm_{描述}.sql`
+
+示例：`2025_01_15_10_30_add_user_status.sql`
+
+```sql title="migrate/2025_01_15_10_30_add_user_status.sql"
+-- ============================================================================
+-- 迁移脚本：为 t_user 表添加 status 字段
+-- 日期：2025-01-15 10:30
+-- ============================================================================
+
+-- 添加新字段
+ALTER TABLE `t_user`
+    ADD COLUMN `status` TINYINT NOT NULL DEFAULT 1 COMMENT '状态: 1-正常 2-禁用' AFTER `role_id`;
+
+-- 更新现有数据
+UPDATE `t_user` SET `status` = 1 WHERE `status` IS NULL;
+```
+
+**在代码中调用**：
+
+```java title="SystemInit.java"
+@Override
+@PostConstruct
+public void init() {
+    // ... 其他初始化 ...
+
+    // 执行数据库迁移
+    this.databaseMigrate("your_schema", prepare);
+}
+```
+
+**databaseMigrate 工作原理**：
+
+1. 扫描 `classpath*:migrate/*.sql` 路径
+2. 按文件名自然排序（确保执行顺序）
+3. 检查迁移记录表，跳过已执行的脚本
+4. 逐条执行 SQL 语句，支持断点续传
+5. 记录执行状态（SUCCESS/PARTIAL/FAILED）
+
+### 迁移记录表
+
+系统自动创建迁移记录表，用于追踪执行状态：
+
+```sql
+CREATE TABLE IF NOT EXISTS `t_migrate`
+(
+    migrate_id         BIGINT UNSIGNED NOT NULL PRIMARY KEY AUTO_INCREMENT,
+    migrate_name       VARCHAR(255)    NOT NULL UNIQUE COMMENT '迁移文件名',
+    migrate_hash       VARCHAR(64)     NOT NULL COMMENT '文件 SHA-256 哈希',
+    migrate_status     VARCHAR(20)     NOT NULL DEFAULT 'SUCCESS' COMMENT '状态',
+    error_message      TEXT                     DEFAULT NULL COMMENT '错误信息',
+    last_executed_line INT                      DEFAULT NULL COMMENT '最后执行的行号',
+    total_lines        INT                      DEFAULT NULL COMMENT '总行数',
+    applied_at         DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '执行时间'
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT ='迁移记录表';
+```
+
+### 迁移状态
+
+| 状态 | 说明 |
+|------|------|
+| `SUCCESS` | 迁移成功完成 |
+| `PARTIAL` | 部分执行，下次启动会从断点继续 |
+| `FAILED` | 执行失败，系统会退出 |
+
+### SQL 方言支持
+
+支持多种数据库的 SQL 方言：
+
+| 数据库 | 策略类 |
+|--------|--------|
+| MySQL / MariaDB | `MySqlDialectStrategy` |
+| PostgreSQL | `PostgreSqlDialectStrategy` |
+
+根据 `bamboo.base.datasource.db-type` 配置自动选择。
+
+<Callout type="warning" title="安全机制">
+- 迁移文件一旦执行成功，如果文件内容被修改（哈希值变化），系统会拒绝启动
+- 迁移失败时系统会退出（`System.exit(1)`），防止数据不一致
+</Callout>
+
+<Callout type="tip" title="最佳实践">
+- 迁移脚本使用时间戳前缀确保执行顺序
+- 每个迁移脚本只做一件事，便于回滚
+- 使用事务确保原子性
+</Callout>
+
+## 幂等性设计
+
+所有初始化方法都应该设计为幂等的，即多次执行不会产生副作用：
+
+```java
+/**
+ * 幂等性设计模式
+ * 1. 先查询是否存在
+ * 2. 存在则返回已有数据
+ * 3. 不存在则创建新数据
+ */
+public String prepareDatabaseForData(@NotNull SomeEntity entity) {
+    return someDAO.lambdaQuery()
+            .eq(SomeEntity::getUniqueKey, entity.getUniqueKey())
+            .last("limit 1")
+            .oneOpt()
+            .map(e -> String.valueOf(e.getId()))      // 存在：返回已有ID
+            .orElseGet(() -> {
+                someDAO.save(entity);                  // 不存在：创建新记录
+                return String.valueOf(entity.getId());
+            });
+}
+```
+
+<Callout type="tip" title="幂等性关键点">
+- 使用唯一键（如 `code`）作为查询条件
+- 使用 `Optional` 链式调用优雅处理存在/不存在两种情况
+- 返回 ID 供后续创建关联数据使用
+</Callout>
+
+## 注意事项
+
+- `init()` 方法必须添加 `@PostConstruct` 注解，确保在 Spring Bean 初始化后执行
+- 初始化顺序很重要，按数据依赖关系排列 Prepare 类
+- 数据库表检查按外键依赖分层，基础表先创建
+- 所有数据初始化方法应设计为幂等的
+- 使用 `@Slf4j` 记录初始化日志，便于调试
+- 复杂初始化逻辑拆分到独立的 Prepare 类中
+
+## 下一步
+
+<Cards>
+  <Card title="MyBatis-Plus 配置" href="/docs/bamboo-base-java/framework/mybatis-plus" />
+  <Card title="自动配置" href="/docs/bamboo-base-java/framework/auto-configuration" />
+  <Card title="异常处理" href="/docs/bamboo-base-java/framework/exception" />
+</Cards>

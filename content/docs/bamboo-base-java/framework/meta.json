@@ -7,6 +7,7 @@
     "context-holder",
     "global-error",
     "mybatis-plus",
+    "system-init",
     "auto-configuration",
     "---扩展---",
     "exception",

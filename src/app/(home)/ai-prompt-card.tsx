@@ -1,6 +1,7 @@
 'use client';
 
-import { Bot, Check, Copy } from 'lucide-react';
+import { Bot, Check, Copy, Terminal } from 'lucide-react';
+import Link from 'next/link';
 import { useState } from 'react';
 
 const AGENT_PROMPT = `请按以下步骤获取竹简文档并回答我的问题：
@@ -28,7 +29,7 @@ export function AIPromptCard() {
             <p className="text-muted-foreground mb-4">
                 本站支持 LLM 标准协议，复制下方 Prompt 到任意 AI Agent 即可直接读取文档内容。
             </p>
-            <div className="relative group">
+            <div className="relative group mb-4">
                 <pre className="p-4 bg-muted/50 rounded-lg text-sm leading-relaxed whitespace-pre-wrap break-all font-mono text-foreground/80 pr-12">
                     {AGENT_PROMPT}
                 </pre>
@@ -43,6 +44,21 @@ export function AIPromptCard() {
                         <Copy className="size-4" />
                     )}
                 </button>
+            </div>
+            <div className="flex flex-wrap gap-3">
+                <Link
+                    href="/docs/guide/claude-code"
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:opacity-90 transition-opacity text-sm font-medium"
+                >
+                    <Terminal className="size-4" />
+                    Claude Code 集成
+                </Link>
+                <Link
+                    href="/docs/guide/ai-integration"
+                    className="inline-flex items-center gap-2 px-4 py-2 border border-border rounded-lg hover:border-primary hover:bg-primary/5 transition-all text-sm font-medium"
+                >
+                    查看更多集成方式
+                </Link>
             </div>
         </div>
     );

@@ -5,6 +5,7 @@ icon: Database
 ---
 
 import { TypeTable } from '@/components/type-table';
+import { Callout } from 'fumadocs-ui/components/callout';
 
 # MyBatis-Plus 配置
 
@@ -69,10 +70,266 @@ public IPage<UserEntity> getUserList(int current, int size) {
 }
 ```
 
+## 扩展配置
+
+业务项目可以继承 `MybatisPlusConfigHandler` 并实现 `MetaObjectHandler` 接口，
+以扩展乐观锁、自定义 ID 生成器和元数据自动填充功能。
+
+### 乐观锁插件
+
+通过重写 `mybatisPlusInterceptor()` 方法，在父类分页拦截器的基础上添加乐观锁插件：
+
+```java title="MybatisPlusConfig.java"
+@Override
+public MybatisPlusInterceptor mybatisPlusInterceptor() {
+    return Optional.of(super.mybatisPlusInterceptor())
+            .map(interceptor -> {
+                // 添加乐观锁插件
+                interceptor.addInnerInterceptor(new OptimisticLockerInnerInterceptor());
+                return interceptor;
+            })
+            .orElseThrow(() -> new ServerInternalErrorException("初始化 MybatisPlusInterceptor 失败"));
+}
+```
+
+在实体类中使用 `@Version` 注解标识乐观锁字段：
+
+```java title="UserEntity.java"
+@Data
+@TableName("t_user")
+public class UserEntity {
+
+    @Version
+    private Long version;
+
+    // 其他字段...
+}
+```
+
+<TypeTable
+  type={{
+    '@Version': {
+      description: '标识乐观锁字段，更新时自动 version = version + 1',
+      type: 'Annotation',
+    },
+  }}
+/>
+
+<Callout type="tip" title="乐观锁工作原理">
+1. 更新时 MyBatis-Plus 自动在 WHERE 条件中添加 `version = 旧值`
+2. 同时 SET 中自动 `version = 旧值 + 1`
+3. 如果受影响行数为 0，说明被其他事务修改过
+</Callout>
+
+### 自定义 ID 生成器
+
+默认使用 `OrdinaryGenerator` 生成 ID（生成6位随机整数），可以通过重写 `plusPropertiesCustomizer()` 方法替换为雪花算法：
+
+<Callout type="note" title="默认 ID 生成器">
+默认使用 `OrdinaryGenerator`，生成6位随机整数。如需分布式唯一 ID，建议替换为 `SnowflakeIdGenerator`。
+</Callout>
+
+```java title="MybatisPlusConfig.java"
+@Override
+public MybatisPlusPropertiesCustomizer plusPropertiesCustomizer() {
+    return mybatisProperties -> mybatisProperties.getGlobalConfig()
+            .setIdentifierGenerator(new SnowflakeIdGenerator(
+                    properties.getSnowflake().getDatacenterId(),
+                    properties.getSnowflake().getMachineId(),
+                    properties.getSnowflake().getEpoch()
+            ));
+}
+```
+
+<TypeTable
+  type={{
+    'datacenterId': {
+      description: '数据中心 ID，用于分布式环境区分不同机房',
+      type: 'Long',
+      default: '1',
+    },
+    'machineId': {
+      description: '机器 ID，用于分布式环境区分不同服务器',
+      type: 'Long',
+      default: '1',
+    },
+    'epoch': {
+      description: '雪花算法起始时间戳（毫秒），用于计算可用 ID 范围',
+      type: 'Long',
+      default: '1690214400000 (2023-07-25)',
+    },
+  }}
+/>
+
+#### 雪花算法 ID 结构
+
+`SnowflakeIdGenerator` 生成64位长整型 ID，结构如下：
+
+```
+┌─────────────┬──────────┬──────────┬─────────────┐
+│  时间戳位   │ 数据中心 │ 机器ID位 │  序列号位   │
+│  (41位)     │  (5位)   │  (5位)   │   (12位)    │
+└─────────────┴──────────┴──────────┴─────────────┘
+ 63          22 21      17 16      12 11          0
+```
+
+- **时间戳位**：41位，可支持约69年的时间范围
+- **数据中心位**：5位，支持32个数据中心
+- **机器ID位**：5位，每个数据中心支持32台机器
+- **序列号位**：12位，每毫秒可生成4096个ID
+
+### 元数据自动填充
+
+实现 `MetaObjectHandler` 接口，在插入和更新时自动填充公共字段：
+
+```java title="MybatisPlusConfig.java"
+@Slf4j
+@Configuration
+public class MybatisPlusConfig extends MybatisPlusConfigHandler implements MetaObjectHandler {
+
+    public MybatisPlusConfig(UtilityBaseProperties properties) {
+        super(properties);
+    }
+
+    @Override
+    public void insertFill(@NotNull MetaObject metaObject) {
+        log.debug("自定义插入填充 {}", metaObject.getOriginalObject().getClass().getName());
+        this.strictInsertFill(metaObject, "createdAt", Timestamp.class, new Timestamp(System.currentTimeMillis()));
+        this.strictInsertFill(metaObject, "updatedAt", Timestamp.class, new Timestamp(System.currentTimeMillis()));
+        this.strictInsertFill(metaObject, "version", Long.class, 0L);
+        this.strictInsertFill(metaObject, "delete", Boolean.class, false);
+    }
+
+    @Override
+    public void updateFill(@NotNull MetaObject metaObject) {
+        log.debug("自定义更新填充 {}", metaObject.getOriginalObject().getClass().getName());
+        this.strictUpdateFill(metaObject, "updatedAt", Timestamp.class, new Timestamp(System.currentTimeMillis()));
+        this.strictUpdateFill(metaObject, "delete", Boolean.class, false);
+    }
+}
+```
+
+#### 自动填充字段规则
+
+| 字段 | 插入时填充 | 更新时填充 | 类型 | 默认值 |
+|------|:----------:|:----------:|------|--------|
+| `createdAt` | ✅ | ❌ | Timestamp | 当前时间 |
+| `updatedAt` | ✅ | ✅ | Timestamp | 当前时间 |
+| `version` | ✅ | ❌ | Long | 0L |
+| `delete` | ✅ | ✅ | Boolean | false |
+
+<Callout type="note" title="严格填充模式">
+使用 `strictInsertFill` / `strictUpdateFill` 进行严格填充，仅在字段为 null 时才会填充值。
+如果字段已有值，则不会覆盖。这样可以保护业务代码中手动设置的值。
+</Callout>
+
+#### 实体类注解配置
+
+在实体类中使用 `@TableField` 注解指定字段的填充策略：
+
+```java title="UserEntity.java"
+@Data
+@TableName("t_user")
+public class UserEntity {
+
+    @TableId(type = IdType.ASSIGN_ID)
+    private Long id;
+
+    private String username;
+
+    @TableField(fill = FieldFill.INSERT)
+    private Timestamp createdAt;
+
+    @TableField(fill = FieldFill.INSERT_UPDATE)
+    private Timestamp updatedAt;
+
+    @Version
+    private Long version;
+
+    @TableLogic
+    @TableField(fill = FieldFill.INSERT_UPDATE)
+    private Boolean delete;
+}
+```
+
+<TypeTable
+  type={{
+    'FieldFill.INSERT': {
+      description: '仅在插入时填充',
+      type: 'Enum',
+    },
+    'FieldFill.UPDATE': {
+      description: '仅在更新时填充',
+      type: 'Enum',
+    },
+    'FieldFill.INSERT_UPDATE': {
+      description: '插入和更新时都填充',
+      type: 'Enum',
+    },
+    'FieldFill.DEFAULT': {
+      description: '默认不填充',
+      type: 'Enum',
+    },
+  }}
+/>
+
+## 完整配置示例
+
+以下是一个完整的 MyBatis-Plus 扩展配置类，集成了乐观锁、雪花算法 ID 生成器和元数据自动填充：
+
+```java title="MybatisPlusConfig.java"
+@Slf4j
+@Configuration
+public class MybatisPlusConfig extends MybatisPlusConfigHandler implements MetaObjectHandler {
+
+    public MybatisPlusConfig(UtilityBaseProperties properties) {
+        super(properties);
+    }
+
+    @Override
+    public MybatisPlusInterceptor mybatisPlusInterceptor() {
+        return Optional.of(super.mybatisPlusInterceptor())
+                .map(interceptor -> {
+                    interceptor.addInnerInterceptor(new OptimisticLockerInnerInterceptor());
+                    return interceptor;
+                })
+                .orElseThrow(() -> new ServerInternalErrorException("初始化 MybatisPlusInterceptor 失败"));
+    }
+
+    @Override
+    public MybatisPlusPropertiesCustomizer plusPropertiesCustomizer() {
+        return mybatisProperties -> mybatisProperties.getGlobalConfig()
+                .setIdentifierGenerator(new SnowflakeIdGenerator(
+                        properties.getSnowflake().getDatacenterId(),
+                        properties.getSnowflake().getMachineId(),
+                        properties.getSnowflake().getEpoch()
+                ));
+    }
+
+    @Override
+    public void insertFill(@NotNull MetaObject metaObject) {
+        log.debug("自定义插入填充 {}", metaObject.getOriginalObject().getClass().getName());
+        this.strictInsertFill(metaObject, "createdAt", Timestamp.class, new Timestamp(System.currentTimeMillis()));
+        this.strictInsertFill(metaObject, "updatedAt", Timestamp.class, new Timestamp(System.currentTimeMillis()));
+        this.strictInsertFill(metaObject, "version", Long.class, 0L);
+        this.strictInsertFill(metaObject, "delete", Boolean.class, false);
+    }
+
+    @Override
+    public void updateFill(@NotNull MetaObject metaObject) {
+        log.debug("自定义更新填充 {}", metaObject.getOriginalObject().getClass().getName());
+        this.strictUpdateFill(metaObject, "updatedAt", Timestamp.class, new Timestamp(System.currentTimeMillis()));
+        this.strictUpdateFill(metaObject, "delete", Boolean.class, false);
+    }
+}
+```
+
 ## 注意事项
 
-- 未引入 MyBatis-Plus 时，该 Bean 不会注册。  
+- 未引入 MyBatis-Plus 时，该 Bean 不会注册。
 - 分页能力来自 `bamboo-base`，`mvc` 与 `webflux` 共用同一套配置实现。
+- 乐观锁插件仅支持 `Integer`、`Long`、`Date`、`Timestamp` 类型的版本字段。
+- 自定义配置类需要继承 `MybatisPlusConfigHandler` 并添加 `@Configuration` 注解。
 
 ## 下一步
 
