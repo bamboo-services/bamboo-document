@@ -1,0 +1,336 @@
+---
+title: Handler 实现模式
+description: gRPC Handler 的标准结构、xGrpcResult 使用和依赖注入
+icon: Code
+---
+
+# Handler 实现模式
+
+本章介绍如何编写符合 `bamboo-base-go` 规范的 gRPC Handler，包括基础结构、响应构建和依赖注入。
+
+## 基础结构
+
+每个 gRPC 服务对应一个 Handler 结构体，实现生成的 Server 接口：
+
+```go title="internal/grpc/handler/auth.go"
+package handler
+
+import (
+    "context"
+
+    xError "github.com/bamboo-services/bamboo-base-go/common/error"
+    xLog "github.com/bamboo-services/bamboo-base-go/common/log"
+    xGrpcMiddle "github.com/bamboo-services/bamboo-base-go/plugins/grpc/middleware"
+    xGrpcResult "github.com/bamboo-services/bamboo-base-go/plugins/grpc/result"
+    "github.com/your-org/beacon-sso/internal/grpc/gen"
+    "github.com/your-org/beacon-sso/internal/logic"
+    "google.golang.org/grpc"
+)
+
+// AuthHandler 认证服务 Handler
+type AuthHandler struct {
+    log         *xLog.LogNamedLogger
+    userLogic   *logic.UserLogic
+    tokenLogic  *logic.TokenLogic
+
+    // 必须嵌入 Unimplemented 服务
+    gen.UnimplementedAuthServiceServer
+}
+
+// NewAuthHandler 创建认证服务 Handler
+//
+// 构造函数负责三件事：
+// 1. 初始化依赖
+// 2. 注册 gRPC 服务
+// 3. 绑定服务级中间件
+func NewAuthHandler(ctx context.Context, server grpc.ServiceRegistrar) *AuthHandler {
+    log := xLog.WithName(xLog.NamedGRPC, "AuthHandler")
+    log.Info(ctx, "初始化认证服务 gRPC Handler")
+
+    handler := &AuthHandler{
+        log:        log,
+        userLogic:  logic.NewUserLogic(ctx),
+        tokenLogic: logic.NewTokenLogic(ctx),
+    }
+
+    // 1. 注册 gRPC 服务到 Server
+    gen.RegisterAuthServiceServer(server, handler)
+
+    // 2. 绑定服务级中间件（只对此服务生效）
+    // xGrpcMiddle.UseUnary(gen.AuthService_ServiceDesc, middleware.UnaryAppVerify(ctx))
+
+    return handler
+}
+```
+
+### 结构体设计要点
+
+1. **命名日志器**：使用 `xLog.WithName` 创建带有服务标识的日志器
+2. **Logic 依赖**：通过组合 Logic 层实现业务逻辑
+3. **Unimplemented 嵌入**：确保向前兼容，新增 RPC 方法时不会编译报错
+
+## xGrpcResult 使用
+
+`xGrpcResult` 提供统一的响应构建函数，自动填充 `BaseResponse` 字段。
+
+### Success - 无数据响应
+
+用于不需要返回业务数据的操作：
+
+```go title="internal/grpc/handler/auth.go"
+func (h *AuthHandler) Logout(ctx context.Context, req *gen.LogoutRequest) (*xGrpcGenerate.BaseResponse, error) {
+    xErr := h.tokenLogic.Invalidate(ctx, req.Token)
+    if xErr != nil {
+        return nil, xErr
+    }
+
+    // 返回无数据的成功响应
+    return xGrpcResult.Success(ctx, "退出登录成功"), nil
+}
+```
+
+### SuccessWith[T] - 有数据响应
+
+泛型函数，创建包含业务数据的成功响应：
+
+```go title="internal/grpc/handler/auth.go"
+func (h *AuthHandler) RegisterByEmail(ctx context.Context, req *gen.RegisterByEmailRequest) (*gen.RegisterByEmailResponse, error) {
+    // 调用 Logic 层执行业务逻辑
+    result, xErr := h.userLogic.RegisterByEmail(ctx, req.Email, req.Code, req.Password, req.Username, req.Nickname)
+    if xErr != nil {
+        return nil, xErr
+    }
+
+    // 构建响应（自动填充 BaseResponse）
+    resp := xGrpcResult.SuccessWith[*gen.RegisterByEmailResponse](ctx, "注册成功")
+    resp.UserId = result.UserID.String()
+    resp.Token = result.Token
+
+    return resp, nil
+}
+```
+
+### 类型约束
+
+`SuccessWith[T]` 要求：
+
+1. `T` 必须是指针类型（如 `*pb.YourResponse`）
+2. `T` 指向的结构体必须包含 `BaseResponse` 字段（类型为 `*xGrpcGenerate.BaseResponse`）
+
+如果类型不满足条件，函数会 **panic** 以在开发阶段暴露错误。
+
+## 错误处理
+
+业务 Handler 直接返回 `*xError.Error`，由 `ResponseBuilder` 拦截器统一转换为 gRPC status。
+
+### 标准错误返回
+
+```go
+func (h *AuthHandler) Login(ctx context.Context, req *gen.LoginRequest) (*gen.LoginResponse, error) {
+    // 参数校验
+    if req.Email == "" {
+        return nil, xError.NewError(ctx, xError.BadRequest, "邮箱不能为空", false)
+    }
+
+    // 业务逻辑
+    result, xErr := h.userLogic.LoginByEmail(ctx, req.Email, req.Password)
+    if xErr != nil {
+        return nil, xErr  // 直接返回，拦截器处理转换
+    }
+
+    resp := xGrpcResult.SuccessWith[*gen.LoginResponse](ctx, "登录成功")
+    resp.UserId = result.UserID.String()
+    resp.Token = result.Token
+
+    return resp, nil
+}
+```
+
+### 错误码到 gRPC Status 映射
+
+`ResponseBuilder` 拦截器自动将业务错误码映射为 gRPC 状态码：
+
+| HTTP 状态码 | gRPC Status Code |
+|------------|-----------------|
+| 400 | `InvalidArgument` |
+| 401 | `Unauthenticated` |
+| 403 | `PermissionDenied` |
+| 404 | `NotFound` |
+| 500 | `Internal` |
+
+## 依赖注入
+
+Handler 通过构造函数注入 Logic 层依赖，Logic 层再从 context 获取基础设施。
+
+### Handler 层
+
+```go
+func NewAuthHandler(ctx context.Context, server grpc.ServiceRegistrar) *AuthHandler {
+    return &AuthHandler{
+        log:        xLog.WithName(xLog.NamedGRPC, "AuthHandler"),
+        userLogic:  logic.NewUserLogic(ctx),
+        tokenLogic: logic.NewTokenLogic(ctx),
+    }
+}
+```
+
+### Logic 层
+
+Logic 层从 context 获取数据库、Redis 等基础设施：
+
+```go title="internal/logic/user.go"
+type UserLogic struct {
+    log *xLog.LogNamedLogger
+}
+
+func NewUserLogic(ctx context.Context) *UserLogic {
+    return &UserLogic{
+        log: xLog.WithName(xLog.NamedLOGC, "UserLogic"),
+    }
+}
+
+func (l *UserLogic) GetByID(ctx context.Context, userID int64) (*entity.User, *xError.Error) {
+    // 从 context 获取数据库连接
+    db := xCtxUtil.MustGetDB(ctx)
+
+    var user entity.User
+    if err := db.First(&user, userID).Error; err != nil {
+        if err == gorm.ErrRecordNotFound {
+            return nil, xError.NewError(ctx, xError.NotExist, "用户不存在", false)
+        }
+        return nil, xError.NewInternalServerError(ctx, "查询用户失败", err)
+    }
+
+    return &user, nil
+}
+```
+
+## 完整示例
+
+以下是一个完整的 Handler 实现示例：
+
+```go title="internal/grpc/handler/upload.go"
+package handler
+
+import (
+    "context"
+
+    xError "github.com/bamboo-services/bamboo-base-go/common/error"
+    xLog "github.com/bamboo-services/bamboo-base-go/common/log"
+    xSnowflake "github.com/bamboo-services/bamboo-base-go/common/snowflake"
+    xGrpcMiddle "github.com/bamboo-services/bamboo-base-go/plugins/grpc/middleware"
+    xGrpcResult "github.com/bamboo-services/bamboo-base-go/plugins/grpc/result"
+    "github.com/your-org/beacon-bucket/internal/grpc/gen"
+    "github.com/your-org/beacon-bucket/internal/logic"
+    "github.com/your-org/beacon-bucket/internal/proto/middleware"
+    "google.golang.org/grpc"
+    "google.golang.org/protobuf/types/known/timestamppb"
+)
+
+type UploadHandler struct {
+    log             *xLog.LogNamedLogger
+    bucketLogic     *logic.BucketLogic
+    bucketFileLogic *logic.BucketFileLogic
+    fileLogic       *logic.FileLogic
+
+    gen.UnimplementedNormalUploadServiceServer
+}
+
+func NewUploadHandler(ctx context.Context, server grpc.ServiceRegistrar) *UploadHandler {
+    log := xLog.WithName(xLog.NamedGRPC, "UploadHandler")
+    log.Info(ctx, "初始化上传服务 gRPC Handler")
+
+    handler := &UploadHandler{
+        log:             log,
+        bucketLogic:     logic.NewBucketLogic(ctx),
+        bucketFileLogic: logic.NewBucketFileLogic(ctx),
+        fileLogic:       logic.NewFileLogic(ctx),
+    }
+
+    // 注册 gRPC 服务
+    gen.RegisterNormalUploadServiceServer(server, handler)
+
+    // 绑定服务级中间件（App 认证）
+    xGrpcMiddle.UseUnary(gen.NormalUploadService_ServiceDesc, middleware.UnaryAppVerify(ctx))
+
+    return handler
+}
+
+// Upload 上传文件
+func (h *UploadHandler) Upload(ctx context.Context, req *gen.UploadRequest) (*gen.UploadResponse, error) {
+    h.log.Info(ctx, "处理普通上传请求")
+
+    // 流程一：解析存储桶 ID
+    bucketID, err := xSnowflake.ParseSnowflakeID(req.GetBucketId())
+    if err != nil {
+        return nil, xError.NewError(ctx, xError.BadRequest, "存储桶 ID 格式无效", false, err)
+    }
+
+    // 流程二：获取存储桶
+    bucket, xErr := h.bucketLogic.Get(ctx, bucketID)
+    if xErr != nil {
+        return nil, xErr
+    }
+
+    // 流程三：解析文件内容
+    decodedFile, contentType, xErr := h.fileLogic.ParseMIMEBase64File(ctx, req.GetContentBase64())
+    if xErr != nil {
+        return nil, xErr
+    }
+
+    // 流程四：上传到存储
+    xErr = h.fileLogic.UploadObject(ctx, bucket, "path/file", decodedFile, contentType)
+    if xErr != nil {
+        return nil, xErr
+    }
+
+    // 流程五：创建数据库记录
+    bucketFile, xErr := h.bucketFileLogic.Create(ctx, bucketID, "file", len(decodedFile))
+    if xErr != nil {
+        return nil, xErr
+    }
+
+    // 构建响应
+    resp := xGrpcResult.SuccessWith[*gen.UploadResponse](ctx, "文件上传成功")
+    resp.FileId = bucketFile.ID.String()
+    resp.Size = bucketFile.Size
+    resp.UploadedAt = timestamppb.New(bucketFile.CreatedAt)
+
+    return resp, nil
+}
+
+// Delete 删除文件
+func (h *UploadHandler) Delete(ctx context.Context, req *gen.DeleteRequest) (*gen.DeleteResponse, error) {
+    h.log.Info(ctx, "处理文件删除请求")
+
+    fileID, err := xSnowflake.ParseSnowflakeID(req.GetFileId())
+    if err != nil {
+        return nil, xError.NewError(ctx, xError.BadRequest, "文件 ID 格式无效", false, err)
+    }
+
+    xErr := h.bucketFileLogic.Delete(ctx, fileID)
+    if xErr != nil {
+        return nil, xErr
+    }
+
+    return xGrpcResult.SuccessWith[*gen.DeleteResponse](ctx, "文件删除成功"), nil
+}
+```
+
+## 最佳实践总结
+
+| 要点 | 说明 |
+|------|------|
+| 日志命名 | 使用 `xLog.NamedGRPC` + 服务名创建日志器 |
+| 错误返回 | 直接返回 `*xError.Error`，不手动转换 |
+| 响应构建 | 使用 `xGrpcResult.Success` 或 `SuccessWith[T]` |
+| 依赖注入 | 在构造函数中创建 Logic 实例 |
+| 中间件绑定 | 在构造函数中调用 `xGrpcMiddle.UseUnary` |
+
+## 下一步
+
+<Cards>
+  <Card title="中间件模式" href="/docs/bamboo-base-go/grpc-best-practices/middleware-pattern" />
+  <Card title="服务注册" href="/docs/bamboo-base-go/grpc-best-practices/service-registration" />
+  <Card title="gRPC 结果处理" href="/docs/bamboo-base-go/grpc/result" />
+</Cards>

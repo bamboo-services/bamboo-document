@@ -1,0 +1,94 @@
+---
+title: gRPC 最佳实践
+description: 基于 bamboo-base-go 的 gRPC 开发最佳实践指南
+icon: GraduationCap
+---
+
+# gRPC 最佳实践
+
+本指南总结了基于 `bamboo-base-go` 框架进行 gRPC 开发的最佳实践，涵盖 Proto 文件组织、代码生成、Handler 实现模式、中间件设计等核心主题。
+
+## 适用场景
+
+- 需要同时暴露 HTTP 与 gRPC 接口的服务
+- 微服务间高性能通信
+- 需要强类型接口定义的内部 API
+
+## 快速入口
+
+<Cards>
+  <Card title="Proto 文件组织" href="/docs/bamboo-base-go/grpc-best-practices/proto-organization" />
+  <Card title="Buf 工具配置" href="/docs/bamboo-base-go/grpc-best-practices/buf-config" />
+  <Card title="Handler 实现模式" href="/docs/bamboo-base-go/grpc-best-practices/handler-pattern" />
+  <Card title="中间件模式" href="/docs/bamboo-base-go/grpc-best-practices/middleware-pattern" />
+  <Card title="服务注册" href="/docs/bamboo-base-go/grpc-best-practices/service-registration" />
+</Cards>
+
+## 核心原则
+
+### 1. 统一响应结构
+
+所有 gRPC 响应都应包含 `BaseResponse` 元信息，由 `ResponseBuilder` 拦截器自动注入追踪 ID 和耗时：
+
+```proto
+message YourResponse {
+  xBase.BaseResponse base_response = 1;  // 必须放在第一位
+  // 业务字段...
+}
+```
+
+### 2. 错误处理模式
+
+业务 Handler 直接返回 `*xError.Error`，由 `ResponseBuilder` 统一转换为 gRPC status：
+
+```go
+if xErr != nil {
+    return nil, xErr  // 直接返回，拦截器处理转换
+}
+```
+
+### 3. 拦截器链顺序
+
+遵循从外到内的洋葱模型：
+
+```
+Trace → InitContext → Recover → Middleware → ResponseBuilder → Handler
+```
+
+## 架构概览
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                        gRPC 请求                             │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│  Trace 拦截器（生成/传递 x_request_uuid）                      │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│  InitContext 拦截器（注入数据库、Redis 等依赖）                  │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│  Recover 拦截器（捕获 panic）                                  │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│  服务级中间件（如 App 认证）                                    │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│  ResponseBuilder 拦截器（错误转换 & 响应注入）                   │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│                      业务 Handler                             │
+└─────────────────────────────────────────────────────────────┘
+```

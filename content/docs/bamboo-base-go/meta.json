@@ -12,6 +12,7 @@
     "...core",
     "---可选模块---",
     "grpc",
+    "grpc-best-practices",
     "plugins/cron",
     "---功能组件---",
     "...components",

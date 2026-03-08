@@ -1,0 +1,260 @@
+---
+title: Proto 文件组织
+description: Proto 文件目录结构、包命名规范与符号链接模式
+icon: FolderTree
+---
+
+# Proto 文件组织
+
+良好的 Proto 文件组织是 gRPC 项目可维护性的基础。本章介绍推荐的目录结构、命名规范以及如何复用 `bamboo-base-go` 的基础定义。
+
+## 目录结构
+
+推荐采用**按服务/领域分层**的目录结构：
+
+```
+project-root/
+├── proto/                          # Proto 源文件根目录
+│   ├── link/                       # 符号链接目录（外部依赖）
+│   │   └── base.proto -> ...       # 链接到 bamboo-base-go
+│   │
+│   ├── beacon/                     # 按项目/命名空间分组
+│   │   └── sso/                    # 按服务分组
+│   │       └── v1/                 # 版本化
+│   │           ├── auth.proto      # 认证服务
+│   │           └── public.proto    # 公共服务
+│   │
+│   ├── buf.yaml                    # Buf 模块配置
+│   └── buf.gen.yaml                # 代码生成配置
+│
+├── internal/
+│   └── grpc/
+│       ├── gen/                    # 生成的 Go 代码（不要手动编辑）
+│       │   ├── beacon/sso/v1/
+│       │   │   ├── auth.pb.go
+│       │   │   ├── auth_grpc.pb.go
+│       │   │   └── ...
+│       │   └── link/
+│       │       └── base.pb.go      # 来自 bamboo-base-go
+│       │
+│       ├── handler/                # gRPC Handler 实现
+│       ├── middleware/             # 服务级中间件
+│       └── register/               # 服务注册入口
+│
+└── Makefile                        # 包含 proto 生成命令
+```
+
+## 包命名规范
+
+### Package 名称
+
+采用**逆向域名 + 服务名 + 版本**的格式：
+
+```proto
+syntax = "proto3";
+
+// 推荐：命名空间.服务名.版本
+package beacon.sso.v1;
+
+// 或者简单格式
+package proto;
+```
+
+### Go Package 映射
+
+通过 `option go_package` 指定生成的 Go 代码路径：
+
+```proto
+// 完整路径格式（推荐）
+option go_package = "github.com/your-org/your-project/internal/grpc/gen;pb";
+
+// 相对路径格式（适用于单体项目）
+option go_package = "./internal/proto/api;bGrpcApi";
+```
+
+### 命名约定
+
+| 元素 | 规范 | 示例 |
+|------|------|------|
+| Service | PascalCase + Service 后缀 | `AuthService`, `UserService` |
+| RPC 方法 | PascalCase 动词短语 | `RegisterByEmail`, `GetUserInfo` |
+| Message | PascalCase + Request/Response 后缀 | `LoginRequest`, `LoginResponse` |
+| 字段 | snake_case | `user_id`, `created_at` |
+| 枚举 | SCREAMING_SNAKE_CASE | `USER_STATUS_ACTIVE` |
+
+## 嵌入 BaseResponse
+
+所有业务响应消息都应该嵌入 `xBase.BaseResponse`，以便获得统一的元信息：
+
+```proto title="proto/beacon/sso/v1/auth.proto"
+syntax = "proto3";
+
+package beacon.sso.v1;
+
+import "link/base.proto";  // 引入 bamboo-base-go 的基础定义
+
+option go_package = "github.com/your-org/beacon-sso/internal/grpc/gen;pb";
+
+// RegisterByEmailResponse 邮箱注册响应
+message RegisterByEmailResponse {
+  // 基础响应信息（必须放在第一个字段）
+  xBase.BaseResponse base_response = 1;
+
+  // 业务字段从 11 开始，预留 2-10 供 BaseResponse 扩展
+  string user_id = 11;
+  string token = 12;
+}
+```
+
+### 字段编号分配建议
+
+| 范围 | 用途 |
+|------|------|
+| 1-10 | BaseResponse 及未来扩展 |
+| 11+ | 业务数据字段 |
+
+这样设计的好处是未来可以在业务消息和 BaseResponse 之间添加新字段，而不会破坏兼容性。
+
+## 符号链接模式
+
+### 为什么使用符号链接
+
+`bamboo-base-go` 提供了 `BaseResponse` 的标准定义，业务端不应该复制粘贴，而应该通过符号链接引用：
+
+1. **保持一致性**：所有服务使用相同版本的 BaseResponse
+2. **简化更新**：升级 `bamboo-base-go` 后自动获得最新定义
+3. **避免冲突**：通过 M 参数映射到正确的 Go 包路径
+
+### 创建符号链接
+
+在 Makefile 中定义初始化命令：
+
+```makefile title="Makefile"
+# 变量定义
+PROTO_FILE ?= beacon/sso/v1/auth.proto
+BASE_GO_MODULE_DIR := $(shell go list -m -f '{{.Dir}}' github.com/bamboo-services/bamboo-base-go/plugins/grpc)
+XBASE_LINK := proto/link/base.proto
+
+# 初始化 proto 符号链接
+proto-init:
+	@mkdir -p $(dir $(XBASE_LINK))
+	@if [ ! -d "$(BASE_GO_MODULE_DIR)" ]; then \
+		echo "错误: 找不到 bamboo-base-go 模块，请先运行 go mod download"; \
+		exit 1; \
+	fi
+	@ln -sf $(BASE_GO_MODULE_DIR)/proto/base.proto $(XBASE_LINK)
+	@echo "符号链接已创建: $(XBASE_LINK) -> $(BASE_GO_MODULE_DIR)/proto/base.proto"
+```
+
+### 符号链接目录结构
+
+```
+proto/
+├── link/
+│   └── base.proto -> /path/to/go/pkg/mod/.../bamboo-base-go@v1.0.0/proto/base.proto
+└── ...
+```
+
+> 符号链接的目标是 Go modules 缓存中的文件，因此必须先执行 `go mod download` 确保依赖已下载。
+
+## Message 设计最佳实践
+
+### Request Message
+
+```proto
+message RegisterByEmailRequest {
+  // 必填字段，使用清晰的注释说明
+  string email = 1;       // 邮箱地址（必填）
+  string code = 2;        // 验证码（必填）
+  string password = 3;    // 密码（必填，至少 6 位且包含字母和数字）
+
+  // 可选字段使用 optional
+  optional string username = 4;   // 用户名（可选，不填则自动生成）
+  optional string nickname = 5;   // 昵称（可选）
+}
+```
+
+### Response Message
+
+```proto
+message GetUserResponse {
+  xBase.BaseResponse base_response = 1;
+
+  // 业务数据
+  string user_id = 11;
+  string username = 12;
+  string email = 13;
+
+  // 可选数据
+  optional string avatar = 14;
+  optional string bio = 15;
+
+  // 嵌套对象
+  message Profile {
+    string display_name = 1;
+    int64 created_at = 2;
+  }
+  Profile profile = 16;
+}
+```
+
+### 使用 google.protobuf.Timestamp
+
+对于时间字段，推荐使用标准类型：
+
+```proto
+import "google/protobuf/timestamp.proto";
+
+message FileInfo {
+  string file_id = 1;
+  string name = 2;
+  google.protobuf.Timestamp uploaded_at = 3;
+  optional google.protobuf.Timestamp deleted_at = 4;
+}
+```
+
+## Service 定义规范
+
+### 方法注释
+
+每个 RPC 方法都应该添加详细的注释，说明认证要求、请求流程和返回值：
+
+```proto
+// AuthService 认证服务（需要 App 认证）
+//
+// 该服务的所有方法都需要在 metadata 中提供有效的 App 凭证：
+// - app-access-id: App 的 Access ID
+// - app-secret-key: App 的 Secret Key
+service AuthService {
+  // RegisterByEmail 通过邮箱注册
+  //
+  // 该接口用于通过邮箱验证码完成用户注册，注册成功后自动生成登录 Token。
+  // 注册流程：
+  // 1. 验证邮箱验证码
+  // 2. 检查邮箱是否已注册
+  // 3. 验证密码强度
+  // 4. 创建用户账号
+  // 5. 绑定邮箱并标记为已验证
+  // 6. 生成登录 Token
+  rpc RegisterByEmail(RegisterByEmailRequest) returns (RegisterByEmailResponse);
+}
+```
+
+### 公共服务 vs 认证服务
+
+根据是否需要认证，将服务分组到不同的 proto 文件：
+
+```
+proto/beacon/sso/v1/
+├── public.proto     # 无需 App 认证的公共服务
+├── auth.proto       # 需要 App 认证的认证服务
+└── user.proto       # 需要用户认证的用户服务
+```
+
+## 下一步
+
+<Cards>
+  <Card title="Buf 工具配置" href="/docs/bamboo-base-go/grpc-best-practices/buf-config" />
+  <Card title="Handler 实现模式" href="/docs/bamboo-base-go/grpc-best-practices/handler-pattern" />
+  <Card title="内置 Proto" href="/docs/bamboo-base-go/grpc/proto" />
+</Cards>

@@ -1,0 +1,13 @@
+{
+  "title": "gRPC 最佳实践",
+  "icon": "GraduationCap",
+  "description": "基于 bamboo-base-go 的 gRPC 开发最佳实践",
+  "pages": [
+    "index",
+    "proto-organization",
+    "buf-config",
+    "handler-pattern",
+    "middleware-pattern",
+    "service-registration"
+  ]
+}

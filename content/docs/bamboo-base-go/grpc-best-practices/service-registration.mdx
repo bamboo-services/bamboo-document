@@ -1,0 +1,309 @@
+---
+title: 服务注册
+description: 集中注册入口、与 gRPC Runner 集成和启动流程
+icon: Plug
+---
+
+# 服务注册
+
+本章介绍如何组织 gRPC 服务的注册流程，以及如何与 `xGrpcRunner` 集成实现统一的生命周期管理。
+
+## 集中注册入口
+
+推荐创建一个集中的注册函数，统一管理所有 gRPC 服务的初始化：
+
+```go title="internal/grpc/register/register.go"
+package register
+
+import (
+    "context"
+
+    "github.com/your-org/beacon-sso/internal/grpc/handler"
+    "google.golang.org/grpc"
+)
+
+// RegisterGRPCServices 注册所有 gRPC 服务
+//
+// 该函数作为 xGrpcRunner.WithRegisterService 的回调，
+// 负责初始化所有 Handler 并注册到 gRPC Server。
+func RegisterGRPCServices(ctx context.Context, server grpc.ServiceRegistrar) {
+    // 公共服务（无需 App 认证）
+    handler.NewPublicHandler(ctx, server)
+
+    // 认证服务（需要 App 认证）
+    handler.NewAuthHandler(ctx, server)
+
+    // 用户服务（需要用户认证）
+    handler.NewUserHandler(ctx, server)
+}
+```
+
+### 目录结构
+
+```
+internal/grpc/
+├── gen/                    # 生成的代码
+│   └── beacon/sso/v1/
+│       ├── auth.pb.go
+│       ├── auth_grpc.pb.go
+│       └── ...
+├── handler/                # Handler 实现
+│   ├── auth.go
+│   ├── public.go
+│   └── user.go
+├── middleware/             # 服务级中间件
+│   └── app_verify.go
+└── register/               # 注册入口
+    └── register.go
+```
+
+## 与 gRPC Runner 集成
+
+### 基本集成
+
+在 `main.go` 中，将注册函数传给 `xGrpcRunner`：
+
+```go title="main.go"
+package main
+
+import (
+    "context"
+    "time"
+
+    xLog "github.com/bamboo-services/bamboo-base-go/common/log"
+    xMain "github.com/bamboo-services/bamboo-base-go/major/main"
+    xReg "github.com/bamboo-services/bamboo-base-go/major/register"
+    xGrpcIUnary "github.com/bamboo-services/bamboo-base-go/plugins/grpc/interceptor/unary"
+    xGrpcRunner "github.com/bamboo-services/bamboo-base-go/plugins/grpc/runner"
+    "github.com/your-org/beacon-sso/internal/app/route"
+    "github.com/your-org/beacon-sso/internal/app/startup"
+    "github.com/your-org/beacon-sso/internal/grpc/register"
+    "google.golang.org/grpc"
+)
+
+func main() {
+    // 1. 初始化框架
+    reg := xReg.Register(startup.Init())
+    log := xLog.WithName(xLog.NamedMAIN)
+
+    // 2. 定义 gRPC 服务注册函数
+    registerGrpcService := func(ctx context.Context, server grpc.ServiceRegistrar) {
+        register.RegisterGRPCServices(ctx, server)
+    }
+
+    // 3. 创建 gRPC 任务
+    grpcTask := xGrpcRunner.New(
+        xGrpcRunner.WithLogger(xLog.WithName(xLog.NamedGRPC)),
+        xGrpcRunner.WithGracefulStopTimeout(30*time.Second),
+        xGrpcRunner.WithRegisterService(registerGrpcService),
+        xGrpcRunner.WithUnaryInterceptors(
+            xGrpcIUnary.InitContext(reg.Init.Ctx),
+            xGrpcIUnary.Recover(),
+            xGrpcIUnary.Middleware(),
+            xGrpcIUnary.ResponseBuilder(),
+        ),
+    )
+
+    // 4. 启动服务（HTTP + gRPC 并行）
+    xMain.Runner(reg, log, route.NewRoute, grpcTask)
+}
+```
+
+### 配置选项
+
+```go
+xGrpcRunner.New(
+    // 日志器
+    xGrpcRunner.WithLogger(xLog.WithName(xLog.NamedGRPC)),
+
+    // 优雅停止超时
+    xGrpcRunner.WithGracefulStopTimeout(30*time.Second),
+
+    // 服务注册回调
+    xGrpcRunner.WithRegisterService(func(ctx context.Context, server grpc.ServiceRegistrar) {
+        // 注册你的服务...
+    }),
+
+    // 一元拦截器
+    xGrpcRunner.WithUnaryInterceptors(
+        xGrpcIUnary.InitContext(reg.Init.Ctx),
+        xGrpcIUnary.Recover(),
+        xGrpcIUnary.Middleware(),
+        xGrpcIUnary.ResponseBuilder(),
+    ),
+
+    // 流式拦截器（如需流式 RPC）
+    xGrpcRunner.WithStreamInterceptors(
+        xGrpcIStream.InitContext(reg.Init.Ctx),
+        xGrpcIStream.Recover(),
+        xGrpcIStream.Middleware(),
+    ),
+)
+```
+
+## 启动流程
+
+### 完整启动顺序
+
+```
+main()
+  │
+  ├── 1. xReg.Register()
+  │     ├── 环境变量初始化
+  │     ├── 日志系统初始化
+  │     └── 节点化初始化（数据库、Redis 等）
+  │
+  ├── 2. xGrpcRunner.New() → 返回任务函数
+  │
+  └── 3. xMain.Runner()
+        ├── Gin 引擎创建
+        ├── 路由注册
+        ├── gRPC Server 启动（协程）
+        │     ├── 创建 gRPC Listener
+        │     ├── 执行服务注册回调
+        │     └── 开始接受连接
+        ├── HTTP Server 启动（协程）
+        └── 信号监听（优雅关闭）
+              ├── SIGINT/SIGTERM
+              ├── HTTP 优雅关闭
+              └── gRPC 优雅关闭
+```
+
+### 环境变量
+
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `GRPC_PORT` | `1119` | gRPC 监听端口 |
+| `GRPC_REFLECTION` | `false` | 是否启用 gRPC 反射 |
+
+### 启用 gRPC 反射
+
+开发调试时可启用反射，支持 `grpcurl` 等工具：
+
+```bash
+# .env
+GRPC_REFLECTION=true
+```
+
+```bash
+# 使用 grpcurl 查看服务
+grpcurl -plaintext localhost:1119 list
+grpcurl -plaintext localhost:1119 describe beacon.sso.v1.AuthService
+```
+
+## 服务隔离注册
+
+当项目规模较大时，可以按领域拆分注册函数：
+
+```go title="internal/grpc/register/register.go"
+package register
+
+import (
+    "context"
+    "google.golang.org/grpc"
+)
+
+// RegisterGRPCServices 注册所有 gRPC 服务
+func RegisterGRPCServices(ctx context.Context, server grpc.ServiceRegistrar) {
+    // 按领域分组注册
+    registerPublicServices(ctx, server)
+    registerAuthServices(ctx, server)
+    registerUserServices(ctx, server)
+}
+
+// registerPublicServices 注册公共服务（无需认证）
+func registerPublicServices(ctx context.Context, server grpc.ServiceRegistrar) {
+    handler.NewPublicHandler(ctx, server)
+}
+
+// registerAuthServices 注册认证服务（需要 App 认证）
+func registerAuthServices(ctx context.Context, server grpc.ServiceRegistrar) {
+    handler.NewAuthHandler(ctx, server)
+}
+
+// registerUserServices 注册用户服务（需要用户认证）
+func registerUserServices(ctx context.Context, server grpc.ServiceRegistrar) {
+    handler.NewUserHandler(ctx, server)
+}
+```
+
+## 多 gRPC 服务场景
+
+某些复杂项目可能需要多个 gRPC Server（如内网/外网隔离）：
+
+```go title="main.go"
+func main() {
+    reg := xReg.Register(startup.Init())
+    log := xLog.WithName(xLog.NamedMAIN)
+
+    // 内网 gRPC 服务
+    internalGrpc := xGrpcRunner.New(
+        xGrpcRunner.WithLogger(xLog.WithName(xLog.NamedGRPC, "internal")),
+        xGrpcRunner.WithRegisterService(register.RegisterInternalServices),
+        // ...
+    )
+
+    // 外网 gRPC 服务
+    externalGrpc := xGrpcRunner.New(
+        xGrpcRunner.WithLogger(xLog.WithName(xLog.NamedGRPC, "external")),
+        xGrpcRunner.WithRegisterService(register.RegisterExternalServices),
+        // ...
+    )
+
+    xMain.Runner(reg, log, route.NewRoute, internalGrpc, externalGrpc)
+}
+```
+
+## 健康检查
+
+### gRPC 健康检查协议
+
+实现标准的 gRPC 健康检查协议：
+
+```go title="internal/grpc/handler/health.go"
+package handler
+
+import (
+    "context"
+    "google.golang.org/grpc/health"
+    "google.golang.org/grpc/health/grpc_health_v1"
+)
+
+func RegisterHealthServer(server grpc.ServiceRegistrar) {
+    healthServer := health.NewServer()
+    // 设置服务状态
+    healthServer.SetServingStatus("your-service", grpc_health_v1.HealthCheckResponse_SERVING)
+    grpc_health_v1.RegisterHealthServer(server, healthServer)
+}
+```
+
+### Kubernetes 探针集成
+
+```yaml title="k8s/deployment.yaml"
+livenessProbe:
+  exec:
+    command: ["grpc_health_probe", "-addr=:1119"]
+  initialDelaySeconds: 10
+
+readinessProbe:
+  exec:
+    command: ["grpc_health_probe", "-addr=:1119"]
+  initialDelaySeconds: 5
+```
+
+## 最佳实践
+
+| 要点 | 说明 |
+|------|------|
+| 集中注册 | 使用统一入口管理所有服务注册 |
+| Handler 职责 | 构造函数负责注册服务 + 绑定中间件 |
+| 命名规范 | 服务名与 proto package 保持一致 |
+| 健康检查 | 实现标准健康检查协议 |
+
+## 下一步
+
+<Cards>
+  <Card title="Proto 文件组织" href="/docs/bamboo-base-go/grpc-best-practices/proto-organization" />
+  <Card title="Handler 实现模式" href="/docs/bamboo-base-go/grpc-best-practices/handler-pattern" />
+  <Card title="gRPC 运行时" href="/docs/bamboo-base-go/grpc/runner" />
+</Cards>

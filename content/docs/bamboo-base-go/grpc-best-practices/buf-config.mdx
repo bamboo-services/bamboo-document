@@ -1,0 +1,256 @@
+---
+title: Buf 工具配置
+description: buf.yaml 和 buf.gen.yaml 配置说明，以及 Makefile 集成
+icon: Settings
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# Buf 工具配置
+
+[Buf](https://buf.build/) 是现代化的 Proto 管理工具，提供 lint、breaking change 检测和代码生成能力。本章介绍如何配置 Buf 与 `bamboo-base-go` 集成。
+
+## 安装 Buf
+
+```bash
+# macOS
+brew install bufbuild/buf/buf
+
+# Linux/WSL
+curl -sSL "https://github.com/bufbuild/buf/releases/latest/download/buf-$(uname)-$(uname -m)" \
+  -o /usr/local/bin/buf && chmod +x /usr/local/bin/buf
+
+# Go install
+go install github.com/bufbuild/buf/cmd/buf@latest
+```
+
+## buf.yaml 配置
+
+在 `proto/` 目录下创建 `buf.yaml`：
+
+```yaml title="proto/buf.yaml"
+version: v2
+
+modules:
+  - path: .    # 当前目录作为模块根目录
+
+lint:
+  use:
+    - MINIMAL  # 使用最小规则集，减少约束
+  except:
+    # 以下规则与 link/base.proto 符号链接冲突，需要忽略
+    - PACKAGE_DIRECTORY_MATCH
+    - PACKAGE_SAME_DIRECTORY
+    - DIRECTORY_SAME_PACKAGE
+    - PACKAGE_LOWER_SNAKE_CASE
+    - PACKAGE_VERSION_SUFFIX
+    - PACKAGE_DEFINED
+    - SYNTAX_SPECIFIED
+  ignore:
+    - link/base.proto  # 忽略符号链接的 lint 检查
+
+breaking:
+  use:
+    - FILE  # 文件级别的破坏性变更检测
+```
+
+### Lint 规则说明
+
+| 规则 | 说明 |
+|------|------|
+| `MINIMAL` | 最小规则集，包含最基本的检查 |
+| `BASIC` | 基础规则集，增加命名规范检查 |
+| `DEFAULT` | 默认规则集，最严格 |
+
+### 为什么需要 except
+
+符号链接模式会导致以下问题：
+
+1. `link/base.proto` 的 package 是 `xBase`，与目录结构不匹配
+2. 符号链接文件不在 `proto/` 的目录层级下
+
+因此需要排除相关 lint 规则。
+
+## buf.gen.yaml 配置
+
+代码生成配置文件通常放在 `proto/` 目录下：
+
+```yaml title="proto/buf.gen.yaml"
+version: v2
+
+plugins:
+  # Go 消息生成器
+  - local: protoc-gen-go
+    out: internal/grpc/gen        # 输出目录
+    opt:
+      - paths=source_relative     # 使用相对路径生成文件
+      # M 参数：将 link/base.proto 映射到 bamboo-base-go 的包路径
+      - Mlink/base.proto=github.com/bamboo-services/bamboo-base-go/plugins/grpc/generate
+
+  # Go gRPC 服务生成器
+  - local: protoc-gen-go-grpc
+    out: internal/grpc/gen
+    opt:
+      - paths=source_relative
+      - Mlink/base.proto=github.com/bamboo-services/bamboo-base-go/plugins/grpc/generate
+```
+
+### M 参数映射
+
+`M` 参数告诉 `protoc-gen-go`，当遇到 `import "link/base.proto"` 时，生成的 Go 代码应该导入哪个包：
+
+```proto
+import "link/base.proto";
+
+message MyResponse {
+  xBase.BaseResponse base_response = 1;  // 类型引用
+}
+```
+
+生成的 Go 代码：
+
+```go
+import xGrpcGenerate "github.com/bamboo-services/bamboo-base-go/plugins/grpc/generate"
+
+type MyResponse struct {
+    BaseResponse *xGrpcGenerate.BaseResponse `protobuf:"bytes,1,opt,name=base_response,json=baseResponse,embedded=base_response,req=is=BaseResponse"`
+}
+```
+
+### 输出目录结构
+
+执行 `buf generate` 后的目录结构：
+
+```
+internal/grpc/gen/
+├── beacon/
+│   └── sso/
+│       └── v1/
+│           ├── auth.pb.go         # 消息定义
+│           ├── auth_grpc.pb.go    # 服务定义
+│           ├── public.pb.go
+│           └── public_grpc.pb.go
+└── link/
+    └── base.pb.go                 # 实际不会生成（映射到外部包）
+```
+
+> 由于 `M` 参数映射，`link/base.proto` 不会在本地生成代码，而是直接引用 `bamboo-base-go` 的包。
+
+## Makefile 集成
+
+将 Buf 命令集成到 Makefile 中，提供统一的开发体验：
+
+```makefile title="Makefile"
+# 变量定义
+MAIN_FILE = main.go
+PROTO_FILE ?= beacon/sso/v1/auth.proto    # 默认生成的文件
+BASE_GO_MODULE_DIR := $(shell go list -m -f '{{.Dir}}' github.com/bamboo-services/bamboo-base-go/plugins/grpc)
+XBASE_LINK := proto/link/base.proto
+
+.PHONY: proto proto-init
+
+# 初始化 proto 符号链接
+proto-init:
+	@mkdir -p $(dir $(XBASE_LINK))
+	@if [ ! -d "$(BASE_GO_MODULE_DIR)" ]; then \
+		echo "错误: 找不到 bamboo-base-go 模块，请先运行 go mod download"; \
+		exit 1; \
+	fi
+	@ln -sf $(BASE_GO_MODULE_DIR)/proto/base.proto $(XBASE_LINK)
+	@echo "符号链接已创建: $(XBASE_LINK)"
+
+# 生成 proto（自动初始化符号链接）
+proto: proto-init
+	cd proto && buf generate --path $(PROTO_FILE)
+```
+
+### 使用方式
+
+```bash
+# 初始化符号链接
+make proto-init
+
+# 生成指定 proto 文件
+make proto PROTO_FILE=beacon/sso/v1/auth.proto
+
+# 生成所有 proto 文件（不指定 --path）
+cd proto && buf generate
+```
+
+### 按需生成 vs 全量生成
+
+| 模式 | 命令 | 适用场景 |
+|------|------|---------|
+| 按需生成 | `buf generate --path xxx.proto` | 开发阶段，只修改了单个文件 |
+| 全量生成 | `buf generate` | CI/CD、首次克隆、多人协作 |
+
+## Lint 检查
+
+在 CI 中添加 lint 检查：
+
+```bash
+# 检查 lint 问题
+buf lint
+
+# 检查破坏性变更（对比远程版本）
+buf breaking proto --against '.git#branch=main'
+```
+
+### GitHub Actions 集成
+
+```yaml title=".github/workflows/proto-lint.yml"
+name: Proto Lint
+
+on:
+  push:
+    paths:
+      - 'proto/**'
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: bufbuild/buf-setup-action@v1
+      - uses: bufbuild/buf-lint-action@v1
+        with:
+          input: proto
+```
+
+## 常见问题
+
+### 1. 符号链接指向错误的版本
+
+**问题**：升级 `bamboo-base-go` 后，符号链接仍指向旧版本。
+
+**解决**：重新执行 `make proto-init` 或手动删除符号链接后重建。
+
+```bash
+rm proto/link/base.proto
+make proto-init
+```
+
+### 2. 找不到 protoc-gen-go
+
+**问题**：执行 `buf generate` 报错找不到插件。
+
+**解决**：确保 protoc 插件已安装并在 PATH 中。
+
+```bash
+go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+```
+
+### 3. import cycle detected
+
+**问题**：Proto 文件之间存在循环引用。
+
+**解决**：重构 Proto 文件，将共享定义提取到独立的 `common.proto` 中。
+
+## 下一步
+
+<Cards>
+  <Card title="Handler 实现模式" href="/docs/bamboo-base-go/grpc-best-practices/handler-pattern" />
+  <Card title="中间件模式" href="/docs/bamboo-base-go/grpc-best-practices/middleware-pattern" />
+  <Card title="服务注册" href="/docs/bamboo-base-go/grpc-best-practices/service-registration" />
+</Cards>
