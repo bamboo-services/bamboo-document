@@ -63,6 +63,11 @@ import xUtil "github.com/xiaolfeng/bamboo-base-go/common/utility"
       type: 'func Valid() *pack.Valid',
       required: true,
     },
+    Function: {
+      description: '函数工具: 获取函数名称、解析方法名',
+      type: 'func Function() *pack.Function',
+      required: true,
+    },
   }}
 />
 
@@ -178,6 +183,7 @@ key := xUtil.Security().GenerateKey()               // "cs_a1b2c3d4..."
 <Cards>
   <Card title="请求绑定" href="/docs/bamboo-base-go/utils/binding" />
   <Card title="通用工具" href="/docs/bamboo-base-go/utils/common" />
+  <Card title="函数工具" href="/docs/bamboo-base-go/utils/function" />
   <Card title="类型解析" href="/docs/bamboo-base-go/utils/parse" />
   <Card title="字符串处理" href="/docs/bamboo-base-go/utils/string" />
   <Card title="时间处理" href="/docs/bamboo-base-go/utils/time" />

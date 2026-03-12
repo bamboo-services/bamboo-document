@@ -1,0 +1,200 @@
+---
+title: 函数工具
+description: 获取函数名称、方法名称等反射相关的工具函数
+icon: FunctionSquare
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# 函数工具
+
+`xUtil.Function()` 提供与函数反射相关的工具方法，用于获取函数名称、解析方法名等场景。
+
+```go
+import xUtil "github.com/xiaolfeng/bamboo-base-go/common/utility"
+```
+
+## 入口函数
+
+```go title="utility.go"
+// [!code highlight]
+func Function() *pack.Function
+```
+
+## 获取函数名
+
+### GetFunctionName
+
+获取函数的完整名称（包含包路径）：
+
+```go title="package/function.go"
+// [!code highlight]
+func (f *Function) GetFunctionName(fn interface{}) string
+```
+
+该方法通过反射机制获取传入函数的底层指针，并利用 `runtime.FuncForPC` 查询其运行时信息，从而返回函数的完整标识符。
+
+<TypeTable
+  type={{
+    fn: {
+      description: '待查询的函数对象',
+      type: 'interface{}',
+    },
+    '返回值': {
+      description: '函数的完整名称（例如 "main.myFunc"），如果传入参数不是函数类型或无法获取运行时函数信息，则返回空字符串',
+      type: 'string',
+    },
+  }}
+/>
+
+```go
+// [!code highlight:4]
+xUtil.Function().GetFunctionName(myFunc)        // "main.myFunc"
+xUtil.Function().GetFunctionName(http.Get)      // "net/http.Get"
+xUtil.Function().GetFunctionName(42)            // ""（非函数类型）
+xUtil.Function().GetFunctionName(nil)           // ""（nil 输入）
+```
+
+### 完整示例
+
+```go
+package main
+
+import (
+    "fmt"
+    xUtil "github.com/xiaolfeng/bamboo-base-go/common/utility"
+)
+
+func myFunction() {}
+
+func main() {
+    // [!code highlight]
+    name := xUtil.Function().GetFunctionName(myFunction)
+    fmt.Println(name)  // "main.myFunction"
+
+    // 匿名函数
+    // [!code highlight]
+    closure := func() {}
+    closureName := xUtil.Function().GetFunctionName(closure)
+    fmt.Println(closureName)  // 包含 "func" 字样的特殊格式
+}
+```
+
+## 获取方法名
+
+### GetMethodName
+
+获取方法的方法名（不包含包路径和接收者类型）：
+
+```go title="package/function.go"
+// [!code highlight]
+func (f *Function) GetMethodName(method interface{}) string
+```
+
+该方法通过反射获取传入方法的运行时信息，并对其完整名称进行解析处理。它会去除包路径、接收者类型（如 `(*Receiver)` 或 `Receiver`）以及闭包方法特有的 `-fm` 后缀，仅返回纯粹的方法名称字符串。
+
+<TypeTable
+  type={{
+    method: {
+      description: '目标方法实例（需为方法引用）',
+      type: 'interface{}',
+    },
+    '返回值': {
+      description: '解析后的方法名称',
+      type: 'string',
+    },
+  }}
+/>
+
+```go
+type UserService struct{}
+
+func (s *UserService) GetUser() {}
+func (s *UserService) DeleteUser() {}
+
+func main() {
+    service := &UserService{}
+
+    // [!code highlight:3]
+    xUtil.Function().GetMethodName(service.GetUser)     // "GetUser"
+    xUtil.Function().GetMethodName(service.DeleteUser)  // "DeleteUser"
+}
+```
+
+### 完整示例
+
+```go
+package main
+
+import (
+    "fmt"
+    xUtil "github.com/xiaolfeng/bamboo-base-go/common/utility"
+)
+
+type Handler struct{}
+
+func (h *Handler) HandleRequest()  {}
+func (h *Handler) validateInput()  {}
+
+func main() {
+    handler := &Handler{}
+
+    // [!code highlight]
+    name := xUtil.Function().GetMethodName(handler.HandleRequest)
+    fmt.Println(name)  // "HandleRequest"
+
+    // 私有方法同样适用
+    // [!code highlight]
+    privateName := xUtil.Function().GetMethodName(handler.validateInput)
+    fmt.Println(privateName)  // "validateInput"
+}
+```
+
+## 使用场景
+
+### 日志记录
+
+在日志中记录当前调用的方法名，便于调试和追踪：
+
+```go
+func (s *UserService) CreateUser(ctx *gin.Context, req *CreateUserReq) {
+    // 记录当前方法名
+    // [!code highlight]
+    methodName := xUtil.Function().GetMethodName(s.CreateUser)
+    s.logger.Info(fmt.Sprintf("[%s] 开始创建用户", methodName))
+
+    // 业务逻辑...
+}
+```
+
+### 中间件追踪
+
+在中间件中自动获取 Handler 方法名用于监控：
+
+```go
+func TraceMiddleware() gin.HandlerFunc {
+    return func(ctx *gin.Context) {
+        // 获取 Handler 方法名（需要特殊处理）
+        // [!code highlight]
+        // 可以在 Handler 中注入方法名用于追踪
+        ctx.Next()
+    }
+}
+```
+
+## 注意事项
+
+<Callout type="warn">
+  `GetMethodName` 方法不会验证传入参数是否为有效的方法，若传入非法参数可能会导致意外结果。
+</Callout>
+
+- 对于非函数类型的输入，`GetFunctionName` 会返回空字符串
+- 匿名函数（闭包）的名称格式可能因 Go 版本不同而有所差异
+- 私有方法同样可以获取名称
+
+## 下一步
+
+<Cards>
+  <Card title="类型解析" href="/docs/bamboo-base-go/utils/parse" />
+  <Card title="数据验证" href="/docs/bamboo-base-go/utils/validate" />
+</Cards>
