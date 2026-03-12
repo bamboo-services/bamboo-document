@@ -101,11 +101,14 @@ public abstract class InitSystemStartupHandler {
 @RequiredArgsConstructor
 public class SystemInit extends InitSystemStartupHandler {
 
-    // 依赖注入
+    // 依赖注入（框架提供）
     private final JdbcTemplate jdbcTemplate;
-    private final TableHandlerDAO tableDAO;
     private final MigrateHandlerDAO migrateHandlerDAO;
     private final TransactionTemplate transactionTemplate;
+    private final SqlDialectStrategyFactory strategyFactory;
+    private final UtilityBaseProperties properties;
+
+    // 依赖注入（业务 DAO）
     private final PermissionDAO permissionDAO;
     private final RoleDAO roleDAO;
     private final SystemDAO systemDAO;
@@ -120,8 +123,9 @@ public class SystemInit extends InitSystemStartupHandler {
         log.info("系统开始进行初始化");
 
         // 1. 创建算法处理器实例
-        prepare = new InitAlgorithm(jdbcTemplate, tableDAO, migrateHandlerDAO,
-                transactionTemplate, permissionDAO, roleDAO, systemDAO);
+        prepare = new InitAlgorithm(jdbcTemplate, migrateHandlerDAO,
+                transactionTemplate, strategyFactory, properties,
+                permissionDAO, roleDAO, systemDAO);
 
         // 2. 检查数据库表结构
         this.prepareDatabase();
@@ -167,10 +171,11 @@ public class InitAlgorithm extends InitPrepareAlgorithmHandler {
     private final RoleDAO roleDAO;
     private final SystemDAO systemDAO;
 
-    public InitAlgorithm(JdbcTemplate jdbcTemplate, TableHandlerDAO tableDAO,
+    public InitAlgorithm(JdbcTemplate jdbcTemplate,
             MigrateHandlerDAO migrateHandlerDAO, TransactionTemplate transactionTemplate,
+            SqlDialectStrategyFactory strategyFactory, UtilityBaseProperties properties,
             PermissionDAO permissionDAO, RoleDAO roleDAO, SystemDAO systemDAO) {
-        super(jdbcTemplate, tableDAO, migrateHandlerDAO, transactionTemplate);
+        super(jdbcTemplate, migrateHandlerDAO, transactionTemplate, strategyFactory, properties);
         this.permissionDAO = permissionDAO;
         this.roleDAO = roleDAO;
         this.systemDAO = systemDAO;
@@ -417,7 +422,7 @@ public void init() {
 系统自动创建迁移记录表，用于追踪执行状态：
 
 ```sql
-CREATE TABLE IF NOT EXISTS `t_migrate`
+CREATE TABLE IF NOT EXISTS `bamboo_migrate`
 (
     migrate_id         BIGINT UNSIGNED NOT NULL PRIMARY KEY AUTO_INCREMENT,
     migrate_name       VARCHAR(255)    NOT NULL UNIQUE COMMENT '迁移文件名',
