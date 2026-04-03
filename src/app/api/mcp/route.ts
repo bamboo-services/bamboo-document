@@ -10,8 +10,9 @@ const CORS_HEADERS: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
   'Access-Control-Allow-Headers':
-    'Content-Type, Mcp-Session-Id, MCP-Protocol-Version, Accept',
-  'Access-Control-Expose-Headers': 'Mcp-Session-Id',
+    'Content-Type, Accept, Authorization, Mcp-Session-Id, Mcp-Protocol-Version, Last-Event-Id',
+  'Access-Control-Expose-Headers':
+    'WWW-Authenticate, Mcp-Session-Id, Last-Event-Id, Mcp-Protocol-Version',
 };
 
 // ── Session Management ────────────────────────────────────────────────────────
