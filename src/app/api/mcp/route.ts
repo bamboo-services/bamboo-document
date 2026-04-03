@@ -21,7 +21,17 @@ interface Session {
   transport: WebStandardStreamableHTTPServerTransport;
 }
 
-const sessions = new Map<string, Session>();
+// Use global to ensure Map persists across hot reloads / request contexts
+declare global {
+  // eslint-disable-next-line no-var
+  var __mcpSessions: Map<string, Session> | undefined;
+}
+
+const sessions: Map<string, Session> =
+  globalThis.__mcpSessions ?? new Map<string, Session>();
+if (!globalThis.__mcpSessions) {
+  globalThis.__mcpSessions = sessions;
+}
 
 function createMcpServer(): McpServer {
   const server = new McpServer(
@@ -35,23 +45,30 @@ function createMcpServer(): McpServer {
 async function getOrCreateSession(
   sessionId: string | null,
 ): Promise<{ session: Session; isNew: boolean }> {
+  // Check for existing session
   if (sessionId && sessions.has(sessionId)) {
     return { session: sessions.get(sessionId)!, isNew: false };
   }
 
+  // Pre-generate session ID so we can store the session immediately
+  const newSessionId = crypto.randomUUID();
+
   const server = createMcpServer();
   const transport = new WebStandardStreamableHTTPServerTransport({
-    sessionIdGenerator: () => crypto.randomUUID(),
-    onsessioninitialized: (id: string) => {
-      sessions.set(id, { server, transport });
-    },
+    // Return the pre-generated ID
+    sessionIdGenerator: () => newSessionId,
     onsessionclosed: (id: string) => {
       sessions.delete(id);
     },
   });
 
   await server.connect(transport);
-  return { session: { server, transport }, isNew: true };
+
+  // Store session immediately with pre-generated ID (before handleRequest)
+  const session: Session = { server, transport };
+  sessions.set(newSessionId, session);
+
+  return { session, isNew: true };
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
