@@ -34,41 +34,13 @@ if (!globalThis.__mcpSessions) {
 }
 
 function createMcpServer(): McpServer {
-  const server = new McpServer(
-    { name: 'BambooDocument', version: '0.1.0' },
-    { capabilities: {} },
-  );
+  // Don't pass capabilities - let SDK auto-detect from registered tools
+  const server = new McpServer({
+    name: 'BambooDocument',
+    version: '0.1.0',
+  });
   registerTools(server);
   return server;
-}
-
-async function getOrCreateSession(
-  sessionId: string | null,
-): Promise<{ session: Session; isNew: boolean }> {
-  // Check for existing session
-  if (sessionId && sessions.has(sessionId)) {
-    return { session: sessions.get(sessionId)!, isNew: false };
-  }
-
-  // Pre-generate session ID so we can store the session immediately
-  const newSessionId = crypto.randomUUID();
-
-  const server = createMcpServer();
-  const transport = new WebStandardStreamableHTTPServerTransport({
-    // Return the pre-generated ID
-    sessionIdGenerator: () => newSessionId,
-    onsessionclosed: (id: string) => {
-      sessions.delete(id);
-    },
-  });
-
-  await server.connect(transport);
-
-  // Store session immediately with pre-generated ID (before handleRequest)
-  const session: Session = { server, transport };
-  sessions.set(newSessionId, session);
-
-  return { session, isNew: true };
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -94,8 +66,37 @@ export async function OPTIONS(): Promise<Response> {
 export async function POST(request: Request): Promise<Response> {
   try {
     const sessionId = request.headers.get('mcp-session-id');
-    const { session } = await getOrCreateSession(sessionId);
-    const response = await session.transport.handleRequest(request);
+
+    // Check for existing session
+    if (sessionId && sessions.has(sessionId)) {
+      const { transport } = sessions.get(sessionId)!;
+      const response = await transport.handleRequest(request);
+      return withCors(response);
+    }
+
+    // Create new session for initialize request or unknown session
+    const server = createMcpServer();
+    const transport = new WebStandardStreamableHTTPServerTransport({
+      sessionIdGenerator: () => crypto.randomUUID(),
+      onsessioninitialized: (id: string) => {
+        // Store session when initialized (called during handleRequest)
+        sessions.set(id, { server, transport });
+      },
+      onsessionclosed: (id: string) => {
+        sessions.delete(id);
+      },
+    });
+
+    await server.connect(transport);
+
+    // Process the request
+    const response = await transport.handleRequest(request);
+
+    // Also store session after handleRequest as backup (using transport.sessionId)
+    if (transport.sessionId && !sessions.has(transport.sessionId)) {
+      sessions.set(transport.sessionId, { server, transport });
+    }
+
     return withCors(response);
   } catch (error) {
     console.error('[MCP] POST error:', error);
