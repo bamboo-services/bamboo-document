@@ -8,13 +8,17 @@ export function registerTools(server: McpServer): void {
     'sector',
     {
       description: '获取所有可用的文档板块列表',
+      outputSchema: z.object({
+        sectors: z
+          .array(z.string())
+          .describe('可用板块标识列表'),
+      }),
     },
     async () => {
       const pages = source.getPages();
       const sectorSet = new Set<string>();
       for (const page of pages) {
         const segments = page.url.split('/');
-        // segments[0] = '', segments[1] = 'docs', segments[2] = sector
         if (segments.length >= 3) {
           sectorSet.add(segments[2]);
         }
@@ -24,7 +28,10 @@ export function registerTools(server: McpServer): void {
       sectors.forEach((s, i) => {
         lines.push(`${i + 1}. ${s}`);
       });
-      return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
+      return {
+        content: [{ type: 'text' as const, text: lines.join('\n') }],
+        structuredContent: { sectors },
+      };
     },
   );
 
@@ -37,11 +44,26 @@ export function registerTools(server: McpServer): void {
         sector: z.string().describe('板块内容'),
         search: z.string().optional().describe('搜索关键词'),
       },
+      outputSchema: z.object({
+        sector: z.string().describe('查询的板块标识'),
+        baseUrl: z.string().describe('文档基础地址'),
+        documents: z
+          .array(
+            z.object({
+              path: z.string().describe('文档路径'),
+              title: z.string().describe('文档标题'),
+              description: z.string().describe('文档描述'),
+            }),
+          )
+          .describe('文档列表'),
+      }),
     },
     async ({ sector, search }) => {
       const pages = source.getPages();
       const prefix = `/docs/${sector}`;
       const lines: string[] = [];
+      const docs: Array<{ path: string; title: string; description: string }> =
+        [];
       let num = 1;
 
       for (const page of pages) {
@@ -61,6 +83,7 @@ export function registerTools(server: McpServer): void {
 
         const shortPath = page.url.slice(prefix.length) || '/';
         lines.push(`${num}. [${title}](${shortPath}): ${description}`);
+        docs.push({ path: shortPath, title, description });
         num++;
       }
 
@@ -75,6 +98,11 @@ export function registerTools(server: McpServer): void {
                 : '未找到匹配的文档',
           },
         ],
+        structuredContent: {
+          sector,
+          baseUrl: 'https://doc.x-lf.com',
+          documents: docs,
+        },
       };
     },
   );
@@ -88,6 +116,13 @@ export function registerTools(server: McpServer): void {
         sector: z.string().describe('板块标识，如 bamboo-base-go'),
         path: z.string().describe('文档路径，如 /architecture'),
       },
+      outputSchema: z.object({
+        sector: z.string().describe('板块标识'),
+        path: z.string().describe('文档路径'),
+        title: z.string().describe('文档标题'),
+        url: z.string().describe('文档完整 URL'),
+        content: z.string().describe('Markdown 文档内容'),
+      }),
     },
     async ({ sector, path }) => {
       let normalizedPath = path;
@@ -104,13 +139,13 @@ export function registerTools(server: McpServer): void {
 
       if (!page) {
         return {
-          isError: true,
           content: [
             {
               type: 'text' as const,
               text: `文档不存在: ${sector}${normalizedPath}`,
             },
           ],
+          isError: true,
         };
       }
 
@@ -126,6 +161,13 @@ export function registerTools(server: McpServer): void {
           },
           { type: 'text' as const, text: content },
         ],
+        structuredContent: {
+          sector,
+          path: normalizedPath,
+          title: page.data.title ?? '',
+          url: `https://doc.x-lf.com${page.url}`,
+          content,
+        },
       };
     },
   );
@@ -136,10 +178,24 @@ export function registerTools(server: McpServer): void {
     {
       description: '在文档内容中搜索关键词，返回匹配行及上下文段落',
       inputSchema: {
-        query: z.string().describe('搜索关键词（只支持英文）'),
+        query: z.string().describe('搜索关键词'),
         sector: z.string().optional().describe('板块标识筛选'),
         path: z.string().optional().describe('路径筛选'),
       },
+      outputSchema: z.object({
+        query: z.string().describe('搜索关键词'),
+        sector: z.string().optional().describe('板块筛选'),
+        path: z.string().optional().describe('路径筛选'),
+        totalResults: z.number().describe('匹配总数'),
+        results: z.array(
+          z.object({
+            title: z.string(),
+            sector: z.string(),
+            detailPath: z.string(),
+            excerpt: z.string(),
+          }),
+        ),
+      }),
     },
     async ({ query, sector, path }) => {
       const pages = source.getPages();
@@ -215,7 +271,21 @@ export function registerTools(server: McpServer): void {
         }
       }
 
-      return { content: contents };
+      return {
+        content: contents,
+        structuredContent: {
+          query,
+          ...(sector ? { sector } : {}),
+          ...(path ? { path } : {}),
+          totalResults: results.length,
+          results: results.map((r) => ({
+            title: r.title,
+            sector: r.pageSector,
+            detailPath: r.detailPath,
+            excerpt: r.excerpt,
+          })),
+        },
+      };
     },
   );
 }
