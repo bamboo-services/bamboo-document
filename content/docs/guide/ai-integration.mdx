@@ -51,12 +51,17 @@ MCP 客户端连接配置示例：
 {
   "mcpServers": {
     "bamboo-document": {
-      "type": "streamableHttp",
+      "type": "http",
       "url": "https://doc.x-lf.com/api/mcp"
     }
   }
 }
 ```
+
+<Callout type="tip" title="type 字段说明">
+Claude Code CLI 使用 `"type": "http"` 标识 Streamable HTTP 传输。
+Claude Desktop 可能使用 `"type": "http"` 标识 Streamable HTTP 传输。
+</Callout>
 
 <Callout type="tip" title="MCP 优势">
 MCP 方式无需手动拼接 URL，AI 助手可通过工具调用自动获取所需的文档内容，是最便捷的集成方式。适用于 Claude Code、Cursor、Windsurf 等支持 MCP 的工具。
