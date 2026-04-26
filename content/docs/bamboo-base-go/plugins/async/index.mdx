@@ -1,0 +1,167 @@
+---
+title: Async 异步任务（可选）
+description: Bamboo Base 的可选异步任务执行能力
+icon: Zap
+---
+
+# Async 异步任务（可选）
+
+`bamboo-base-go` 的核心是 HTTP + 节点化初始化；Async 属于**可选扩展能力**，按需接入。
+
+适用场景：
+
+- 在 HTTP Handler 中需要执行耗时操作（如发送通知、异步计算、写日志），但不希望阻塞请求响应。
+- 在 gRPC 方法中需要启动后台任务，且主请求返回后任务继续执行。
+- 需要异步任务访问 DB、Redis 等组件，且不受父上下文取消的影响。
+
+## 快速入口
+
+<Cards>
+  <Card title="快速开始" href="/docs/bamboo-base-go/quick-start" />
+  <Card title="Cron 定时任务" href="/docs/bamboo-base-go/plugins/cron" />
+  <Card title="核心架构" href="/docs/bamboo-base-go/architecture" />
+</Cards>
+
+## 功能特性
+
+- **上下文分离**: 从请求上下文中提取组件引用，注入到独立的 goroutine 上下文中，父上下文取消不影响异步任务
+- **组件访问**: 异步任务中可通过 `xCtxUtil` 系列函数正常访问 DB、Redis、Snowflake 等组件
+- **两种关闭策略**: 支持 Cancel（强制终止）和 Wait（等待完成）
+- **Panic 恢复**: 内置 Panic 恢复机制，异步任务 Panic 不会影响主协程
+- **轻量级**: 纯工具库，无需注册到 `xMain.Runner`
+
+## 模块导入
+
+```go
+import xAsync "github.com/xiaolfeng/bamboo-base-go/plugins/async"
+```
+
+## 核心 API
+
+### Async — 发起异步任务
+
+从当前请求上下文中提取组件引用，创建独立上下文后在新 goroutine 中执行任务。
+
+```go
+func Async(parentCtx context.Context, fn func(ctx context.Context)) *Task
+```
+
+### Cancel — 强制终止
+
+取消异步任务的上下文，任务可通过 `ctx.Done()` 感知取消信号并主动退出。不阻塞等待。
+
+```go
+func Cancel(task *Task)
+```
+
+### Wait — 等待完成
+
+阻塞当前协程，直到异步任务执行完毕（正常结束或 Panic 恢复后均返回）。
+
+```go
+func Wait(task *Task)
+```
+
+## 快速示例
+
+### 在 HTTP Handler 中发起异步任务
+
+```go title="handler.go"
+package handler
+
+import (
+    "net/http"
+
+    "github.com/gin-gonic/gin"
+    xAsync   "github.com/xiaolfeng/bamboo-base-go/plugins/async"
+    xCtxUtil "github.com/xiaolfeng/bamboo-base-go/common/utility/context"
+    xResult  "github.com/xiaolfeng/bamboo-base-go/major/result"
+)
+
+func CreateUser(c *gin.Context) {
+    // ... 绑定和验证请求数据 ...
+
+    // 发起异步任务（如发送欢迎邮件）
+    xAsync.Async(c.Request.Context(), func(ctx context.Context) {
+        // 异步任务中可正常访问组件
+        db := xCtxUtil.MustGetDB(ctx)
+        rdb := xCtxUtil.MustGetRDB(ctx)
+
+        // 执行耗时操作...
+        _ = db
+        _ = rdb
+    })
+
+    xResult.Success(c, "创建成功")
+}
+```
+
+### 等待异步任务完成
+
+```go
+// 发起任务
+task := xAsync.Async(ctx, func(ctx context.Context) {
+    // 耗时操作...
+})
+
+// 主协程等待异步任务完成后再继续
+xAsync.Wait(task)
+```
+
+### 强制终止异步任务
+
+```go
+// 发起长时间运行的任务
+task := xAsync.Async(ctx, func(ctx context.Context) {
+    for {
+        select {
+        case <-ctx.Done():
+            // 收到取消信号，主动退出
+            return
+        default:
+            // 继续执行...
+        }
+    }
+})
+
+// 需要终止时调用 Cancel
+xAsync.Cancel(task)
+```
+
+## 上下文分离机制
+
+`Async` 函数内部的上下文处理流程：
+
+1. 从 `parentCtx` 提取 `RegNodeKey`（即 `ContextNodeList`，包含所有已注册组件）
+2. 创建全新的 `context.Background()` 作为基础上下文（不受父上下文取消影响）
+3. 将 `ContextNodeList` 注入新上下文的 `RegNodeKey`
+4. 包装 `context.WithCancel` 以支持 `Cancel()` 调用
+
+```
+parentCtx（请求上下文）
+  ├── RegNodeKey → ContextNodeList [DB, Redis, Snowflake, ...]
+  ├── RequestKey → "uuid-xxx"
+  └── UserStartTimeKey → time.Now()
+          │
+          │  Async() 提取 RegNodeKey
+          ▼
+asyncCtx（独立上下文）
+  ├── RegNodeKey → ContextNodeList [DB, Redis, Snowflake, ...]  ← 仅复制组件
+  └── context.WithCancel → 支持 Cancel() 调用
+```
+
+异步任务中**不复制**请求级数据（`RequestKey`、`UserStartTimeKey` 等），因为异步任务是独立的执行单元。
+
+## Task 方法
+
+| 方法 | 说明 |
+|------|------|
+| `Ctx() context.Context` | 返回任务的独立上下文 |
+| `IsDone() bool` | 检查任务是否已完成 |
+
+## 注意事项
+
+- **不阻塞 Handler**: `Async` 函数立即返回，不会等待任务完成。如需等待，请显式调用 `Wait`。
+- **组件安全**: 异步任务中获取的 DB 客户端会自动调用 `db.WithContext(ctx)`，使用的是独立的异步上下文。
+- **Panic 安全**: 异步任务中的 Panic 会被自动恢复并记录日志，不会导致应用崩溃。
+- **资源管理**: 如果不需要等待或取消，可以忽略返回的 `*Task`，任务会自动在完成后回收。
