@@ -1,4 +1,4 @@
 {
-  "title": "Cron 定时任务",
+  "title": "Cron 定时任务（可选）",
   "pages": ["index", "job", "runner"]
 }
