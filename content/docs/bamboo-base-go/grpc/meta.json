@@ -7,6 +7,12 @@
     "interceptors",
     "constants",
     "proto",
-    "result"
+    "result",
+    "---最佳实践---",
+    "proto-organization",
+    "buf-config",
+    "handler-pattern",
+    "middleware-pattern",
+    "service-registration"
   ]
 }
