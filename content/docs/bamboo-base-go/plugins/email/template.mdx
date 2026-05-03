@@ -92,14 +92,14 @@ err := emailClient.SendTemplate(ctx, &xEmail.Message{
 ```
 _base.html              ← 基础布局（页头、页脚、样式）
   └── {{template "content" .}}
-        ├── verification.html   ← 定义 "content" 块：验证码
-        ├── welcome.html        ← 定义 "content" 块：欢迎
-        └── reset_password.html ← 定义 "content" 块：重置密码
+        ├── verification.html   ← {{define "verification"}} 验证码
+        ├── welcome.html        ← {{define "welcome"}} 欢迎
+        └── reset_password.html ← {{define "reset_password"}} 重置密码
 ```
 
 - `_base.html` 提供统一的邮件外观（品牌标题、页脚声明、背景样式）
-- 每个具体模板通过 `{{define "content"}}` 定义内容块
-- 渲染时自动套用基础布局
+- 每个具体模板通过 `{{define "模板名"}}` 定义内容块，模板名须与文件名一致（不含 `.html` 后缀）
+- 渲染时通过 `Lookup` 查找指定模板，将内容注入 `base` 布局的 `"content"` 槽位后输出
 
 ## TemplateManager API
 
@@ -177,7 +177,7 @@ err := emailClient.AddTemplateDir("/path/to/custom/templates")
 在外部模板目录中创建 HTML 文件，文件名即为模板名称：
 
 ```html title="custom/templates/order_confirm.html"
-{{define "content"}}
+{{define "order_confirm"}}
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
     <tr>
         <td style="padding-bottom: 24px;">
@@ -224,7 +224,7 @@ custom/templates/
 
 - **模板名称**: 模板名称不含 `.html` 后缀和 `template/` 前缀，直接使用如 `"verification"`。
 - **`_base.html` 不可覆盖**: 基础布局模板名称为 `_base`，不会出现在 `ListTemplates` 结果中。
-- **文件格式**: 外部模板必须是 `.html` 后缀的文件，且使用 `{{define "content"}}` 定义内容块。
+- **文件格式**: 外部模板必须是 `.html` 后缀的文件，且使用 `{{define "模板名"}}` 定义内容块。`define` 名称须与文件名一致（不含 `.html` 后缀），例如 `order_confirm.html` 中应为 `{{define "order_confirm"}}`。
 - **数据传递**: `TemplateData` 支持 `map[string]any` 或自定义结构体，模板中通过 `{{.FieldName}}` 访问字段。
 
 ## 下一步
