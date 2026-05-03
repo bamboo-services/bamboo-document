@@ -344,6 +344,65 @@ orderID := xCtxUtil.MustGenerateGeneSnowflakeID(ctx.Request.Context(), xSnowflak
 func GenerateGeneSnowflakeID(ctx context.Context, gene xSnowflake.Gene) (xSnowflake.SnowflakeID, error)
 ```
 
+## 邮件客户端函数
+
+### MustGetEmailClient
+
+从上下文获取邮件客户端实例（Panic 版本）。
+
+```go title="email.go"
+// [!code highlight]
+func MustGetEmailClient(ctx context.Context) *xEmail.EmailClient
+```
+
+**注意：**
+- 如果上下文中未找到邮件客户端，会触发 `panic`
+- 若传入 `*gin.Context` 会自动转换为 `c.Request.Context()`
+
+**示例：**
+
+```go
+func SendEmail(c *gin.Context) {
+    ctx := c.Request.Context()
+    // [!code highlight]
+    emailClient := xCtxUtil.MustGetEmailClient(ctx)
+
+    err := emailClient.SendTemplate(ctx, &xEmail.Message{
+        To:       []string{"user@example.com"},
+        Subject:  "验证码",
+        Template: "verification",
+        TemplateData: map[string]string{
+            "Code":   "123456",
+            "Expire": "5 分钟",
+        },
+    })
+}
+```
+
+### GetEmailClient
+
+从上下文获取邮件客户端实例（错误返回版本）。
+
+```go title="email.go"
+// [!code highlight]
+func GetEmailClient(ctx context.Context) (*xEmail.EmailClient, *xError.Error)
+```
+
+**示例：**
+
+```go
+emailClient, err := xCtxUtil.GetEmailClient(ctx)
+if err != nil {
+    return nil, err
+}
+
+err := emailClient.Send(ctx, &xEmail.Message{
+    To:       []string{"user@example.com"},
+    Subject:  "通知",
+    TextBody: "系统通知内容",
+})
+```
+
 ## 函数一览
 
 <TypeTable
@@ -421,6 +480,16 @@ func GenerateGeneSnowflakeID(ctx context.Context, gene xSnowflake.Gene) (xSnowfl
     GenerateGeneSnowflakeID: {
       description: '生成带基因的雪花 ID（错误返回）',
       type: '(ctx context.Context, gene Gene) (SnowflakeID, error)',
+      required: true,
+    },
+    MustGetEmailClient: {
+      description: '获取邮件客户端（panic）',
+      type: '(ctx context.Context) *xEmail.EmailClient',
+      required: true,
+    },
+    GetEmailClient: {
+      description: '获取邮件客户端（错误返回）',
+      type: '(ctx context.Context) (*xEmail.EmailClient, *xError.Error)',
       required: true,
     },
   }}

@@ -1,0 +1,4 @@
+{
+  "title": "Email 邮件服务（可选）",
+  "pages": ["index", "message", "template"]
+}

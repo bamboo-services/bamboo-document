@@ -15,6 +15,7 @@ go get github.com/bamboo-services/bamboo-base-go/major
 go get github.com/bamboo-services/bamboo-base-go/common
 go get github.com/bamboo-services/bamboo-base-go/defined
 go get github.com/bamboo-services/bamboo-base-go/plugins/grpc  # 可选
+go get github.com/bamboo-services/bamboo-base-go/plugins/email # 可选
 go mod tidy
 ```
 
@@ -91,6 +92,15 @@ NOSQL_PREFIX=
 # 雪花算法配置（可选，默认自动生成）
 SNOWFLAKE_DATACENTER_ID=1
 SNOWFLAKE_NODE_ID=1
+
+# 邮件服务配置（可选）
+EMAIL_HOST=smtp.example.com
+EMAIL_PORT=587
+EMAIL_USER=your_email@example.com
+EMAIL_PASS=your_password
+EMAIL_FROM=noreply@example.com
+EMAIL_FROM_NAME=Bamboo Service
+EMAIL_TLS=starttls
 ```
 
 ## 入口文件

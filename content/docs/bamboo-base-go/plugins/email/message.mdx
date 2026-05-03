@@ -1,0 +1,208 @@
+---
+title: Message 消息定义
+description: 邮件消息结构和附件管理
+icon: FileText
+---
+
+# Message 消息定义
+
+`Message` 结构体定义了邮件的所有信息，包括收件人、主题、正文、模板和附件。
+
+## 结构体定义
+
+```go
+// Message 邮件消息
+type Message struct {
+    From         string       // 发件人地址 (可选，为空使用默认配置)
+    To           []string     // 收件人地址列表
+    Cc           []string     // 抄送列表
+    Bcc          []string     // 密送列表
+    ReplyTo      string       // 回复地址
+    Subject      string       // 邮件主题
+    TextBody     string       // 纯文本内容
+    HTMLBody     string       // HTML 内容
+    Template     string       // 模板名称 (用于 SendTemplate)
+    TemplateData any          // 模板数据
+    Attachments  []Attachment // 附件列表
+}
+```
+
+## 字段说明
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `From` | `string` | 否 | 发件人地址。为空时使用 `EMAIL_FROM` 环境变量配置的默认地址 |
+| `To` | `[]string` | 是 | 收件人地址列表，至少需要一个地址 |
+| `Cc` | `[]string` | 否 | 抄送列表 |
+| `Bcc` | `[]string` | 否 | 密送列表 |
+| `ReplyTo` | `string` | 否 | 回复地址，收件人回复邮件时使用的地址 |
+| `Subject` | `string` | 是 | 邮件主题 |
+| `TextBody` | `string` | 否 | 纯文本正文。当 `HTMLBody` 也存在时作为备选内容 |
+| `HTMLBody` | `string` | 否 | HTML 正文。优先于 `TextBody` 显示 |
+| `Template` | `string` | 条件 | 模板名称，使用 `SendTemplate` 时必填 |
+| `TemplateData` | `any` | 否 | 模板渲染数据，传递给模板引擎的变量 |
+| `Attachments` | `[]Attachment` | 否 | 附件列表 |
+
+### 正文优先级
+
+当 `HTMLBody` 和 `TextBody` 同时设置时：
+
+1. `HTMLBody` 作为主内容发送
+2. `TextBody` 作为备选内容（Alternative），邮件客户端不支持 HTML 时自动降级显示
+
+```go
+// 推荐做法：同时设置 HTML 和纯文本
+msg := &xEmail.Message{
+    To:       []string{"user@example.com"},
+    Subject:  "通知",
+    HTMLBody: "<h1>重要通知</h1><p>内容详情</p>",
+    TextBody: "重要通知\n\n内容详情",  // 备选
+}
+```
+
+## NewMessage
+
+创建空邮件消息实例。
+
+```go
+func NewMessage() *Message
+```
+
+**示例：**
+
+```go
+msg := xEmail.NewMessage()
+msg.To = []string{"user@example.com"}
+msg.Subject = "欢迎注册"
+msg.HTMLBody = "<h1>欢迎！</h1>"
+```
+
+## Attachment 附件
+
+### 结构体定义
+
+```go
+// Attachment 邮件附件
+type Attachment struct {
+    Filename    string    // 附件文件名
+    ContentType string    // MIME 类型 (如 "application/pdf")
+    Data        io.Reader // 附件数据
+}
+```
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `Filename` | `string` | 附件文件名，如 `"report.pdf"` |
+| `ContentType` | `string` | MIME 类型，如 `"application/pdf"`、`"image/png"` |
+| `Data` | `io.Reader` | 附件数据流 |
+
+### AttachFile — 从文件添加附件
+
+从文件系统读取文件并添加为附件。
+
+```go
+func (m *Message) AttachFile(filename string) error
+```
+
+**示例：**
+
+```go
+msg := xEmail.NewMessage()
+msg.To = []string{"user@example.com"}
+msg.Subject = "月度报告"
+
+// [!code highlight:2]
+// 添加文件附件
+if err := msg.AttachFile("/path/to/report.pdf"); err != nil {
+    log.Fatalf("添加附件失败: %v", err)
+}
+
+err := emailClient.Send(ctx, msg)
+```
+
+### AttachReader — 从 Reader 添加附件
+
+从 `io.Reader` 添加附件，支持链式调用。
+
+```go
+func (m *Message) AttachReader(name string, r io.Reader) *Message
+```
+
+**示例：**
+
+```go
+import "bytes"
+
+msg := xEmail.NewMessage()
+msg.To = []string{"user@example.com"}
+msg.Subject = "数据导出"
+
+// [!code highlight]
+// 从内存数据添加附件（支持链式调用）
+msg.AttachReader("data.csv", bytes.NewReader(csvData)).
+    AttachReader("summary.json", bytes.NewReader(jsonData))
+
+err := emailClient.Send(ctx, msg)
+```
+
+## 完整示例
+
+### 基本邮件
+
+```go
+msg := &xEmail.Message{
+    To:       []string{"user@example.com"},
+    Subject:  "注册确认",
+    TextBody: "您已成功注册。",
+}
+err := emailClient.Send(ctx, msg)
+```
+
+### HTML 邮件（含备选纯文本）
+
+```go
+msg := &xEmail.Message{
+    To:       []string{"user@example.com"},
+    Subject:  "订单确认",
+    HTMLBody: "<h1>订单已确认</h1><p>订单号: #12345</p>",
+    TextBody: "订单已确认\n订单号: #12345",
+}
+err := emailClient.Send(ctx, msg)
+```
+
+### 多收件人 + 抄送 + 密送
+
+```go
+msg := &xEmail.Message{
+    From:    "custom@example.com",                      // 自定义发件人
+    To:      []string{"user1@example.com", "user2@example.com"},
+    Cc:      []string{"manager@example.com"},
+    Bcc:     []string{"archive@example.com"},
+    ReplyTo: "support@example.com",
+    Subject: "项目周报",
+    HTMLBody: "<p>本周进展...</p>",
+}
+err := emailClient.Send(ctx, msg)
+```
+
+### 带附件的邮件
+
+```go
+msg := xEmail.NewMessage()
+msg.To = []string{"user@example.com"}
+msg.Subject = "发票"
+msg.HTMLBody = "<p>请查收附件中的发票。</p>"
+msg.TextBody = "请查收附件中的发票。"
+
+// 添加附件
+msg.AttachReader("invoice.pdf", bytes.NewReader(pdfData))
+
+err := emailClient.Send(ctx, msg)
+```
+
+## 下一步
+
+<Cards>
+  <Card title="Template 模板系统" href="/docs/bamboo-base-go/plugins/email/template" />
+  <Card title="邮件服务概述" href="/docs/bamboo-base-go/plugins/email" />
+</Cards>
