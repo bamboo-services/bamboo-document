@@ -11,7 +11,7 @@ import { TypeTable } from '@/components/type-table';
 `bamboo-base-go` 提供类型安全的 gRPC 元数据常量，区分 **Metadata**（请求头）和 **Trailer**（响应尾）两种语义。
 
 ```go
-import xGrpcConst "github.com/xiaolfeng/bamboo-base-go/plugins/grpc/constant"
+import xGrpcConst "github.com/bamboo-services/bamboo-base-go/plugins/grpc/constant"
 ```
 
 ## Metadata 常量
@@ -65,7 +65,7 @@ func (md Trailer) String() string
 `utility` 包提供从 gRPC 上下文中提取元数据的工具函数。
 
 ```go title="plugins/grpc/utility/grpc.go"
-import xGrpcUtil "github.com/xiaolfeng/bamboo-base-go/plugins/grpc/utility"
+import xGrpcUtil "github.com/bamboo-services/bamboo-base-go/plugins/grpc/utility"
 
 func ExtractMetadata(ctx context.Context, key xGrpcConst.Metadata) (string, *xError.Error)
 ```
@@ -102,11 +102,11 @@ func (s *Server) Handle(ctx context.Context, req *pb.Request) (*pb.Response, err
 import (
     "context"
 
-    xError "github.com/xiaolfeng/bamboo-base-go/common/error"
-    xGrpcConst "github.com/xiaolfeng/bamboo-base-go/plugins/grpc/constant"
-    xGrpcUtil "github.com/xiaolfeng/bamboo-base-go/plugins/grpc/utility"
-    xLog "github.com/xiaolfeng/bamboo-base-go/common/log"
-    xSnowflake "github.com/xiaolfeng/bamboo-base-go/common/snowflake"
+xError "github.com/bamboo-services/bamboo-base-go/common/error"
+xGrpcConst "github.com/bamboo-services/bamboo-base-go/plugins/grpc/constant"
+xGrpcUtil "github.com/bamboo-services/bamboo-base-go/plugins/grpc/utility"
+xLog "github.com/bamboo-services/bamboo-base-go/common/log"
+xSnowflake "github.com/bamboo-services/bamboo-base-go/common/snowflake"
     "google.golang.org/grpc"
 )
 

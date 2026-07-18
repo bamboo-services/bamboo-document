@@ -3,6 +3,7 @@
   "icon": "Blocks",
   "pages": [
     "init",
+    "option",
     "context",
     "result"
   ]

@@ -20,16 +20,17 @@ import xMain "github.com/bamboo-services/bamboo-base-go/major/main"
 func Runner(
     reg *xReg.Reg,
     log *xLog.LogNamedLogger,
-    routeFunc func(reg *xReg.Reg),
-    goroutineFunc ...func(ctx context.Context, option ...any),
+    opts []xOption.Option,
+    goroutineFunc ...func(ctx context.Context, extra ...any),
 )
 ```
 
 ## 功能
 
 - 从环境变量读取 `XLF_HOST` 与 `XLF_PORT` 作为监听地址，默认 `localhost:1118`。
+- 支持传入 `*xOption.Config`，自动装配缓存、数据库等内置组件
 - 自动监听 `SIGINT`/`SIGTERM`，触发优雅关闭。
-- 支持注册路由函数。
+- 支持注册路由函数（传统方式）或通过 Option 声明式注册路由
 - 支持启动多个后台协程并统一等待退出。
 - HTTP 关闭超时时间为 30 秒。
 
@@ -47,14 +48,14 @@ func Runner(
       type: '*xLog.LogNamedLogger',
       required: true,
     },
-    routeFunc: {
-      description: '路由注册函数，可为 nil',
-      type: 'func(reg *xReg.Reg)',
+    opts: {
+      description: '应用级配置选项（缓存、数据库、路由等），传入 nil 或空切片表示不启用内置实现',
+      type: '[]xOption.Option',
       required: false,
     },
     goroutineFunc: {
-      description: '后台协程函数列表，接收 context.Context',
-      type: '...func(ctx context.Context, option ...any)',
+      description: '后台协程函数列表，接收运行期上下文',
+      type: '...func(ctx context.Context, extra ...any)',
       required: false,
     },
   }}
@@ -71,6 +72,7 @@ import (
     xCtx "github.com/bamboo-services/bamboo-base-go/defined/context"
     xLog "github.com/bamboo-services/bamboo-base-go/common/log"
     xMain "github.com/bamboo-services/bamboo-base-go/major/main"
+    xOption "github.com/bamboo-services/bamboo-base-go/major/option"
     xReg "github.com/bamboo-services/bamboo-base-go/major/register"
     xRegNode "github.com/bamboo-services/bamboo-base-go/major/register/node"
 )
@@ -83,14 +85,28 @@ func main() {
 
     log := xLog.WithName(xLog.NamedMAIN)
 
-    xMain.Runner(reg, log, registerRoute)
+    // 通过 Option 声明式配置路由
+    opts := []xOption.Option{
+        xOption.WithRoute(registerRoute),
+    }
+
+    xMain.Runner(reg, log, opts)
 }
+```
+
+## 仅路由（无内置组件）
+
+```go
+opts := []xOption.Option{
+    xOption.WithRoute(registerRoute),
+}
+xMain.Runner(reg, log, opts)
 ```
 
 ## 带后台任务示例
 
 ```go
-func runConsumer(ctx context.Context, option ...any) {
+func runConsumer(ctx context.Context, extra ...any) {
     for {
         select {
         case <-ctx.Done():
@@ -103,11 +119,44 @@ func runConsumer(ctx context.Context, option ...any) {
 
 func main() {
     // ... reg, log 初始化省略
-    xMain.Runner(reg, log, registerRoute, runConsumer)
+    opts := []xOption.Option{
+        xOption.WithRoute(registerRoute),
+    }
+    xMain.Runner(reg, log, opts, runConsumer)
 }
 ```
 
 > 如需接入 gRPC（可选），请前往独立模块文档：[`gRPC 运行时`](/docs/bamboo-base-go/grpc/runner)
+
+## Option 声明式配置
+
+v1.0.1 起 Runner 接受 `[]xOption.Option`，以声明式装配内置组件：
+
+```go title="main.go"
+import (
+    xLog "github.com/bamboo-services/bamboo-base-go/common/log"
+    xMain "github.com/bamboo-services/bamboo-base-go/major/main"
+    xOption "github.com/bamboo-services/bamboo-base-go/major/option"
+    xReg "github.com/bamboo-services/bamboo-base-go/major/register"
+)
+
+func main() {
+    reg := xReg.Register(context.Background(), nil)
+    log := xLog.WithName(xLog.NamedMAIN)
+
+    // 声明式配置
+    opts := []xOption.Option{
+        xOption.WithRedis("localhost:6379"),
+        xOption.WithMySQL("user:pass@tcp(localhost:3306)/bamboo"),
+        xOption.WithRoute(registerRoute),
+    }
+
+    // Runner 根据 opts 自动装配 Redis 客户端、GORM DB 等
+    xMain.Runner(reg, log, opts)
+}
+```
+
+> nil 或空 `[]xOption.Option` 表示不启用任何内置实现，仅以 reg 现有状态启动。
 
 ## 下一步
 

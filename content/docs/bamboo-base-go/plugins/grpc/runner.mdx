@@ -23,7 +23,9 @@ func New(options ...Option) func(ctx context.Context, option ...any)
 返回值可直接传给：
 
 ```go
-xMain.Runner(reg, log, registerRoute, grpcTask)
+xMain.Runner(reg, log, []xOption.Option{
+    xOption.WithRoute(registerRoute),
+}, grpcTask)
 ```
 
 ## 常用 Option
@@ -69,6 +71,7 @@ import (
 
     xLog "github.com/bamboo-services/bamboo-base-go/common/log"
     xMain "github.com/bamboo-services/bamboo-base-go/major/main"
+    xOption "github.com/bamboo-services/bamboo-base-go/major/option"
     xReg "github.com/bamboo-services/bamboo-base-go/major/register"
 
     xGrpcIUnary "github.com/bamboo-services/bamboo-base-go/plugins/grpc/interceptor/unary"
@@ -94,7 +97,9 @@ func main() {
         ),
     )
 
-    xMain.Runner(reg, log, registerRoute, grpcTask)
+    xMain.Runner(reg, log, []xOption.Option{
+    xOption.WithRoute(registerRoute),
+}, grpcTask)
 }
 ```
 

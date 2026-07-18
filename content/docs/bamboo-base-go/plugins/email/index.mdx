@@ -92,6 +92,7 @@ import (
     xCtx "github.com/bamboo-services/bamboo-base-go/defined/context"
     xLog "github.com/bamboo-services/bamboo-base-go/common/log"
     xMain "github.com/bamboo-services/bamboo-base-go/major/main"
+    xOption "github.com/bamboo-services/bamboo-base-go/major/option"
     xReg "github.com/bamboo-services/bamboo-base-go/major/register"
     xRegNode "github.com/bamboo-services/bamboo-base-go/major/register/node"
     xEmail "github.com/bamboo-services/bamboo-base-go/plugins/email"
@@ -108,7 +109,9 @@ func main() {
     })
 
     log := xLog.WithName(xLog.NamedMAIN)
-    xMain.Runner(reg, log, route.NewRoute)
+    xMain.Runner(reg, log, []xOption.Option{
+        xOption.WithRoute(route.NewRoute),
+    })
 }
 ```
 

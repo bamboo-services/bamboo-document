@@ -35,8 +35,8 @@ icon: Timer
 
 ```go
 import (
-    xCron      "github.com/xiaolfeng/bamboo-base/plugins/cron"
-    xCronRunner "github.com/xiaolfeng/bamboo-base/plugins/cron/runner"
+    xCron      "github.com/bamboo-services/bamboo-base-go/plugins/cron"
+    xCronRunner "github.com/bamboo-services/bamboo-base-go/plugins/cron/runner"
 )
 ```
 
@@ -46,11 +46,12 @@ import (
 package main
 
 import (
-    xCron      "github.com/xiaolfeng/bamboo-base/plugins/cron"
-    xCronRunner "github.com/xiaolfeng/bamboo-base/plugins/cron/runner"
-    xLog       "github.com/xiaolfeng/bamboo-base/common/log"
-    xMain      "github.com/xiaolfeng/bamboo-base/major/main"
-    xReg       "github.com/xiaolfeng/bamboo-base/major/register"
+    xCron      "github.com/bamboo-services/bamboo-base-go/plugins/cron"
+    xCronRunner "github.com/bamboo-services/bamboo-base-go/plugins/cron/runner"
+    xLog       "github.com/bamboo-services/bamboo-base-go/common/log"
+    xMain      "github.com/bamboo-services/bamboo-base-go/major/main"
+    xOption    "github.com/bamboo-services/bamboo-base-go/major/option"
+    xReg       "github.com/bamboo-services/bamboo-base-go/major/register"
 )
 
 func main() {
@@ -75,6 +76,8 @@ func main() {
     )
 
     // 启动服务（HTTP + Cron）
-    xMain.Runner(reg, log, registerRoute, cronTask)
+    xMain.Runner(reg, log, []xOption.Option{
+        xOption.WithRoute(registerRoute),
+    }, cronTask)
 }
 ```

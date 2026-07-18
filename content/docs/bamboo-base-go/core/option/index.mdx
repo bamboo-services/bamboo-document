@@ -1,0 +1,271 @@
+---
+title: 声明式配置
+description: xOption 函数式选项模式，声明式装配缓存、数据库和路由
+icon: Settings
+---
+
+import { TypeTable } from '@/components/type-table';
+
+# xOption — 声明式配置
+
+`xOption` 基于**函数式选项模式**，让业务侧以声明式风格选择框架内置组件（缓存后端、数据库驱动、路由挂载），而非手工编写初始化节点。Runner 在启动时根据 `Config` 自动完成装配。
+
+```go
+import xOption "github.com/bamboo-services/bamboo-base-go/major/option"
+```
+
+## 设计理念
+
+传统的 `xRegNode.RegNodeList` 要求业务侧编写完整的初始化工厂函数（打开连接、拼装 DSN、注册中间件）。对于框架内置组件（缓存、数据库、路由），xOption 将这部分逻辑内化到框架层，业务侧只需描述「选哪种 + 用什么参数」。
+
+```
+注册节点模式                  Option 模式
+─────────────                ───────────
+xReg.Register(ctx, nodeList)  xOption.Apply(...)
+  └── 用户手写 InitXxx         └── WithRedis("localhost:6379")
+                                  └── WithMySQL("user:pass@tcp(...)/db")
+                                  └── WithRoute(routeFunc)
+```
+
+## 核心类型
+
+### Option & Config
+
+```go
+// Option 是应用级配置选项的函数签名
+type Option func(*Config)
+
+// Config 是应用运行期配置的聚合体
+type Config struct {
+    // 私有字段，通过 getter 暴露只读视图
+}
+
+func (c *Config) Cache()    CacheConfig          // 缓存配置
+func (c *Config) Database() xOptionDB.Config     // 数据库配置
+func (c *Config) Routes()   []RouteRegistrar     // 路由注册器列表
+```
+
+### Apply
+
+将 Option 列表逐个应用到 Config，nil 选项自动跳过。
+
+```go
+func Apply(opts ...Option) *Config
+```
+
+## 缓存配置
+
+<TypeTable
+  type={{
+    'WithRedis': {
+      description: '配置 Redis 作为缓存后端，addr 为 host:port',
+      type: 'func(addr string, opts ...RedisOption) Option',
+      required: false,
+    },
+    'WithMemory': {
+      description: '配置程序内内存作为缓存后端',
+      type: 'func(opts ...MemoryOption) Option',
+      required: false,
+    },
+    'WithCacheType': {
+      description: '显式指定缓存类型（通常不需要手动调用）',
+      type: 'func(t CacheType) Option',
+      required: false,
+    },
+  }}
+/>
+
+### Redis 子选项
+
+| 选项 | 类型 | 说明 |
+|------|------|------|
+| `WithRedisUsername(u)` | `RedisOption` | ACL 用户名 |
+| `WithRedisPassword(p)` | `RedisOption` | 密码 |
+| `WithRedisDB(db)` | `RedisOption` | 数据库序号 |
+| `WithRedisPoolSize(n)` | `RedisOption` | 连接池大小 |
+| `WithRedisMinIdleConns(n)` | `RedisOption` | 最小空闲连接数 |
+| `WithRedisDialTimeout(d)` | `RedisOption` | 连接建立超时 |
+| `WithRedisReadTimeout(d)` | `RedisOption` | 读操作超时 |
+| `WithRedisWriteTimeout(d)` | `RedisOption` | 写操作超时 |
+
+### Memory 子选项
+
+| 选项 | 类型 | 说明 |
+|------|------|------|
+| `WithMemoryDefaultTTL(d)` | `MemoryOption` | 默认过期时间 |
+| `WithMemoryMaxEntries(n)` | `MemoryOption` | 最大条目数 |
+| `WithMemoryShardCount(n)` | `MemoryOption` | 分片数（提升并发） |
+
+## 数据库配置
+
+<TypeTable
+  type={{
+    'WithMySQL': {
+      description: '配置 MySQL，dsn 为连接字符串',
+      type: 'func(dsn string, opts ...CommonOption) Option',
+      required: false,
+    },
+    'WithPostgres': {
+      description: '配置 PostgreSQL，dsn 为连接字符串',
+      type: 'func(dsn string, opts ...CommonOption) Option',
+      required: false,
+    },
+    'WithSQLite': {
+      description: '配置 SQLite，dsn 为文件路径或 :memory:',
+      type: 'func(dsn string, opts ...CommonOption) Option',
+      required: false,
+    },
+    'WithDatabaseFromEnv': {
+      description: '从环境变量自动装配（读取 DATABASE_DRIVER 等），未启用时返回 nil',
+      type: 'func(opts ...CommonOption) Option',
+      required: false,
+    },
+  }}
+/>
+
+## 路由配置
+
+<TypeTable
+  type={{
+    'WithRoute': {
+      description: '注册路由函数，多次调用叠加执行',
+      type: 'func(r RouteRegistrar) Option',
+      required: false,
+    },
+    'WithRouteGroup': {
+      description: '注册带前缀的路由组（自动调用 serve.Group）',
+      type: 'func(prefix string, r func(rg *gin.RouterGroup)) Option',
+      required: false,
+    },
+  }}
+/>
+
+```go
+// RouteRegistrar 接收 Gin 引擎进行路由挂载
+type RouteRegistrar func(serve *gin.Engine)
+```
+
+## 使用示例
+
+### 完整配置
+
+```go title="main.go"
+package main
+
+import (
+    "context"
+    "time"
+
+    xLog "github.com/bamboo-services/bamboo-base-go/common/log"
+    xMain "github.com/bamboo-services/bamboo-base-go/major/main"
+    xOption "github.com/bamboo-services/bamboo-base-go/major/option"
+    xReg "github.com/bamboo-services/bamboo-base-go/major/register"
+)
+
+func main() {
+    reg := xReg.Register(context.Background(), nil)
+    log := xLog.WithName(xLog.NamedMAIN)
+
+    // 声明式配置：选择组件实现
+    opts := []xOption.Option{
+        // 缓存：使用 Redis
+        xOption.WithRedis("localhost:6379",
+            xOption.WithRedisPassword("xxx"),
+            xOption.WithRedisDB(0),
+        ),
+        // 数据库：MySQL
+        xOption.WithMySQL("user:pass@tcp(localhost:3306)/bamboo?charset=utf8mb4&parseTime=True"),
+        // 路由
+        xOption.WithRoute(func(serve *gin.Engine) {
+            serve.GET("/ping", func(c *gin.Context) {
+                c.String(200, "pong")
+            })
+        }),
+    }
+
+    // Runner 根据 opts 自动装配 Redis 客户端、GORM DB 等
+    xMain.Runner(reg, log, opts)
+
+    // 也支持传入后台协程函数
+    // xMain.Runner(reg, log, opts, goroutineFunc)
+}
+```
+
+### 仅缓存 + Memory 后端
+
+```go
+opts := []xOption.Option{
+    xOption.WithMemory(
+        xOption.WithMemoryDefaultTTL(10*time.Minute),
+        xOption.WithMemoryMaxEntries(10000),
+    ),
+    xOption.WithRoute(func(serve *gin.Engine) {
+        serve.GET("/ping", func(c *gin.Context) {
+            c.JSON(200, gin.H{"message": "pong"})
+        })
+    }),
+}
+
+xMain.Runner(reg, log, opts)
+```
+
+### 从环境变量装配数据库
+
+```go
+opts := []xOption.Option{
+    xOption.WithDatabaseFromEnv(), // 读取 DATABASE_DRIVER/DATABASE_HOST/... 等
+    xOption.WithRoute(routeFunc),
+}
+
+xMain.Runner(reg, log, opts)
+```
+
+### 条件构造
+
+nil Option 被自动跳过，可安全用于条件分支：
+
+```go
+var opts []xOption.Option
+
+if useRedis {
+    opts = append(opts, xOption.WithRedis("localhost:6379"))
+} else {
+    opts = append(opts, xOption.WithMemory())
+}
+
+opts = append(opts, xOption.WithRoute(routeFunc))
+
+xMain.Runner(reg, log, opts)
+```
+
+## 与注册节点模式的关系
+
+xOption 是注册节点模式的**补充**，而非替代。两者可以共存：
+
+| 场景 | 推荐方式 |
+|------|----------|
+| 框架内置组件（缓存、数据库、路由） | xOption |
+| 自定义初始化逻辑（第三方 SDK、业务启动） | xRegNode |
+| 需要访问前序节点结果 | xRegNode（节点化注入） |
+
+```go
+// 混合模式：内置组件用 Option，自定义逻辑用节点
+reg := xReg.Register(ctx, []xRegNode.RegNodeList{
+    {Key: xCtx.CustomClientKey, Node: initCustomSDK},
+})
+
+opts := []xOption.Option{
+    xOption.WithRedis("localhost:6379"),
+    xOption.WithRoute(routeFunc),
+}
+
+xMain.Runner(reg, log, opts)
+```
+
+## 下一步
+
+<Cards>
+  <Card title="缓存系统" href="/docs/bamboo-base-go/components/cache" />
+  <Card title="服务运行时" href="/docs/bamboo-base-go/core/init/runner" />
+  <Card title="节点初始化" href="/docs/bamboo-base-go/core/init" />
+</Cards>

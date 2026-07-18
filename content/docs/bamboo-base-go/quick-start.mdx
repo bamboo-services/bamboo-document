@@ -14,10 +14,14 @@ icon: Zap
 go get github.com/bamboo-services/bamboo-base-go/major
 go get github.com/bamboo-services/bamboo-base-go/common
 go get github.com/bamboo-services/bamboo-base-go/defined
-go get github.com/bamboo-services/bamboo-base-go/plugins/grpc  # 可选
-go get github.com/bamboo-services/bamboo-base-go/plugins/email # 可选
+go get github.com/bamboo-services/bamboo-base-go/plugins/grpc   # 可选
+go get github.com/bamboo-services/bamboo-base-go/plugins/async  # 可选
+go get github.com/bamboo-services/bamboo-base-go/plugins/cron   # 可选
+go get github.com/bamboo-services/bamboo-base-go/plugins/email  # 可选
 go mod tidy
 ```
+
+> 亦可使用 **声明式配置**（`xOption`）替代手动节点注册，简化内置组件装配。详见 [声明式配置](/docs/bamboo-base-go/core/option)。
 
 ## 工具链与命令（接入方 vs 维护方）
 
@@ -114,6 +118,7 @@ import (
     xCtx "github.com/bamboo-services/bamboo-base-go/defined/context"
     xLog "github.com/bamboo-services/bamboo-base-go/common/log"
     xMain "github.com/bamboo-services/bamboo-base-go/major/main"
+    xOption "github.com/bamboo-services/bamboo-base-go/major/option"
     xReg "github.com/bamboo-services/bamboo-base-go/major/register"
     xRegNode "github.com/bamboo-services/bamboo-base-go/major/register/node"
     "your-project/internal/app/startup"
@@ -131,7 +136,9 @@ func main() {
     log := xLog.WithName(xLog.NamedMAIN)
 
     // 2. 交由 Runner 托管服务生命周期（路由注册 + 启动 + 优雅关闭）
-    xMain.Runner(reg, log, route.NewRoute)
+    xMain.Runner(reg, log, []xOption.Option{
+        xOption.WithRoute(route.NewRoute),
+    })
 }
 ```
 
@@ -163,7 +170,9 @@ grpcTask := xGrpcRunner.New(
     ),
 )
 
-xMain.Runner(reg, log, route.NewRoute, grpcTask)
+xMain.Runner(reg, log, []xOption.Option{
+    xOption.WithRoute(route.NewRoute),
+}, grpcTask)
 ```
 
 完整说明参见：[gRPC 运行时](/docs/bamboo-base-go/grpc/runner)

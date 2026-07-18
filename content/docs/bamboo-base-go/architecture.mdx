@@ -12,7 +12,7 @@ import { TypeTable } from '@/components/type-table';
 
 **模块名称**: `github.com/bamboo-services/bamboo-base-go`
 
-**Go 版本**: 1.24+
+**Go 版本**: 1.25+
 
 **项目定位**: Go 语言基础框架库，为 Bamboo 服务提供核心功能支持，包括日志、错误处理、雪花算法 ID 生成、验证器、中间件等基础设施。
 
@@ -35,25 +35,36 @@ github.com/bamboo-services/bamboo-base-go/
 │   └── validator/              #   验证器 (xVaild)
 │
 ├── major/                      # 🚀 主框架层 — 依赖 Gin 的核心组件
-│   ├── cache/                  #   缓存抽象 (xCache)
+│   ├── cache/                  #   泛型缓存系统 (xCache) — Redis / Memory 双后端
+│   │   ├── driver/             #     缓存接口定义与类型
+│   │   ├── redis/              #     Redis 后端实现
+│   │   └── memory/             #     Memory 后端实现
 │   ├── helper/                 #   核心中间件 (xHelper)
 │   ├── hook/                   #   钩子函数 (xHook)
-│   ├── http/                   #   HTTP 常量 (xHttp)
 │   ├── main/                   #   服务运行时 (xMain)
 │   ├── middleware/             #   业务中间件 (xMiddle)
 │   ├── models/                 #   数据模型基类 (xModels)
+│   ├── option/                 #   声明式配置 (xOption)
+│   │   └── database/           #     数据库选项配置
 │   ├── register/               #   应用注册和初始化 (xReg)
+│   │   ├── init/               #     内置初始化节点
+│   │   └── node/               #     节点管理器
 │   ├── result/                 #   响应结果处理 (xResult)
-│   └── route/                  #   路由处理 (xRoute)
+│   ├── route/                  #   路由处理 (xRoute)
+│   └── utility/                #   请求绑定与上下文提取 (xUtil)
 │
 └── plugins/                    # 🔌 插件层 — 可选扩展
-    └── grpc/                   #   gRPC 支持
-        ├── constant/           #     gRPC 常量
-        ├── generate/           #     Proto 生成辅助
-        ├── interceptor/        #     拦截器
-        ├── middleware/         #     gRPC 中间件
-        ├── result/             #     gRPC 响应处理
-        └── runner/             #     gRPC 运行时
+    ├── grpc/                   #   gRPC 支持
+    │   ├── constant/           #     gRPC 常量
+    │   ├── generate/           #     Proto 生成辅助
+    │   ├── interceptor/        #     拦截器
+    │   ├── middleware/         #     gRPC 中间件
+    │   ├── result/             #     gRPC 响应处理
+    │   └── runner/             #     gRPC 运行时
+    ├── async/                  #   异步任务执行 (xAsync)
+    ├── cron/                   #   定时任务 (xCron)
+    │   └── runner/             #     Cron 运行时
+    └── email/                  #   邮件服务 (xEmail)
 ```
 
 ## 包导入别名
@@ -131,6 +142,11 @@ github.com/bamboo-services/bamboo-base-go/
       type: '.../major/main',
       required: true,
     },
+    'xOption': {
+      description: '声明式配置选项（缓存、数据库、路由等）',
+      type: '.../major/option',
+      required: false,
+    },
     'xHelper': {
       description: '核心中间件（请求上下文、Panic 恢复、HTTP 日志）',
       type: '.../major/helper',
@@ -157,18 +173,18 @@ github.com/bamboo-services/bamboo-base-go/
       required: true,
     },
     'xCache': {
-      description: '缓存抽象',
+      description: '泛型缓存系统，Redis / Memory 双后端',
       type: '.../major/cache',
-      required: true,
+      required: false,
     },
     'xHook': {
       description: 'Redis 钩子，自动添加键前缀',
       type: '.../major/hook',
-      required: true,
+      required: false,
     },
-    'xHttp': {
-      description: 'HTTP 相关常量（请求头等）',
-      type: '.../major/http',
+    'xUtil': {
+      description: '请求参数绑定与上下文组件提取',
+      type: '.../major/utility',
       required: true,
     },
   }}
@@ -186,6 +202,21 @@ github.com/bamboo-services/bamboo-base-go/
     'xGrpcInterface': {
       description: 'gRPC 拦截器',
       type: '.../plugins/grpc/interceptor',
+      required: false,
+    },
+    'xAsync': {
+      description: '异步任务执行器，支持链路追踪',
+      type: '.../plugins/async',
+      required: false,
+    },
+    'xCronRunner': {
+      description: '定时任务运行时',
+      type: '.../plugins/cron/runner',
+      required: false,
+    },
+    'xEmail': {
+      description: '邮件发送客户端',
+      type: '.../plugins/email',
       required: false,
     },
   }}
@@ -212,14 +243,20 @@ graph TD
 
     subgraph major[major 层]
         xReg[xReg<br/>注册中心]
+        xOption[xOption<br/>声明式配置]
         xResult[xResult<br/>响应处理]
         xModels[xModels<br/>数据模型]
+        xCache[xCache<br/>缓存系统]
         xHelper[xHelper<br/>核心中间件]
         xMain[xMain<br/>运行时]
+        xUtil[xUtil<br/>请求绑定]
     end
 
     subgraph plugins[plugins 层]
         xGrpc[xGrpc<br/>gRPC 扩展]
+        xAsync[xAsync<br/>异步任务]
+        xCron[xCron<br/>定时任务]
+        xEmail[xEmail<br/>邮件服务]
     end
 
     xBase --> xError
@@ -230,13 +267,23 @@ graph TD
     xReg --> xSnowflake
     xReg --> xHelper
     xReg --> xVaild
+    xOption --> xCache
+    xOption --> xMain
     xResult --> xBase
     xResult --> xError
     xModels --> xSnowflake
+    xCache --> xLog
     xMain --> xReg
+    xMain --> xOption
+    xMain --> xModels
 
     xGrpc --> xLog
-    xGrpc --> xError"
+    xGrpc --> xError
+    xAsync --> xLog
+    xAsync --> xCtxUtil
+    xCron --> xLog
+    xCron --> xSnowflake
+    xEmail --> xLog"
 />
 
 ## 初始化流程
@@ -277,11 +324,14 @@ func main() {
 
 | 依赖 | 版本 | 用途 |
 |------|------|------|
-| `gin-gonic/gin` | v1.10+ | Web 框架 |
+| `gin-gonic/gin` | v1.12+ | Web 框架 |
 | `go-playground/validator` | v10.30+ | 验证器 |
 | `joho/godotenv` | v1.5+ | 环境变量加载 |
-| `redis/go-redis` | v9.14+ | Redis 客户端 |
-| `gorm.io/gorm` | v1.30+ | ORM 框架 |
+| `redis/go-redis` | v9.21+ | Redis 客户端 |
+| `gorm.io/gorm` | v1.31+ | ORM 框架 |
+| `wneessen/go-mail` | v0.6+ | 邮件发送 |
+| `robfig/cron/v3` | v3.0+ | 定时任务 |
+| `google.golang.org/grpc` | v1.82+ | gRPC 框架 |
 
 ## 设计原则
 
@@ -290,6 +340,7 @@ func main() {
 3. **统一命名** - 所有包使用 `x` 前缀别名，便于识别
 4. **约定优于配置** - 提供合理的默认值，减少配置负担
 5. **链路追踪** - 请求 ID 贯穿整个请求生命周期
+6. **后端可切换** - 缓存等组件支持 Redis / Memory 双后端，零代码切换
 
 ## 下一步
 

@@ -93,6 +93,7 @@ import (
     xCtx "github.com/bamboo-services/bamboo-base-go/defined/context"
     xLog "github.com/bamboo-services/bamboo-base-go/common/log"
     xMain "github.com/bamboo-services/bamboo-base-go/major/main"
+    xOption "github.com/bamboo-services/bamboo-base-go/major/option"
     xReg "github.com/bamboo-services/bamboo-base-go/major/register"
     xRegNode "github.com/bamboo-services/bamboo-base-go/major/register/node"
     "github.com/gin-gonic/gin"
@@ -109,10 +110,12 @@ func main() {
     })
 
     log := xLog.WithName(xLog.NamedMAIN)
-    xMain.Runner(reg, log, func(reg *xReg.Reg) {
-        reg.Serve.GET("/ping", func(c *gin.Context) {
-            c.String(200, "pong")
-        })
+    xMain.Runner(reg, log, []xOption.Option{
+        xOption.WithRoute(func(serve *gin.Engine) {
+            serve.GET("/ping", func(c *gin.Context) {
+                c.String(http.StatusOK, "pong")
+            })
+        }),
     })
 }
 

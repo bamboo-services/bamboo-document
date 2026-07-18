@@ -1,6 +1,6 @@
 ---
 title: 概述
-description: xCache 提供基于 Redis 的多种数据结构缓存接口
+description: xCache 基于 Manager 的泛型缓存系统，支持 Redis / Memory 双后端
 icon: Database
 ---
 
@@ -8,166 +8,289 @@ import { TypeTable } from '@/components/type-table';
 
 # 缓存
 
-`xCache` 基于 Redis 提供了四种常用数据结构的缓存接口，支持泛型操作，适用于各种缓存场景。
+`xCache` 是泛型缓存系统，通过 **Manager** 统一门面支持 **Redis** 和 **Memory** 两种后端，提供类型安全的 KeyCache / HashCache / SetCache / ListCache 四种接口。切换后端只需更换一个 `option`，无需修改业务代码。
 
 ```go
 import xCache "github.com/bamboo-services/bamboo-base-go/major/cache"
 ```
 
-## 核心结构
+## 双后端架构
 
 <TypeTable
   type={{
-    Cache: {
-      description: 'Redis 客户端封装，管理连接和 TTL',
-      type: 'struct',
-      required: true,
+    'CacheTypeRedis': {
+      description: 'Redis 后端 — 分布式与跨进程共享场景，通过 go-redis 操作',
+      type: 'const',
+      required: false,
+    },
+    'CacheTypeMemory': {
+      description: 'Memory 后端 — 单实例或可接受最终一致性的场景，进程内存储',
+      type: 'const',
+      required: false,
+    },
+    'CacheTypeNone': {
+      description: '不启用内置缓存 — 业务侧自行注册自定义实现',
+      type: 'const',
+      required: false,
     },
   }}
 />
 
-### Cache 结构体
+## 核心结构 — Manager
+
+`Manager` 是业务访问缓存的**唯一入口**。它持有底层后端实例，通过 `KeyCacheOf` / `HashCacheOf` / `SetCacheOf` / `ListCacheOf` 四个泛型工厂方法返回对应后端的接口实现。
 
 ```go
-type Cache struct {
-    RDB *redis.Client  // Redis 客户端
-    TTL time.Duration  // 默认过期时间
+type Manager struct {
+    // 私有字段，通过 getter 访问
 }
+
+// Getter 方法
+func (m *Manager) Type() CacheType                // 当前后端类型
+func (m *Manager) Redis() *redis.Client           // Redis 客户端（仅 Redis 后端非 nil）
+func (m *Manager) Memory() *xCacheMemory.Store    // Memory 存储（仅 Memory 后端非 nil）
+func (m *Manager) TTL() time.Duration             // 默认过期时间
+func (m *Manager) Codec() Codec                   // 当前序列化器
+func (m *Manager) Logo(*xLog.LogNamedLogger)      // 日志器
 ```
 
-## 缓存接口
+### ManagerOption 选项
+
+创建 Manager 时传入函数式选项，控制后端实例、TTL 和序列化器：
 
 <TypeTable
   type={{
-    KeyCache: {
-      description: '键值对缓存，适用于单一对象存储',
-      type: 'interface[K, V]',
+    'WithRedisClient': {
+      description: '注入 Redis 客户端，kind 自动置为 CacheTypeRedis',
+      type: 'ManagerOption',
       required: false,
     },
-    HashCache: {
-      description: '哈希缓存，适用于对象属性存储',
-      type: 'interface[K, F, V]',
+    'WithMemoryStore': {
+      description: '注入内存存储实例，kind 自动置为 CacheTypeMemory',
+      type: 'ManagerOption',
       required: false,
     },
-    SetCache: {
-      description: '集合缓存，适用于标签、权限等去重数据',
-      type: 'interface[K, V]',
+    'WithManagerTTL': {
+      description: '设置默认过期时间，所有未显式指定 TTL 的写入使用此值',
+      type: 'ManagerOption',
       required: false,
     },
-    ListCache: {
-      description: '列表缓存，适用于队列、栈等有序数据',
-      type: 'interface[K, V]',
+    'WithCodec': {
+      description: '设置序列化器，默认 JSONCodec',
+      type: 'ManagerOption',
+      required: false,
+    },
+    'WithKeyEncoder': {
+      description: '设置键编码器，默认 DefaultKeyEncoder',
+      type: 'ManagerOption',
+      required: false,
+    },
+    'WithLogger': {
+      description: '设置命名日志器，用于缓存操作的调试与错误日志',
+      type: 'ManagerOption',
       required: false,
     },
   }}
 />
 
-## 快速使用
+## 初始化
 
-### 初始化缓存
+### Redis 后端
 
-```go title="main.go"
+```go
 import (
     "time"
-    "github.com/redis/go-redis/v9"
+
     xCache "github.com/bamboo-services/bamboo-base-go/major/cache"
+    "github.com/redis/go-redis/v9"
 )
 
-func main() {
-    // [!code highlight:5]
-    // 创建 Redis 客户端
-    rdb := redis.NewClient(&redis.Options{
-        Addr: "localhost:6379",
-        DB:   0,
-    })
+rdb := redis.NewClient(&redis.Options{
+    Addr: "localhost:6379",
+    DB:   0,
+})
 
-    // [!code highlight:4]
-    // 初始化缓存实例
-    cache := &xCache.Cache{
-        RDB: rdb,
-        TTL: 24 * time.Hour, // 默认 24 小时过期
-    }
-}
+// 初始化缓存管理器 — 使用 Redis 后端
+manager := xCache.NewManager(xCache.CacheTypeRedis,
+    xCache.WithRedisClient(rdb),
+    xCache.WithManagerTTL(24*time.Hour),
+)
+
+// 从 Manager 获取 KeyCache 实现
+kc := xCache.KeyCacheOf[string, User](manager)
 ```
 
-### 使用键值对缓存
+### Memory 后端
 
-```go title="service/user.go"
-type UserCache struct {
-    *xCache.Cache
-}
+```go
+import (
+    xCache "github.com/bamboo-services/bamboo-base-go/major/cache"
+    xCacheMemory "github.com/bamboo-services/bamboo-base-go/major/cache/memory"
+)
 
-// 实现 KeyCache 接口
-func (c *UserCache) Get(ctx context.Context, userID string) (*User, bool, error) {
-    // 实现获取逻辑
-}
+// 创建内存存储，参数为清理间隔
+store := xCacheMemory.NewStore(5 * time.Minute)
 
-func (c *UserCache) Set(ctx context.Context, userID string, user *User) error {
-    // 实现设置逻辑
-}
+// 初始化缓存管理器 — 使用 Memory 后端
+manager := xCache.NewManager(xCache.CacheTypeMemory,
+    xCache.WithMemoryStore(store),
+    xCache.WithManagerTTL(10*time.Minute),
+)
+
+kc := xCache.KeyCacheOf[string, User](manager)
+```
+
+> 生产环境建议通过 **Option 声明式配置** 自动装配 Manager。详见 [声明式配置](/docs/bamboo-base-go/core/option)。
+
+## 工厂方法
+
+由于 Go 不允许接口/方法带类型参数，`KeyCacheOf` / `HashCacheOf` / `SetCacheOf` / `ListCacheOf` 作为包级泛型函数，根据 `Manager.Type()` 分发给对应后端实现。
+
+<TypeTable
+  type={{
+    'KeyCacheOf[K, V]': {
+      description: '创建或获取 KeyCache 实现。K=业务键类型，V=值类型',
+      type: 'func(m *Manager) KeyCache[K, V]',
+      required: false,
+    },
+    'HashCacheOf[K, F, V, S]': {
+      description: '创建或获取 HashCache 实现。K=哈希键，F=字段(comparable)，V=字段值，S=结构体',
+      type: 'func(m *Manager) HashCache[K, F, V, S]',
+      required: false,
+    },
+    'SetCacheOf[K, V]': {
+      description: '创建或获取 SetCache 实现。K=键类型，V=元素类型',
+      type: 'func(m *Manager) SetCache[K, V]',
+      required: false,
+    },
+    'ListCacheOf[K, V]': {
+      description: '创建或获取 ListCache 实现。K=键类型，V=元素类型',
+      type: 'func(m *Manager) ListCache[K, V]',
+      required: false,
+    },
+  }}
+/>
+
+## 缓存接口类型（Driver 层）
+
+`xCache` 通过 `type alias` 将 `driver` 包的接口类型重新导出，保持向后兼容：
+
+```go
+type (
+    KeyCache[K, V] = xCacheDriver.KeyCache[K, V]
+    HashCache[K, F, V, S] = xCacheDriver.HashCache[K, F, V, S]
+    SetCache[K, V] = xCacheDriver.SetCache[K, V]
+    ListCache[K, V] = xCacheDriver.ListCache[K, V]
+    Codec = xCacheDriver.Codec
+    JSONCodec = xCacheDriver.JSONCodec
+    KeyEncoder = xCacheDriver.KeyEncoder
+)
 ```
 
 ## 使用场景
 
-### KeyCache - 键值对缓存
+### KeyCache — 键值对缓存
 
-适用于存储单一对象：
-- 用户信息缓存
-- 配置项缓存
-- Token 缓存
+适用于存储单一对象：用户信息、配置项、Token 缓存。
 
-### HashCache - 哈希缓存
+```go
+kc := xCache.KeyCacheOf[string, User](manager)
 
-适用于存储对象属性：
-- 用户配置（多个字段）
-- 商品详情（价格、库存等）
-- 会话数据
+// 写入
+_ = kc.Set(ctx, "user:123", &User{Name: "筱锋"})
 
-### SetCache - 集合缓存
+// 读取
+user, ok, err := kc.Get(ctx, "user:123")
+```
 
-适用于存储唯一元素：
-- 用户标签
-- 权限列表
-- 在线用户集合
+### HashCache — 哈希缓存
 
-### ListCache - 列表缓存
+适用于对象属性存储：用户配置、商品详情、会话数据。
 
-适用于存储有序数据：
-- 消息队列
-- 操作历史
-- 排行榜
+```go
+hc := xCache.HashCacheOf[string, string, int, UserConfig](manager)
+
+// 设置字段
+_ = hc.HSet(ctx, "config:123", "theme", 1)
+_ = hc.HSet(ctx, "config:123", "lang", 2)
+
+// 获取字段
+theme, ok, err := hc.HGet(ctx, "config:123", "theme")
+```
+
+### SetCache — 集合缓存
+
+适用于去重数据：用户标签、权限列表、在线用户集合。
+
+```go
+sc := xCache.SetCacheOf[string, string](manager)
+
+// 添加成员
+_ = sc.SAdd(ctx, "tags:123", "gopher", "opensource")
+
+// 检查成员
+isMember, err := sc.SIsMember(ctx, "tags:123", "gopher")
+```
+
+### ListCache — 列表缓存
+
+适用于有序数据：消息队列、操作历史、排行榜。
+
+```go
+lc := xCache.ListCacheOf[string, string](manager)
+
+// 左侧推入
+_ = lc.LPush(ctx, "queue:task", "task-1", "task-2")
+
+// 右侧弹出
+val, ok, err := lc.RPop(ctx, "queue:task")
+```
+
+## 自定义序列化器
+
+默认使用 `JSONCodec`。可通过 `WithCodec` 替换为自定义实现：
+
+```go
+// 实现 xCache.Codec 接口
+type GobCodec struct{}
+
+func (g GobCodec) Marshal(v any) ([]byte, error) { /* ... */ }
+func (g GobCodec) Unmarshal(data []byte, v any) error { /* ... */ }
+
+manager := xCache.NewManager(xCache.CacheTypeRedis,
+    xCache.WithRedisClient(rdb),
+    xCache.WithCodec(GobCodec{}),
+)
+```
+
+## 资源释放
+
+```go
+// 应用退出时释放资源（Memory 后端会停止 janitor goroutine）
+defer manager.Close()
+
+// 可安全多次调用（内部 sync.Once 保护）
+manager.Close()
+```
 
 ## 设计特点
 
-### 泛型支持
+### 后端透明
 
-所有接口都支持泛型，提供类型安全：
+业务代码无感后端差异。`KeyCacheOf` / `SetCacheOf` 等接口在 Redis 和 Memory 下行为一致，切换只需改一行初始化参数。
+
+### 泛型类型安全
+
+所有接口支持 Go 泛型，编译期保证键值类型正确：
 
 ```go
-// 字符串键，User 值
-type UserCache interface {
-    xCache.KeyCache[string, User]
-}
-
-// 字符串键，字符串字段，配置值
-type ConfigCache interface {
-    xCache.HashCache[string, string, ConfigValue]
-}
+kc := xCache.KeyCacheOf[string, User](manager)
+// kc.Set(ctx, 123, ...) // 编译错误：键类型必须是 string
 ```
 
-### 统一上下文
+### 统一日志
 
-所有方法都接受 `*gin.Context`，便于：
-- 请求追踪
-- 日志记录
-- 超时控制
-
-### 灵活的键类型
-
-键类型支持任意类型（`any`），可以使用：
-- 字符串：`"user:123"`
-- 结构体：`UserKey{ID: 123}`
-- 自定义类型：`type CacheKey string`
+通过 `WithLogger` 注入 `xLog` 命名日志器，缓存操作自动记录调试与错误信息。
 
 ## 下一步
 
@@ -176,4 +299,5 @@ type ConfigCache interface {
   <Card title="HashCache" href="/docs/bamboo-base-go/components/cache/hash-cache" />
   <Card title="SetCache" href="/docs/bamboo-base-go/components/cache/set-cache" />
   <Card title="ListCache" href="/docs/bamboo-base-go/components/cache/list-cache" />
+  <Card title="声明式配置" href="/docs/bamboo-base-go/core/option" />
 </Cards>

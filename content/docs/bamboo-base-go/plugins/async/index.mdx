@@ -24,16 +24,18 @@ icon: Zap
 
 ## 功能特性
 
-- **上下文分离**: 从请求上下文中提取组件引用，注入到独立的 goroutine 上下文中，父上下文取消不影响异步任务
+- **上下文分离**: 从请求上下文中提取组件引用（包括 RequestKey 链路追踪），注入到独立的 goroutine 上下文中，父上下文取消不影响异步任务
 - **组件访问**: 异步任务中可通过 `xCtxUtil` 系列函数正常访问 DB、Redis、Snowflake 等组件
 - **两种关闭策略**: 支持 Cancel（强制终止）和 Wait（等待完成）
 - **Panic 恢复**: 内置 Panic 恢复机制，异步任务 Panic 不会影响主协程
+- **选项配置**: 支持 `WithName`、`WithDebug`、`WithLogger` 三种选项
+- **链路追踪**: 自动继承父上下文的 RequestKey，支持全链路日志追踪
 - **轻量级**: 纯工具库，无需注册到 `xMain.Runner`
 
 ## 模块导入
 
 ```go
-import xAsync "github.com/xiaolfeng/bamboo-base-go/plugins/async"
+import xAsync "github.com/bamboo-services/bamboo-base-go/plugins/async"
 ```
 
 ## 核心 API
@@ -43,8 +45,16 @@ import xAsync "github.com/xiaolfeng/bamboo-base-go/plugins/async"
 从当前请求上下文中提取组件引用，创建独立上下文后在新 goroutine 中执行任务。
 
 ```go
-func Async(parentCtx context.Context, fn func(ctx context.Context)) *Task
+func Async(parentCtx context.Context, fn func(ctx context.Context), options ...Option) *Task
 ```
+
+### Options 选项
+
+| 选项 | 类型 | 说明 |
+|------|------|------|
+| `WithName(name)` | `Option` | 设置异步任务名称，名称会显示在日志中 |
+| `WithDebug()` | `Option` | 启用调试日志（输出开始执行、执行完成） |
+| `WithLogger(logger)` | `Option` | 设置自定义日志器 |
 
 ### Cancel — 强制终止
 
@@ -73,9 +83,9 @@ import (
     "net/http"
 
     "github.com/gin-gonic/gin"
-    xAsync   "github.com/xiaolfeng/bamboo-base-go/plugins/async"
-    xCtxUtil "github.com/xiaolfeng/bamboo-base-go/common/utility/context"
-    xResult  "github.com/xiaolfeng/bamboo-base-go/major/result"
+    xAsync   "github.com/bamboo-services/bamboo-base-go/plugins/async"
+    xCtxUtil "github.com/bamboo-services/bamboo-base-go/common/utility/context"
+    xResult  "github.com/bamboo-services/bamboo-base-go/major/result"
 )
 
 func CreateUser(c *gin.Context) {
@@ -134,7 +144,7 @@ xAsync.Cancel(task)
 
 1. 从 `parentCtx` 提取 `RegNodeKey`（即 `ContextNodeList`，包含所有已注册组件）
 2. 创建全新的 `context.Background()` 作为基础上下文（不受父上下文取消影响）
-3. 将 `ContextNodeList` 注入新上下文的 `RegNodeKey`
+3. 将 `ContextNodeList` 和 `RequestKey`（链路追踪 ID）注入新上下文中
 4. 包装 `context.WithCancel` 以支持 `Cancel()` 调用
 
 ```
@@ -143,14 +153,15 @@ parentCtx（请求上下文）
   ├── RequestKey → "uuid-xxx"
   └── UserStartTimeKey → time.Now()
           │
-          │  Async() 提取 RegNodeKey
+          │  Async() 提取 RegNodeKey + RequestKey
           ▼
 asyncCtx（独立上下文）
-  ├── RegNodeKey → ContextNodeList [DB, Redis, Snowflake, ...]  ← 仅复制组件
+  ├── RegNodeKey → ContextNodeList [DB, Redis, Snowflake, ...]  ← 组件引用
+  ├── RequestKey → "uuid-xxx"                                    ← 链路追踪
   └── context.WithCancel → 支持 Cancel() 调用
 ```
 
-异步任务中**不复制**请求级数据（`RequestKey`、`UserStartTimeKey` 等），因为异步任务是独立的执行单元。
+异步任务中**不复制**请求级数据（`UserStartTimeKey` 等），因为异步任务是独立的执行单元。
 
 ## Task 方法
 

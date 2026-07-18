@@ -18,21 +18,31 @@ icon: Package
 - 🔒 **类型安全** - 完整的类型定义和错误处理
 - 📄 **分页标准化** - 内置 `PageRequest`/`PageResponse` 泛型分页模型
 - ▶️ **运行时托管** - 内置 `xMain.Runner`，统一启动与优雅关闭
+- ⚡ **声明式配置** - `xOption` 函数式选项模式，优雅组织中间件、缓存和数据库
+- 🗃️ **双后端缓存** - `xCache.Manager` 支持 Redis / Memory 双后端，泛型 API 零切换成本
 - 🔌 **gRPC 支持** - 提供 `xGrpcRunner`、追踪拦截器与错误包装能力
+- ⏰ **定时任务** - 提供 `xCron` 基于 robfig/cron 的定时任务插件
+- 🔄 **异步任务** - 提供 `xAsync` 协程池异步执行，支持链路追踪和优雅终止
+- 📧 **邮件服务** - 提供 `xEmail` 基于 go-mail 的邮件发送插件，内置多种模板
 
 ## 模块概览
 
 | 模块 | 层级 | 描述 |
 |------|------|------|
 | [注册系统](/docs/bamboo-base-go/core/init) | major | Reg 结构体、节点初始化与 Runner 运行时 |
+| [声明式配置](/docs/bamboo-base-go/core/option) | major | xOption 函数式选项，声明式装配缓存、数据库和路由 |
 | [统一响应](/docs/bamboo-base-go/core/result) | common | BaseResponse 与响应处理中间件 |
 | [错误处理](/docs/bamboo-base-go/core/result/error) | common | IError 接口与错误构造函数 |
-| [gRPC（可选）](/docs/bamboo-base-go/grpc) | plugins | 可选扩展：gRPC 启动、服务注册与优雅关闭 |
 | [雪花算法](/docs/bamboo-base-go/components/snowflake) | common | 64 位分布式 ID 生成 |
 | [模型基类](/docs/bamboo-base-go/components/models) | major | GORM 实体基类、软删除与分页模型 |
+| [缓存系统](/docs/bamboo-base-go/components/cache) | major | xCache.Manager 泛型缓存，Redis + Memory 双后端 |
 | [日志系统](/docs/bamboo-base-go/components/log) | common | 基于 slog 的彩色日志 |
 | [中间件](/docs/bamboo-base-go/components/middleware) | major | CORS、响应处理等 |
 | [验证器](/docs/bamboo-base-go/components/validator) | common | 自定义验证规则与中文翻译 |
+| [gRPC 插件](/docs/bamboo-base-go/plugins/grpc) | plugins | gRPC 启动、拦截器与错误包装 |
+| [Cron 定时任务](/docs/bamboo-base-go/plugins/cron) | plugins | 基于 robfig/cron 的定时任务插件 |
+| [Async 异步任务](/docs/bamboo-base-go/plugins/async) | plugins | 协程池异步执行，链路追踪与优雅终止 |
+| [Email 邮件服务](/docs/bamboo-base-go/plugins/email) | plugins | 基于 go-mail 的 SMTP 邮件发送 |
 
 ## 快速开始
 
@@ -40,7 +50,10 @@ icon: Package
 go get github.com/bamboo-services/bamboo-base-go/major
 go get github.com/bamboo-services/bamboo-base-go/common
 go get github.com/bamboo-services/bamboo-base-go/defined
-go get github.com/bamboo-services/bamboo-base-go/plugins/grpc  # 可选
+go get github.com/bamboo-services/bamboo-base-go/plugins/grpc   # 可选
+go get github.com/bamboo-services/bamboo-base-go/plugins/async  # 可选
+go get github.com/bamboo-services/bamboo-base-go/plugins/cron   # 可选
+go get github.com/bamboo-services/bamboo-base-go/plugins/email  # 可选
 go mod tidy
 ```
 
@@ -51,22 +64,25 @@ package main
 
 import (
     "context"
-
-    "github.com/gin-gonic/gin"
+    "net/http"
 
     xLog "github.com/bamboo-services/bamboo-base-go/common/log"
     xMain "github.com/bamboo-services/bamboo-base-go/major/main"
+    xOption "github.com/bamboo-services/bamboo-base-go/major/option"
     xReg "github.com/bamboo-services/bamboo-base-go/major/register"
+    "github.com/gin-gonic/gin"
 )
 
 func main() {
     reg := xReg.Register(context.Background(), nil)
     log := xLog.WithName(xLog.NamedMAIN)
 
-    xMain.Runner(reg, log, func(reg *xReg.Reg) {
-        reg.Serve.GET("/ping", func(c *gin.Context) {
-            c.JSON(200, gin.H{"message": "pong"})
-        })
+    xMain.Runner(reg, log, []xOption.Option{
+        xOption.WithRoute(func(serve *gin.Engine) {
+            serve.GET("/ping", func(c *gin.Context) {
+                c.JSON(http.StatusOK, gin.H{"message": "pong"})
+            })
+        }),
     })
 }
 ```
