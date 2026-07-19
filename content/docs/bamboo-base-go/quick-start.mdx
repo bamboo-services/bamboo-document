@@ -317,31 +317,31 @@ func (u *User) GetGene() xSnowflake.Gene {
 
 ```go title="internal/app/route/route.go"
 package route
-
 import (
+    "context"
+
+    "github.com/gin-gonic/gin"
+
     xMiddle "github.com/bamboo-services/bamboo-base-go/major/middleware"
-    xReg "github.com/bamboo-services/bamboo-base-go/major/register"
     xRoute "github.com/bamboo-services/bamboo-base-go/major/route"
     "your-project/internal/handler"
 )
 
-func NewRoute(xReg *xReg.Reg) {
-    engine := xReg.Serve
-
+func NewRoute(ctx context.Context, serve *gin.Engine) {
     // [!code highlight:3]
     // 全局异常处理
-    engine.NoMethod(xRoute.NoMethod)
-    engine.NoRoute(xRoute.NoRoute)
+    serve.NoMethod(xRoute.NoMethod)
+    serve.NoRoute(xRoute.NoRoute)
 
     // [!code highlight:4]
     // 全局中间件
-    engine.Use(xMiddle.ResponseMiddleware)
-    engine.Use(xMiddle.ReleaseAllCors)
-    engine.Use(xMiddle.AllowOption)
+    serve.Use(xMiddle.ResponseMiddleware)
+    serve.Use(xMiddle.ReleaseAllCors)
+    serve.Use(xMiddle.AllowOption)
 
     // [!code highlight:2]
     // API 路由组
-    api := engine.Group("/api/v1")
+    api := serve.Group("/api/v1")
     {
         userHandler := handler.NewUserHandler()
 

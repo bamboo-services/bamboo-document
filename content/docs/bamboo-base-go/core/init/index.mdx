@@ -111,7 +111,7 @@ func main() {
 
     log := xLog.WithName(xLog.NamedMAIN)
     xMain.Runner(reg, log, []xOption.Option{
-        xOption.WithRoute(func(serve *gin.Engine) {
+        xOption.WithRoute(func(ctx context.Context, serve *gin.Engine) {
             serve.GET("/ping", func(c *gin.Context) {
                 c.String(http.StatusOK, "pong")
             })

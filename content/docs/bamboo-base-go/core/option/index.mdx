@@ -141,8 +141,8 @@ func Apply(opts ...Option) *Config
 />
 
 ```go
-// RouteRegistrar 接收 Gin 引擎进行路由挂载
-type RouteRegistrar func(serve *gin.Engine)
+// RouteRegistrar 路由注册器，接收已装配依赖的 ctx（含 DB/缓存等组件）与 Gin 引擎进行路由挂载
+type RouteRegistrar func(ctx context.Context, serve *gin.Engine)
 ```
 
 ## 使用示例
@@ -176,7 +176,7 @@ func main() {
         // 数据库：MySQL
         xOption.WithMySQL("user:pass@tcp(localhost:3306)/bamboo?charset=utf8mb4&parseTime=True"),
         // 路由
-        xOption.WithRoute(func(serve *gin.Engine) {
+        xOption.WithRoute(func(ctx context.Context, serve *gin.Engine) {
             serve.GET("/ping", func(c *gin.Context) {
                 c.String(200, "pong")
             })
@@ -199,13 +199,13 @@ opts := []xOption.Option{
         xOption.WithMemoryDefaultTTL(10*time.Minute),
         xOption.WithMemoryMaxEntries(10000),
     ),
-    xOption.WithRoute(func(serve *gin.Engine) {
+    xOption.WithRoute(func(ctx context.Context, serve *gin.Engine) {
         serve.GET("/ping", func(c *gin.Context) {
             c.JSON(200, gin.H{"message": "pong"})
         })
     }),
 }
-
+ 
 xMain.Runner(reg, log, opts)
 ```
 
