@@ -14,7 +14,8 @@ import { TypeTable } from '@/components/type-table';
 
 ```go
 type SetCache[K any, V any] interface {
-    Add(ctx context.Context, key K, members ...V) error
+    // v1.1.0 起：入参由变参 members ...V 调整为切片 []V，以便在尾部保留 opts ...SetOption 变参位置
+    Add(ctx context.Context, key K, members []V, opts ...SetOption) error
     Members(ctx context.Context, key K) ([]V, error)
     IsMember(ctx context.Context, key K, member V) (bool, error)
     Count(ctx context.Context, key K) (int64, error)
@@ -54,19 +55,35 @@ user:tags:123 → {"golang", "redis", "docker"}
 
 ### Add
 
-将一个或多个成员添加到集合中。
+将一组成员添加到集合中。**v1.1.0 起**入参由变参 `members ...V` 调整为切片 `members []V`，并在尾部新增 `opts ...SetOption`，以便在单次调用中覆盖默认 TTL 或附加写入条件。
 
 ```go
-Add(ctx context.Context, key K, members ...V) error
+Add(ctx context.Context, key K, members []V, opts ...SetOption) error
 ```
 
 **参数：**
 - `ctx` - context.Context 上下文
 - `key` - 集合键
-- `members` - 要添加的成员（可变参数）
+- `members` - 要添加的成员切片
+- `opts` - 写操作选项（可选）。常用：
+    - `xCache.WithTTL(ttl)` — 覆盖本次写入的过期时间
+    - `xCache.WithNX()` / `WithXX()` — 仅当 key 不存在 / 已存在时写入
+    - `xCache.WithNoSlide()` — 添加成员但不延长 key 的整体 TTL
 
 **返回值：**
 - `error` - 错误信息
+
+> **破坏性变更**：升级时需将 `sc.Add(ctx, key, "a", "b")` 改写为 `sc.Add(ctx, key, []string{"a", "b"})`。
+
+**示例：**
+
+```go
+// 沿用默认 TTL
+_ = sc.Add(ctx, "tags:1", []string{"golang", "redis"})
+
+// 添加成员但不滑动 TTL
+_ = sc.Add(ctx, "tags:1", []string{"docker"}, xCache.WithNoSlide())
+```
 
 **注意：** 已存在的成员会被忽略。
 

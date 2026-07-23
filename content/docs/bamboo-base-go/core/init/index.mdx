@@ -48,7 +48,7 @@ type Reg struct {
 
 ```go title="register.go"
 // [!code highlight]
-func Register(ctx context.Context, nodeList []xRegNode.RegNodeList) *Reg
+func Register(ctx context.Context, nodeList []xRegNode.RegNodeList, opts ...xOption.Option) *Reg
 ```
 
 **参数说明：**
@@ -61,25 +61,37 @@ func Register(ctx context.Context, nodeList []xRegNode.RegNodeList) *Reg
       required: true,
     },
     nodeList: {
-      description: '自定义初始化节点列表',
+      description: '自定义初始化节点列表（不得包含框架保留键，见下方说明）',
       type: '[]xRegNode.RegNodeList',
       required: true,
+    },
+    opts: {
+      description: 'v1.0.5 起新增。应用级配置选项（缓存、数据库、路由等），nil 或不传表示不启用内置实现',
+      type: '...xOption.Option',
+      required: false,
     },
   }}
 />
 
+> **框架保留键**：`SnowflakeNodeKey` / `DatabaseKey` / `CacheManagerKey` / `RedisClientKey` 由 `Register` 内部根据 `opts` 自动注册，**不得**出现在 `nodeList` 中，否则 `Use` 会因重复注册 panic。
+
 **初始化顺序：**
 
 ```
-Register(ctx, nodeList)
-    ├── configInit()           // 1. 加载配置（私有）
+Register(ctx, nodeList, opts...)
+    ├── configInit()           // 1. 加载 .env 配置（私有）
     ├── loggerInit()           // 2. 初始化日志（私有）
-    ├── SnowflakeInit          // 3. 内置雪花算法节点
-    ├── [自定义节点...]         // 4. 用户自定义节点
-    └── engineInit()           // 5. 初始化 Gin 引擎（私有）
+    ├── SnowflakeInit          // 3. 基础设施：雪花算法节点（框架注册）
+    ├── DatabaseInit           // 4. 基础设施：数据库（来自 opts，启用时）
+    ├── CacheInit              // 5. 基础设施：缓存（来自 opts，启用时）
+    │   └── RedisClientFromManager  // 5.1 Redis 后端补注册 *redis.Client
+    ├── [自定义节点...]         // 6. 业务自定义节点（来自 nodeList）
+    ├── Init.Exec()            // 7. 一次性执行全部装配
+    ├── engineInit()           // 8. 初始化 Gin 引擎（私有）
+    └── 路由注册                // 9. 按 opts.Routes() 顺序挂载路由
 
 启动阶段（推荐）
-    └── xMain.Runner(...)      // 6. 启动 HTTP 服务并托管优雅关闭
+    └── xMain.Runner(...)      // 10. 启动 HTTP 服务并托管优雅关闭
 ```
 
 **示例：**
@@ -94,38 +106,39 @@ import (
     xLog "github.com/bamboo-services/bamboo-base-go/common/log"
     xMain "github.com/bamboo-services/bamboo-base-go/major/main"
     xOption "github.com/bamboo-services/bamboo-base-go/major/option"
+    xOptDatabase "github.com/bamboo-services/bamboo-base-go/major/option/database"
     xReg "github.com/bamboo-services/bamboo-base-go/major/register"
     xRegNode "github.com/bamboo-services/bamboo-base-go/major/register/node"
     "github.com/gin-gonic/gin"
 )
 
 func main() {
-    // [!code highlight:8]
-    // 初始化，传入自定义节点
-    reg := xReg.Register(context.Background(), []xRegNode.RegNodeList{
-        {
-            Key:  xCtx.DatabaseKey,
-            Node: initDatabase,  // 自定义数据库初始化
+    // [!code highlight:10]
+    // v1.0.5 起：opts 直接传给 Register，统一装配内置组件
+    // 业务自定义节点列表只放纯业务逻辑，不再手写数据库初始化
+    reg := xReg.Register(context.Background(),
+        []xRegNode.RegNodeList{
+            {Key: xCtx.CustomClientKey, Node: initCustomSDK},
         },
-    })
-
-    log := xLog.WithName(xLog.NamedMAIN)
-    xMain.Runner(reg, log, []xOption.Option{
+        xOption.WithDatabase(xOptDatabase.FromEnv()), // 从环境变量装配数据库
         xOption.WithRoute(func(ctx context.Context, serve *gin.Engine) {
             serve.GET("/ping", func(c *gin.Context) {
                 c.String(http.StatusOK, "pong")
             })
         }),
-    })
+    )
+
+    log := xLog.WithName(xLog.NamedMAIN)
+    xMain.Runner(reg, log, nil)
 }
 
 // [!code highlight:2]
-// 自定义初始化节点
-func initDatabase(ctx context.Context) (any, error) {
-    // 从上下文获取配置（前面节点的结果）
-    // 初始化数据库连接
-    db, err := gorm.Open(...)
-    return db, err
+// 自定义初始化节点（业务 SDK / 第三方组件）
+func initCustomSDK(ctx context.Context) (any, error) {
+    // 可直接从 ctx 取 *gorm.DB / *xCache.Manager（已由 opts 装配）
+    db := ctx.Value(xCtx.DatabaseKey).(*gorm.DB)
+    // ...
+    return sdk, nil
 }
 ```
 
@@ -267,6 +280,9 @@ import (
     "context"
 
     xCtx "github.com/bamboo-services/bamboo-base-go/defined/context"
+    xOption "github.com/bamboo-services/bamboo-base-go/major/option"
+    xOptCache "github.com/bamboo-services/bamboo-base-go/major/option/cache"
+    xOptDatabase "github.com/bamboo-services/bamboo-base-go/major/option/database"
     xReg "github.com/bamboo-services/bamboo-base-go/major/register"
     xRegNode "github.com/bamboo-services/bamboo-base-go/major/register/node"
     xResult "github.com/bamboo-services/bamboo-base-go/major/result"
@@ -275,11 +291,14 @@ import (
 
 func main() {
     // [!code highlight:9]
-    // 初始化，注册自定义节点
-    reg := xReg.Register(context.Background(), []xRegNode.RegNodeList{
-        {Key: xCtx.DatabaseKey, Node: initDatabase},
-        {Key: xCtx.RedisClientKey, Node: initRedis},
-    })
+    // v1.0.5 起：业务节点只放纯业务逻辑，数据库/缓存交给 opts
+    reg := xReg.Register(context.Background(),
+        []xRegNode.RegNodeList{
+            {Key: xCtx.CustomClientKey, Node: initCustomSDK},
+        },
+        xOption.WithDatabase(xOptDatabase.MySQL("user:pass@tcp(localhost:3306)/bamboo")),
+        xOption.WithCache(xOptCache.WithRedis("localhost:6379")),
+    )
 
     // 注册路由
     // [!code highlight:4]
@@ -295,17 +314,11 @@ func main() {
 }
 
 // [!code highlight:2]
-// 数据库初始化节点
-func initDatabase(ctx context.Context) (any, error) {
-    // 初始化数据库...
-    return db, nil
-}
-
-// [!code highlight:2]
-// Redis 初始化节点
-func initRedis(ctx context.Context) (any, error) {
-    // 初始化 Redis...
-    return rdb, nil
+// 业务自定义初始化节点（数据库/缓存已由框架装配，勿重复注册保留键）
+func initCustomSDK(ctx context.Context) (any, error) {
+    db := ctx.Value(xCtx.DatabaseKey).(*gorm.DB)
+    // 基于 db 初始化自定义 SDK...
+    return sdk, nil
 }
 ```
 

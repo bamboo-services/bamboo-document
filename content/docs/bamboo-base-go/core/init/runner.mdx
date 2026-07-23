@@ -73,24 +73,29 @@ import (
     xLog "github.com/bamboo-services/bamboo-base-go/common/log"
     xMain "github.com/bamboo-services/bamboo-base-go/major/main"
     xOption "github.com/bamboo-services/bamboo-base-go/major/option"
+    xOptCache "github.com/bamboo-services/bamboo-base-go/major/option/cache"
+    xOptDatabase "github.com/bamboo-services/bamboo-base-go/major/option/database"
     xReg "github.com/bamboo-services/bamboo-base-go/major/register"
     xRegNode "github.com/bamboo-services/bamboo-base-go/major/register/node"
 )
 
 func main() {
-    reg := xReg.Register(context.Background(), []xRegNode.RegNodeList{
-        {Key: xCtx.DatabaseKey, Node: initDatabase},
-        {Key: xCtx.RedisClientKey, Node: initRedis},
-    })
+    // 业务自定义节点（注意：DatabaseKey/RedisClientKey/CacheManagerKey/SnowflakeNodeKey 是框架保留键，
+    // 不能出现在 nodeList 中，否则 Register 会因重复注册 panic）
+    reg := xReg.Register(context.Background(),
+        []xRegNode.RegNodeList{
+            {Key: xCtx.CustomClientKey, Node: initCustomSDK},
+        },
+        // v1.0.5 起：opts 作为变参直接传给 Register，统一装配内置组件
+        xOption.WithCache(xOptCache.WithRedis("localhost:6379")),
+        xOption.WithDatabase(xOptDatabase.MySQL("user:pass@tcp(localhost:3306)/bamboo")),
+        xOption.WithRoute(registerRoute),
+    )
 
     log := xLog.WithName(xLog.NamedMAIN)
 
-    // 通过 Option 声明式配置路由
-    opts := []xOption.Option{
-        xOption.WithRoute(registerRoute),
-    }
-
-    xMain.Runner(reg, log, opts)
+    // Runner 启动 HTTP 服务并优雅关闭
+    xMain.Runner(reg, log, nil)
 }
 ```
 
@@ -130,33 +135,40 @@ func main() {
 
 ## Option 声明式配置
 
-v1.0.3 起 Runner 接受 `[]xOption.Option`，以声明式装配内置组件：
+历史演进：
+- **v1.0.3**：`Runner` 接受 `[]xOption.Option`，开始支持声明式装配内置组件
+- **v1.0.4**：缓存与数据库改为**两层调用形态**，构造函数收敛到 `xOptCache` / `xOptDatabase` 子包
+- **v1.0.5**：`Register` 同样接受 `opts ...xOption.Option` 变参，opts 直接在注册阶段装配，业务节点可立即从 `ctx` 取到 DB / 缓存
 
-```go title="main.go"
+两种传参方式等价，二选一即可：
+
+```go title="方式 A：opts 直接传给 Register（推荐，业务节点立即拿到组件）"
 import (
-    xLog "github.com/bamboo-services/bamboo-base-go/common/log"
-    xMain "github.com/bamboo-services/bamboo-base-go/major/main"
-    xOption "github.com/bamboo-services/bamboo-base-go/major/option"
-    xReg "github.com/bamboo-services/bamboo-base-go/major/register"
+    xOption     "github.com/bamboo-services/bamboo-base-go/major/option"
+    xOptCache   "github.com/bamboo-services/bamboo-base-go/major/option/cache"
+    xOptDatabase "github.com/bamboo-services/bamboo-base-go/major/option/database"
 )
 
-func main() {
-    reg := xReg.Register(context.Background(), nil)
-    log := xLog.WithName(xLog.NamedMAIN)
-
-    // 声明式配置
-    opts := []xOption.Option{
-        xOption.WithRedis("localhost:6379"),
-        xOption.WithMySQL("user:pass@tcp(localhost:3306)/bamboo"),
-        xOption.WithRoute(registerRoute),
-    }
-
-    // Runner 根据 opts 自动装配 Redis 客户端、GORM DB 等
-    xMain.Runner(reg, log, opts)
-}
+reg := xReg.Register(context.Background(), nil,
+    xOption.WithCache(xOptCache.WithRedis("localhost:6379")),
+    xOption.WithDatabase(xOptDatabase.MySQL("user:pass@tcp(localhost:3306)/bamboo")),
+    xOption.WithRoute(registerRoute),
+)
+// 此时 reg.Init.Ctx 已含 *gorm.DB / *xCache.Manager，业务节点可用
+xMain.Runner(reg, log, nil)
 ```
 
-> nil 或空 `[]xOption.Option` 表示不启用任何内置实现，仅以 reg 现有状态启动。
+```go title="方式 B：opts 传给 Runner（Runner 阶段才装配）"
+reg := xReg.Register(context.Background(), nil) // 仅业务自定义节点
+opts := []xOption.Option{
+    xOption.WithCache(xOptCache.WithRedis("localhost:6379")),
+    xOption.WithDatabase(xOptDatabase.MySQL("user:pass@tcp(localhost:3306)/bamboo")),
+    xOption.WithRoute(registerRoute),
+}
+xMain.Runner(reg, log, opts)
+```
+
+> nil 或空 `opts` 表示不启用任何内置实现，仅以 reg 现有状态启动。
 
 ## 下一步
 

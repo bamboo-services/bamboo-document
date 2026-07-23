@@ -14,8 +14,9 @@ import { TypeTable } from '@/components/type-table';
 
 ```go
 type ListCache[K any, V any] interface {
-    Prepend(ctx context.Context, key K, values ...V) error
-    Append(ctx context.Context, key K, values ...V) error
+    // v1.1.0 起：入参由变参 values ...V 调整为切片 []V，以便在尾部保留 opts ...SetOption 变参位置
+    Prepend(ctx context.Context, key K, values []V, opts ...SetOption) error
+    Append(ctx context.Context, key K, values []V, opts ...SetOption) error
     Range(ctx context.Context, key K, start int64, end int64) ([]V, error)
     Index(ctx context.Context, key K, index int64) (*V, error)
     Len(ctx context.Context, key K) (int64, error)
@@ -59,37 +60,64 @@ message:queue → ["msg1", "msg2", "msg3", "msg2"]
 
 ### Prepend
 
-将一个或多个值插入到列表头部（左侧）。
+将一组值插入到列表头部（左侧）。**v1.1.0 起**入参由变参 `values ...V` 调整为切片 `values []V`，并在尾部新增 `opts ...SetOption`，以便在单次调用中覆盖默认 TTL 或附加写入条件。
 
 ```go
-Prepend(ctx context.Context, key K, values ...V) error
+Prepend(ctx context.Context, key K, values []V, opts ...SetOption) error
 ```
 
 **参数：**
 - `ctx` - context.Context 上下文
 - `key` - 列表键
-- `values` - 要插入的值（可变参数）
+- `values` - 要插入的值切片
+- `opts` - 写操作选项（可选）。常用：
+    - `xCache.WithTTL(ttl)` — 覆盖本次写入的过期时间
+    - `xCache.WithNX()` / `WithXX()` — 仅当 key 不存在 / 已存在时写入
+    - `xCache.WithNoSlide()` — 插入数据但不延长 key 的整体 TTL
 
 **返回值：**
 - `error` - 错误信息
+
+> **破坏性变更**：升级时需将 `lc.Prepend(ctx, key, "a", "b")` 改写为 `lc.Prepend(ctx, key, []string{"a", "b"})`。
+
+**示例：**
+
+```go
+// 沿用默认 TTL
+_ = lc.Prepend(ctx, "queue:1", []string{"task-1", "task-2"})
+
+// 仅当 key 不存在时写入（首次建队）
+_ = lc.Prepend(ctx, "queue:1", []string{"task-1"}, xCache.WithNX())
+```
 
 **注意：** 多个值按顺序插入，最后一个值会在最前面。
 
 ### Append
 
-将一个或多个值追加到列表尾部（右侧）。
+将一组值追加到列表尾部（右侧）。**v1.1.0 起**入参由变参 `values ...V` 调整为切片 `values []V`，并在尾部新增 `opts ...SetOption`，可在单次调用中覆盖默认 TTL 或附加写入条件。
 
 ```go
-Append(ctx context.Context, key K, values ...V) error
+Append(ctx context.Context, key K, values []V, opts ...SetOption) error
 ```
 
 **参数：**
 - `ctx` - context.Context 上下文
 - `key` - 列表键
-- `values` - 要追加的值（可变参数）
+- `values` - 要追加的值切片
+- `opts` - 写操作选项（可选），同 [Prepend](#prepend)
 
 **返回值：**
 - `error` - 错误信息
+
+**示例：**
+
+```go
+// 沿用默认 TTL
+_ = lc.Append(ctx, "queue:1", []string{"task-3", "task-4"})
+
+// 追加但不滑动 TTL（不延长 key 整体过期时间）
+_ = lc.Append(ctx, "queue:1", []string{"task-5"}, xCache.WithNoSlide())
+```
 
 ### Range
 

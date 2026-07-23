@@ -15,11 +15,13 @@ import { TypeTable } from '@/components/type-table';
 ```go
 type HashCache[K any, F comparable, V any, S any] interface {
     Get(ctx context.Context, key K, field F) (*V, bool, error)
-    Set(ctx context.Context, key K, field F, value *V) error
+    // v1.1.0 起尾部新增 opts ...SetOption，可在单次调用覆盖默认 TTL 或附加写入条件
+    Set(ctx context.Context, key K, field F, value *V, opts ...SetOption) error
     GetAll(ctx context.Context, key K) (map[F]V, error)
     GetAllStruct(ctx context.Context, key K) (S, error)
-    SetAll(ctx context.Context, key K, fields map[F]*V) error
-    SetAllStruct(ctx context.Context, key K, value S) error
+    // v1.1.0 起尾部新增 opts ...SetOption
+    SetAll(ctx context.Context, key K, fields map[F]*V, opts ...SetOption) error
+    SetAllStruct(ctx context.Context, key K, value S, opts ...SetOption) error
     Exists(ctx context.Context, key K, field F) (bool, error)
     Remove(ctx context.Context, key K, fields ...F) error
     Delete(ctx context.Context, key K) error
@@ -89,10 +91,10 @@ Get(ctx context.Context, key K, field F) (*V, bool, error)
 
 ### Set
 
-设置单个字段的值。
+设置单个字段的值。**v1.1.0 起**尾部新增 `opts ...SetOption`，可在单次调用中覆盖默认 TTL 或附加写入条件。
 
 ```go
-Set(ctx context.Context, key K, field F, value *V) error
+Set(ctx context.Context, key K, field F, value *V, opts ...SetOption) error
 ```
 
 **参数：**
@@ -100,9 +102,23 @@ Set(ctx context.Context, key K, field F, value *V) error
 - `key` - 哈希键
 - `field` - 字段键
 - `value` - 指向值的指针
+- `opts` - 写操作选项（可选）。常用：
+    - `xCache.WithTTL(ttl)` — 覆盖本次写入的过期时间
+    - `xCache.WithNX()` / `WithXX()` — 仅当 key 不存在 / 已存在时写入
+    - `xCache.WithNoSlide()` — 追加字段但不延长 key 的整体 TTL（哈希场景常用，避免追加操作意外续期）
 
 **返回值：**
 - `error` - 错误信息
+
+**示例：**
+
+```go
+// 沿用默认 TTL
+_ = hc.Set(ctx, "config:1", "theme", &theme)
+
+// 追加字段但不滑动 TTL（不延长 key 整体过期时间）
+_ = hc.Set(ctx, "config:1", "lang", &lang, xCache.WithNoSlide())
+```
 
 ### GetAll
 
@@ -138,32 +154,34 @@ GetAllStruct(ctx context.Context, key K) (S, error)
 
 ### SetAll
 
-批量设置多个字段的值。
+批量设置多个字段的值。**v1.1.0 起**尾部新增 `opts ...SetOption`，可在单次调用中覆盖默认 TTL 或附加写入条件。
 
 ```go
-SetAll(ctx context.Context, key K, fields map[F]*V) error
+SetAll(ctx context.Context, key K, fields map[F]*V, opts ...SetOption) error
 ```
 
 **参数：**
 - `ctx` - context.Context 上下文
 - `key` - 哈希键
 - `fields` - 字段和值的映射
+- `opts` - 写操作选项（可选），同 [Set](#set)
 
 **返回值：**
 - `error` - 错误信息
 
 ### SetAllStruct
 
-批量设置多个字段的值，使用指定结构体进行写入。
+批量设置多个字段的值，使用指定结构体进行写入。**v1.1.0 起**尾部新增 `opts ...SetOption`，可在单次调用中覆盖默认 TTL 或附加写入条件。
 
 ```go
-SetAllStruct(ctx context.Context, key K, value S) error
+SetAllStruct(ctx context.Context, key K, value S, opts ...SetOption) error
 ```
 
 **参数：**
 - `ctx` - context.Context 上下文
 - `key` - 哈希键
 - `value` - 结构体数据
+- `opts` - 写操作选项（可选），同 [Set](#set)
 
 **返回值：**
 - `error` - 错误信息

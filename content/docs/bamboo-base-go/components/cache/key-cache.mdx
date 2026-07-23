@@ -15,7 +15,8 @@ import { TypeTable } from '@/components/type-table';
 ```go
 type KeyCache[K any, V any] interface {
     Get(ctx context.Context, key K) (*V, bool, error)
-    Set(ctx context.Context, key K, value *V) error
+    // v1.1.0 起尾部新增 opts ...SetOption，可在单次调用覆盖默认 TTL 或附加写入条件
+    Set(ctx context.Context, key K, value *V, opts ...SetOption) error
     Exists(ctx context.Context, key K) (bool, error)
     Delete(ctx context.Context, key K) error
 }
@@ -59,19 +60,44 @@ Get(ctx context.Context, key K) (*V, bool, error)
 
 ### Set
 
-将键值对存入缓存。
+将键值对存入缓存。**v1.1.0 起**尾部新增 `opts ...SetOption`，可在单次调用中覆盖默认 TTL 或附加写入条件。
 
 ```go
-Set(ctx context.Context, key K, value *V) error
+Set(ctx context.Context, key K, value *V, opts ...SetOption) error
 ```
 
 **参数：**
 - `ctx` - context.Context 上下文
 - `key` - 缓存键
 - `value` - 指向值的指针（可以为 nil）
+- `opts` - 写操作选项（可选）。可用的选项有：
+    - `xCache.WithTTL(ttl)` — 覆盖本次写入的过期时间（`ttl <= 0` 表示永久）
+    - `xCache.WithNX()` — 仅当 key 不存在时写入
+    - `xCache.WithXX()` — 仅当 key 已存在时写入
+    - `xCache.WithKeepTTL()` — 保留原 TTL 不重设（等价 Redis `SET KEEPTTL`）
+    - `xCache.WithNoSlide()` — 对 KeyCache.Set 无意义，传入被忽略
 
 **返回值：**
 - `error` - 错误信息
+
+**示例：**
+
+```go
+import xCache "github.com/bamboo-services/bamboo-base-go/major/cache"
+import "time"
+
+// 默认（沿用 Manager 实例 TTL）
+_ = kc.Set(ctx, "user:1", &u)
+
+// 覆盖 TTL 为 5 分钟
+_ = kc.Set(ctx, "user:1", &u, xCache.WithTTL(5*time.Minute))
+
+// 仅当不存在时写入（简易分布式锁）
+_ = kc.Set(ctx, "lock:order:1", &token, xCache.WithNX(), xCache.WithTTL(30*time.Second))
+
+// 刷新值但保留原 TTL（避免锁被无意延长）
+_ = kc.Set(ctx, "lock:order:1", &newToken, xCache.WithKeepTTL())
+```
 
 **注意：** 需要处理 `value` 为 `nil` 的场景。
 
