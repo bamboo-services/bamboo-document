@@ -134,17 +134,18 @@ Delete(ctx context.Context, key K) error
 
 ## 实现示例
 
+`KeyCache` 的实现由 `Manager` 通过 `KeyCacheOf[K, V]` 工厂方法分发到对应后端，**业务侧无需手写 Get/Set/Exists/Delete**。下方示例展示如何从上下文获取 `Manager`、构造泛型 `kc`，并调用其方法。
+
 ### 用户缓存实现
 
 ```go title="cache/user.go"
 import (
     "context"
-    "encoding/json"
     "time"
 
-    "github.com/gin-gonic/gin"
-    "github.com/redis/go-redis/v9"
     xCache "github.com/bamboo-services/bamboo-base-go/major/cache"
+    xCtx "github.com/bamboo-services/bamboo-base-go/defined/context"
+    xCtxUtil "github.com/bamboo-services/bamboo-base-go/common/utility/context"
 )
 
 type User struct {
@@ -153,82 +154,108 @@ type User struct {
     Email    string `json:"email"`
 }
 
-type UserCache struct {
-    *xCache.Cache
+// UserCache 是基于 KeyCacheOf 的泛型别名
+// K = string（业务键，如用户 ID）
+// V = User（值类型，框架内部按指针传递）
+type UserCache = xCache.KeyCache[string, User]
+
+// NewUserCache 从上下文获取 Manager 并创建泛型 KeyCache
+func NewUserCache(ctx context.Context) UserCache {
+    // [!code highlight:2]
+    // 推荐方式：通过 xCtxUtil 从上下文获取 Manager（框架保留键 CacheManagerKey）
+    manager := xCtxUtil.MustGet[*xCache.Manager](ctx, xCtx.CacheManagerKey)
+
+    // [!code highlight:1]
+    // 由 Manager 根据 Type() 分发到对应后端的 KeyCache 实现
+    return xCache.KeyCacheOf[string, User](manager)
 }
+```
 
-// [!code highlight:15]
-// Get 获取用户缓存
-func (c *UserCache) Get(ctx context.Context, userID string) (*User, bool, error) {
-    key := "user:" + userID
+> 若处于非 HTTP 上下文（如初始化阶段、定时任务），无法从请求上下文获取 `Manager`，可改为构造期注入 `*xCache.Manager`，见下方[使用缓存](#使用缓存)。
 
-    val, err := c.RDB.Get(ctx, key).Result()
-    if err == redis.Nil {
-        return nil, false, nil
+### 基本用法
+
+```go title="handler/user.go"
+import (
+    "context"
+    "time"
+
+    xCache "github.com/bamboo-services/bamboo-base-go/major/cache"
+    "github.com/gin-gonic/gin"
+)
+
+func GetUserHandler(c *gin.Context) {
+    ctx := c.Request.Context()
+    kc := NewUserCache(ctx)
+
+    user := &User{ID: "1", Username: "筱锋", Email: "x@x.com"}
+
+    // [!code highlight:1]
+    // 基础用法：沿用默认 TTL（Manager 实例 TTL）
+    _ = kc.Set(ctx, "user:1", user)
+
+    // [!code highlight:1]
+    // 覆盖 TTL 为 5 分钟
+    _ = kc.Set(ctx, "user:1", user, xCache.WithTTL(5*time.Minute))
+
+    // [!code highlight:1]
+    // 分布式锁：NX + 短 TTL（仅当 key 不存在时写入）
+    token := "token-abc"
+    _ = kc.Set(ctx, "lock:order:1", &token, xCache.WithNX(), xCache.WithTTL(30*time.Second))
+
+    // [!code highlight:1]
+    // 保留原 TTL 刷新值（避免锁被无意延长）
+    newToken := "token-def"
+    _ = kc.Set(ctx, "lock:order:1", &newToken, xCache.WithKeepTTL())
+
+    // [!code highlight:1]
+    // 读取：返回 *User、是否命中、错误
+    u, exists, err := kc.Get(ctx, "user:1")
+    if err != nil || !exists {
+        // 处理未命中或错误
     }
-    if err != nil {
-        return nil, false, err
-    }
+    _ = u
 
-    var user User
-    if err := json.Unmarshal([]byte(val), &user); err != nil {
-        return nil, false, err
-    }
+    // [!code highlight:1]
+    // 检查存在
+    ok, _ := kc.Exists(ctx, "user:1")
 
-    return &user, true, nil
-}
-
-// [!code highlight:17]
-// Set 设置用户缓存
-func (c *UserCache) Set(ctx context.Context, userID string, user *User) error {
-    if user == nil {
-        return nil
-    }
-
-    key := "user:" + userID
-
-    data, err := json.Marshal(user)
-    if err != nil {
-        return err
-    }
-
-    return c.RDB.Set(ctx, key, data, c.TTL).Err()
-}
-
-// [!code highlight:5]
-// Exists 检查用户是否存在
-func (c *UserCache) Exists(ctx context.Context, userID string) (bool, error) {
-    key := "user:" + userID
-    count, err := c.RDB.Exists(ctx, key).Result()
-    return count > 0, err
-}
-
-// [!code highlight:4]
-// Delete 删除用户缓存
-func (c *UserCache) Delete(ctx context.Context, userID string) error {
-    key := "user:" + userID
-    return c.RDB.Del(ctx, key).Err()
+    // [!code highlight:1]
+    // 删除
+    _ = kc.Delete(ctx, "user:1")
+    _ = ok
 }
 ```
 
 ### 使用缓存
 
+业务服务通常在构造期注入 `*xCache.Manager`，在方法内部按需通过 `KeyCacheOf` 创建对应泛型 `kc`，避免在请求路径上重复查表：
+
 ```go title="service/user.go"
+import (
+    "context"
+
+    xCache "github.com/bamboo-services/bamboo-base-go/major/cache"
+)
+
 type UserService struct {
-    cache *UserCache
+    // [!code highlight:1]
+    // 注入 Manager（而非底层 *redis.Client 或 *xCache.Cache）
+    manager *xCache.Manager
 }
 
-func NewUserService(cache *xCache.Cache) *UserService {
-    return &UserService{
-        cache: &UserCache{Cache: cache},
-    }
+func NewUserService(manager *xCache.Manager) *UserService {
+    return &UserService{manager: manager}
 }
 
-// [!code highlight:11]
+// [!code highlight:13]
 // GetUser 获取用户（带缓存）
 func (s *UserService) GetUser(ctx context.Context, userID string) (*User, error) {
+    // 按需创建泛型 kc（KeyCacheOf 内部有缓存，重复调用开销很小）
+    kc := xCache.KeyCacheOf[string, User](s.manager)
+
     // 先从缓存获取
-    user, exists, err := s.cache.Get(ctx, userID)
+    user, exists, err := kc.Get(ctx, userID)
     if err != nil {
         return nil, err
     }
@@ -243,13 +270,13 @@ func (s *UserService) GetUser(ctx context.Context, userID string) (*User, error)
     }
 
     // [!code highlight:2]
-    // 写入缓存
-    _ = s.cache.Set(ctx, userID, user)
+    // 写入缓存（沿用 Manager 默认 TTL）
+    _ = kc.Set(ctx, userID, user)
 
     return user, nil
 }
 
-// [!code highlight:2]
+// [!code highlight:4]
 // DeleteUser 删除用户并清除缓存
 func (s *UserService) DeleteUser(ctx context.Context, userID string) error {
     // 删除数据库记录
@@ -259,7 +286,8 @@ func (s *UserService) DeleteUser(ctx context.Context, userID string) error {
 
     // [!code highlight:2]
     // 删除缓存
-    return s.cache.Delete(ctx, userID)
+    kc := xCache.KeyCacheOf[string, User](s.manager)
+    return kc.Delete(ctx, userID)
 }
 ```
 
@@ -308,49 +336,52 @@ type ConfigCache interface {
 
 ### 1. 统一键命名
 
-使用前缀区分不同类型的缓存：
+`KeyCacheOf` 不强制业务前缀，建议在调用 `kc.Set/Get/Delete` 时统一使用业务前缀区分不同类型缓存：
 
 ```go
-func (c *UserCache) Get(ctx context.Context, userID string) (*User, bool, error) {
-    // [!code highlight:2]
-    // 使用 "user:" 前缀
-    key := "user:" + userID
-    // ...
-}
+const userKeyPrefix = "user:"
+
+// [!code highlight:2]
+// 写入时统一使用前缀
+_ = kc.Set(ctx, userKeyPrefix+"1", &user)
+
+// [!code highlight:2]
+// 读取时保持一致
+user, exists, err := kc.Get(ctx, userKeyPrefix+"1")
 ```
+
+> 更复杂的键编码（如带租户、版本号）可通过 `xCache.WithKeyEncoder` 在 Manager 层统一注入，避免业务侧散落拼键逻辑。
 
 ### 2. 处理 nil 值
 
-在 `Set` 方法中正确处理 `nil` 值：
+`KeyCache.Set` 的入参为 `*V`，业务侧建议在写入前显式判空，避免把无效数据写入缓存：
 
 ```go
-func (c *UserCache) Set(ctx context.Context, userID string, user *User) error {
-    // [!code highlight:3]
-    // 如果值为 nil，直接返回
-    if user == nil {
-        return nil
-    }
-    // ...
+if user == nil {
+    return nil
 }
+
+// [!code highlight:1]
+_ = kc.Set(ctx, userID, user)
 ```
 
 ### 3. 错误处理
 
-区分缓存未命中和真实错误：
+`kc.Get` 通过三元返回值区分"未命中"与"真实错误"，调用方应据此决定是否回源：
 
 ```go
-func (c *UserCache) Get(ctx context.Context, userID string) (*User, bool, error) {
-    val, err := c.RDB.Get(ctx, key).Result()
-    // [!code highlight:3]
-    // 缓存未命中不是错误
-    if err == redis.Nil {
-        return nil, false, nil
-    }
-    // [!code highlight:3]
-    // 其他错误需要返回
-    if err != nil {
-        return nil, false, err
-    }
+user, exists, err := kc.Get(ctx, userID)
+
+// [!code highlight:3]
+// 错误需返回，切勿当作未命中处理
+if err != nil {
+    return nil, err
+}
+
+// [!code highlight:3]
+// 未命中不是错误，回源数据库
+if !exists {
+    user, err = s.getUserFromDB(userID)
     // ...
 }
 ```
@@ -374,16 +405,29 @@ data, _ := proto.Marshal(user)
 
 ### 批量操作
 
-虽然 `KeyCache` 接口不支持批量操作，但可以使用 Pipeline：
+`KeyCache` 接口本身不支持批量操作。若需要一次性写入大量键值，可通过 `manager.Redis()` 直接访问底层 `*redis.Client` 进行 Pipeline 操作：
+
+> **底层扩展用法：直接访问 Redis 客户端进行 Pipeline 操作**。仅 Redis 后端可用；Memory 后端下 `manager.Redis()` 返回 `nil`，调用前应判空或确保部署后端为 Redis。
 
 ```go
-func (c *UserCache) SetBatch(ctx context.Context, users map[string]*User) error {
-    pipe := c.RDB.Pipeline()
+func (s *UserService) SetBatch(ctx context.Context, users map[string]*User) error {
+    // [!code highlight:1]
+    // 通过 manager.Redis() 获取底层 *redis.Client（仅 Redis 后端非 nil）
+    rdb := s.manager.Redis()
+    if rdb == nil {
+        // Memory 后端或未启用缓存，回退到逐条 kc.Set 或直接返回
+        return errors.New("batch pipeline requires redis backend")
+    }
+
+    // [!code highlight:1]
+    pipe := rdb.Pipeline()
 
     for userID, user := range users {
         key := "user:" + userID
         data, _ := json.Marshal(user)
-        pipe.Set(ctx, key, data, c.TTL)
+        // [!code highlight:1]
+        // 复用 Manager 默认 TTL，保持与 kc.Set 一致的过期语义
+        pipe.Set(ctx, key, data, s.manager.TTL())
     }
 
     _, err := pipe.Exec(ctx)
@@ -393,7 +437,7 @@ func (c *UserCache) SetBatch(ctx context.Context, users map[string]*User) error 
 
 ### 缓存预热
 
-在系统启动时预加载热点数据：
+在系统启动时预加载热点数据。预热阶段通常不在 HTTP 请求中，应使用 `context.Background()`（或注入了 `Manager` 的初始化上下文）而非 `*gin.Context`：
 
 ```go
 func (s *UserService) WarmupCache(ctx context.Context) error {
@@ -403,15 +447,22 @@ func (s *UserService) WarmupCache(ctx context.Context) error {
         return err
     }
 
+    // [!code highlight:3]
+    // 由 Manager 创建泛型 KeyCache，复用与请求路径一致的缓存语义
+    // ctx 推荐传入 context.Background() 或 Register 返回的初始化上下文
+    kc := xCache.KeyCacheOf[string, User](s.manager)
+
+    // [!code highlight:3]
     // 批量写入缓存
-    ginCtx := &gin.Context{}
     for _, user := range hotUsers {
-        _ = s.cache.Set(ginCtx, user.ID, user)
+        _ = kc.Set(ctx, user.ID, user)
     }
 
     return nil
 }
 ```
+
+> 若预热需要绕过序列化、追求极致吞吐，可改用[批量操作](#批量操作)中的 `manager.Redis()` + Pipeline 方案，但会失去后端透明性。
 
 ## 注意事项
 

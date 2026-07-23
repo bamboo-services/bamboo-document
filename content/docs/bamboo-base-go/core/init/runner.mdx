@@ -28,7 +28,7 @@ func Runner(
 ## 功能
 
 - 从环境变量读取 `XLF_HOST` 与 `XLF_PORT` 作为监听地址，默认 `localhost:1118`。
-- 支持传入 `*xOption.Config`，自动装配缓存、数据库等内置组件
+- 接收 `opts []xOption.Option`，自动装配缓存、数据库等内置组件（推荐通过 `Register` 传入 opts，业务节点立即可用）
 - 自动监听 `SIGINT`/`SIGTERM`，触发优雅关闭。
 - 支持注册路由函数（传统方式）或通过 Option 声明式注册路由
 - 支持启动多个后台协程并统一等待退出。
@@ -102,10 +102,11 @@ func main() {
 ## 仅路由（无内置组件）
 
 ```go
-opts := []xOption.Option{
+// opts 传给 Register（方式 A，推荐）
+reg := xReg.Register(context.Background(), nil,
     xOption.WithRoute(registerRoute),
-}
-xMain.Runner(reg, log, opts)
+)
+xMain.Runner(reg, log, nil)
 ```
 
 ## 带后台任务示例
@@ -124,14 +125,15 @@ func runConsumer(ctx context.Context, extra ...any) {
 
 func main() {
     // ... reg, log 初始化省略
-    opts := []xOption.Option{
+    // opts 传给 Register（方式 A，推荐）
+    reg := xReg.Register(context.Background(), nil,
         xOption.WithRoute(registerRoute),
-    }
-    xMain.Runner(reg, log, opts, runConsumer)
+    )
+    xMain.Runner(reg, log, nil, runConsumer)
 }
 ```
 
-> 如需接入 gRPC（可选），请前往独立模块文档：[`gRPC 运行时`](/docs/bamboo-base-go/grpc/runner)
+> 如需接入 gRPC（可选），请前往独立模块文档：[`gRPC 运行时`](/docs/bamboo-base-go/plugins/grpc/runner)
 
 ## Option 声明式配置
 
@@ -173,6 +175,6 @@ xMain.Runner(reg, log, opts)
 ## 下一步
 
 <Cards>
-  <Card title="快速开始" href="/docs/bamboo-base-go/core/init" />
+  <Card title="节点初始化" href="/docs/bamboo-base-go/core/init" />
   <Card title="引擎初始化" href="/docs/bamboo-base-go/core/init/engine" />
 </Cards>

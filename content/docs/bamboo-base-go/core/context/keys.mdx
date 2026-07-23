@@ -39,6 +39,7 @@ const (
     UserStartTimeKey ContextKey = "context_user_start_time" // 请求开始时间
     DatabaseKey      ContextKey = "context_database"        // 数据库客户端
     RedisClientKey   ContextKey = "context_redis_client"    // Redis 客户端
+    CacheManagerKey  ContextKey = "context_cache_manager"   // 缓存管理器
     SnowflakeNodeKey ContextKey = "context_snowflake_node"  // 雪花算法节点
 )
 ```
@@ -90,6 +91,11 @@ const (
     RedisClientKey: {
       description: 'Redis 客户端实例',
       type: '*redis.Client',
+      required: true,
+    },
+    CacheManagerKey: {
+      description: '缓存管理器实例（泛型缓存系统统一入口，Redis/Memory 双后端）',
+      type: '*xCache.Manager',
       required: true,
     },
     SnowflakeNodeKey: {

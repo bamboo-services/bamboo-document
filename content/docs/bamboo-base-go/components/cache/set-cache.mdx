@@ -171,128 +171,134 @@ Delete(ctx context.Context, key K) error
 
 ### 用户标签缓存
 
+通过上下文获取 `Manager`，再用 `SetCacheOf[K, V]` 构造泛型集合缓存，无需自行维护 `*xCache.Cache` 与 `RDB` 直连。
+
 ```go title="cache/user_tags.go"
 import (
-    "github.com/gin-gonic/gin"
+    "context"
+
     xCache "github.com/bamboo-services/bamboo-base-go/major/cache"
+    xCtx "github.com/bamboo-services/bamboo-base-go/major/context"
 )
 
-type UserTagsCache struct {
-    *xCache.Cache
+// [!code highlight:3]
+// UserTagsCache 用户标签缓存接口，复用泛型 SetCache
+type UserTagsCache interface {
+    xCache.SetCache[string, string]
 }
 
 // [!code highlight:5]
-// Add 添加用户标签
-func (c *UserTagsCache) Add(ctx context.Context, userID string, tags ...string) error {
-    key := "user:tags:" + userID
-    return c.RDB.SAdd(ctx, key, tags).Err()
-}
-
-// [!code highlight:5]
-// Members 获取所有标签
-func (c *UserTagsCache) Members(ctx context.Context, userID string) ([]string, error) {
-    key := "user:tags:" + userID
-    return c.RDB.SMembers(ctx, key).Result()
-}
-
-// [!code highlight:5]
-// IsMember 检查标签是否存在
-func (c *UserTagsCache) IsMember(ctx context.Context, userID string, tag string) (bool, error) {
-    key := "user:tags:" + userID
-    return c.RDB.SIsMember(ctx, key, tag).Result()
-}
-
-// [!code highlight:5]
-// Count 获取标签数量
-func (c *UserTagsCache) Count(ctx context.Context, userID string) (int64, error) {
-    key := "user:tags:" + userID
-    return c.RDB.SCard(ctx, key).Result()
-}
-
-// [!code highlight:5]
-// Remove 移除标签
-func (c *UserTagsCache) Remove(ctx context.Context, userID string, tags ...string) error {
-    key := "user:tags:" + userID
-    return c.RDB.SRem(ctx, key, tags).Err()
-}
-
-// [!code highlight:4]
-// Delete 删除所有标签
-func (c *UserTagsCache) Delete(ctx context.Context, userID string) error {
-    key := "user:tags:" + userID
-    return c.RDB.Del(ctx, key).Err()
+// NewUserTagsCache 从请求上下文获取 Manager，构造字符串集合缓存
+func NewUserTagsCache(ctx context.Context) UserTagsCache {
+    manager := ctx.Value(xCtx.CacheManagerKey).(*xCache.Manager)
+    sc := xCache.SetCacheOf[string, string](manager)
+    return sc
 }
 ```
 
-### 使用标签缓存
+### 基本用法
+
+`SetCacheOf` 返回的 `sc` 已实现 `Add / Members / IsMember / Count / Remove / Delete` 全部方法，可直接调用：
+
+```go title="cache/user_tags_usage.go"
+sc := NewUserTagsCache(ctx)
+key := "user:tags:1"
+
+// [!code highlight:4]
+// Add：添加成员（v1.1.0 起使用切片）
+_ = sc.Add(ctx, key, []string{"golang", "redis"})
+
+// [!code highlight:3]
+// Add：带 opts，添加成员但不延长 key 的整体 TTL
+_ = sc.Add(ctx, key, []string{"docker"}, xCache.WithNoSlide())
+
+// Members：获取所有成员
+members, _ := sc.Members(ctx, key)
+
+// IsMember：检查成员是否存在
+exists, _ := sc.IsMember(ctx, key, "golang")
+
+// Count：获取成员数量
+count, _ := sc.Count(ctx, key)
+
+// Remove：移除指定成员（仍为变参）
+_ = sc.Remove(ctx, key, "redis")
+
+// Delete：删除整个集合
+_ = sc.Delete(ctx, key)
+```
+
+### 服务层示例
+
+在服务层封装缓存与数据库的读写协同，`Add` 统一使用切片传参。
 
 ```go title="service/user_tags.go"
 type UserTagsService struct {
-    cache *UserTagsCache
+    cache UserTagsCache
 }
 
-func NewUserTagsService(cache *xCache.Cache) *UserTagsService {
-    return &UserTagsService{
-        cache: &UserTagsCache{Cache: cache},
-    }
+func NewUserTagsService(cache UserTagsCache) *UserTagsService {
+    return &UserTagsService{cache: cache}
 }
 
-// [!code highlight:6]
+// [!code highlight:7]
 // AddTags 添加用户标签
-func (s *UserTagsService) AddTags(ctx context.Context, userID string, tags ...string) error {
+func (s *UserTagsService) AddTags(ctx context.Context, userID string, tags []string) error {
     // 更新数据库
-    if err := s.addTagsToDB(userID, tags...); err != nil {
+    if err := s.addTagsToDB(ctx, userID, tags); err != nil {
         return err
     }
 
-    // [!code highlight:2]
-    // 更新缓存
-    return s.cache.Add(ctx, userID, tags...)
+    // 更新缓存：Add 入参为切片
+    key := "user:tags:" + userID
+    return s.cache.Add(ctx, key, tags)
 }
 
 // [!code highlight:11]
 // GetTags 获取用户标签
 func (s *UserTagsService) GetTags(ctx context.Context, userID string) ([]string, error) {
+    key := "user:tags:" + userID
+
     // 先从缓存获取
-    tags, err := s.cache.Members(ctx, userID)
+    tags, err := s.cache.Members(ctx, key)
     if err != nil {
         return nil, err
     }
 
     // 如果缓存为空，从数据库加载
     if len(tags) == 0 {
-        tags, err = s.getTagsFromDB(userID)
+        tags, err = s.getTagsFromDB(ctx, userID)
         if err != nil {
             return nil, err
         }
 
-        // [!code highlight:4]
-        // 写入缓存
+        // 写入缓存：Add 入参为切片
         if len(tags) > 0 {
-            _ = s.cache.Add(ctx, userID, tags...)
+            _ = s.cache.Add(ctx, key, tags)
         }
     }
 
     return tags, nil
 }
 
-// [!code highlight:5]
+// [!code highlight:4]
 // HasTag 检查用户是否有指定标签
-func (s *UserTagsService) HasTag(ctx context.Context, userID string, tag string) (bool, error) {
-    return s.cache.IsMember(ctx, userID, tag)
+func (s *UserTagsService) HasTag(ctx context.Context, userID, tag string) (bool, error) {
+    key := "user:tags:" + userID
+    return s.cache.IsMember(ctx, key, tag)
 }
 
-// [!code highlight:6]
+// [!code highlight:7]
 // RemoveTags 移除用户标签
-func (s *UserTagsService) RemoveTags(ctx context.Context, userID string, tags ...string) error {
+func (s *UserTagsService) RemoveTags(ctx context.Context, userID string, tags []string) error {
     // 更新数据库
-    if err := s.removeTagsFromDB(userID, tags...); err != nil {
+    if err := s.removeTagsFromDB(ctx, userID, tags); err != nil {
         return err
     }
 
-    // [!code highlight:2]
-    // 更新缓存
-    return s.cache.Remove(ctx, userID, tags...)
+    // 更新缓存：Remove 仍为变参，用 tags... 展开
+    key := "user:tags:" + userID
+    return s.cache.Remove(ctx, key, tags...)
 }
 ```
 
@@ -354,16 +360,16 @@ type UniqueItemsCache interface {
 
 ### 1. 批量添加
 
-使用可变参数一次添加多个成员：
+使用切片一次添加多个成员（v1.1.0 起 `Add` 入参为 `[]V`）：
 
 ```go
-// ✅ 批量添加
-cache.Add(ctx, userID, "golang", "redis", "docker")
+// ✅ 批量添加（切片写法）
+sc.Add(ctx, "tags:1", []string{"golang", "redis", "docker"})
 
 // ❌ 逐个添加
-cache.Add(ctx, userID, "golang")
-cache.Add(ctx, userID, "redis")
-cache.Add(ctx, userID, "docker")
+sc.Add(ctx, "tags:1", []string{"golang"})
+sc.Add(ctx, "tags:1", []string{"redis"})
+sc.Add(ctx, "tags:1", []string{"docker"})
 ```
 
 ### 2. 成员检查
@@ -372,10 +378,10 @@ cache.Add(ctx, userID, "docker")
 
 ```go
 // ✅ 高效检查
-exists, _ := cache.IsMember(ctx, userID, "golang")
+exists, _ := sc.IsMember(ctx, "tags:1", "golang")
 
 // ❌ 低效检查
-members, _ := cache.Members(ctx, userID)
+members, _ := sc.Members(ctx, "tags:1")
 for _, m := range members {
     if m == "golang" {
         exists = true
@@ -390,10 +396,10 @@ for _, m := range members {
 
 ```go
 // ✅ 高效统计
-count, _ := cache.Count(ctx, userID)
+count, _ := sc.Count(ctx, "tags:1")
 
 // ❌ 低效统计
-members, _ := cache.Members(ctx, userID)
+members, _ := sc.Members(ctx, "tags:1")
 count := len(members)
 ```
 
@@ -403,7 +409,8 @@ count := len(members)
 
 ```go
 func (s *UserTagsService) GetTags(ctx context.Context, userID string) ([]string, error) {
-    tags, err := s.cache.Members(ctx, userID)
+    key := "user:tags:" + userID
+    tags, err := s.cache.Members(ctx, key)
     if err != nil {
         return nil, err
     }
@@ -421,30 +428,51 @@ func (s *UserTagsService) GetTags(ctx context.Context, userID string) ([]string,
 
 ## 高级操作
 
+集合运算（交集 / 并集 / 差集）、随机获取、成员移动等能力未在 `SetCache` 接口中暴露，可通过 `manager.Redis()` 取回底层 Redis 客户端直接调用。
+
+> **底层扩展用法**：直接使用 Redis 客户端进行集合运算，绕过 `SetCache` 抽象。仅在接口未覆盖的场景下使用，并注意自行管理 key 的命名与 TTL。
+
 ### 集合运算
 
-虽然接口不直接支持，但可以使用 Redis 命令：
+```go title="cache/user_tags_advanced.go"
+import (
+    "context"
 
-```go
-// 交集：获取两个用户的共同标签
-func (c *UserTagsCache) CommonTags(ctx context.Context, userID1, userID2 string) ([]string, error) {
+    xCache "github.com/bamboo-services/bamboo-base-go/major/cache"
+    xCtx "github.com/bamboo-services/bamboo-base-go/major/context"
+)
+
+// [!code highlight:2]
+// 底层扩展用法：直接使用 Redis 客户端进行集合运算
+func commonTags(ctx context.Context, userID1, userID2 string) ([]string, error) {
+    manager := ctx.Value(xCtx.CacheManagerKey).(*xCache.Manager)
+    rdb := manager.Redis()
+
     key1 := "user:tags:" + userID1
     key2 := "user:tags:" + userID2
-    return c.RDB.SInter(ctx, key1, key2).Result()
+
+    // 交集：两个用户的共同标签
+    return rdb.SInter(ctx, key1, key2).Result()
 }
 
-// 并集：获取两个用户的所有标签
-func (c *UserTagsCache) AllTags(ctx context.Context, userID1, userID2 string) ([]string, error) {
+// 并集：两个用户的所有标签
+func allTags(ctx context.Context, userID1, userID2 string) ([]string, error) {
+    manager := ctx.Value(xCtx.CacheManagerKey).(*xCache.Manager)
+    rdb := manager.Redis()
+
     key1 := "user:tags:" + userID1
     key2 := "user:tags:" + userID2
-    return c.RDB.SUnion(ctx, key1, key2).Result()
+    return rdb.SUnion(ctx, key1, key2).Result()
 }
 
-// 差集：获取用户1独有的标签
-func (c *UserTagsCache) UniqueTags(ctx context.Context, userID1, userID2 string) ([]string, error) {
+// 差集：用户1独有的标签
+func uniqueTags(ctx context.Context, userID1, userID2 string) ([]string, error) {
+    manager := ctx.Value(xCtx.CacheManagerKey).(*xCache.Manager)
+    rdb := manager.Redis()
+
     key1 := "user:tags:" + userID1
     key2 := "user:tags:" + userID2
-    return c.RDB.SDiff(ctx, key1, key2).Result()
+    return rdb.SDiff(ctx, key1, key2).Result()
 }
 ```
 
@@ -453,17 +481,16 @@ func (c *UserTagsCache) UniqueTags(ctx context.Context, userID1, userID2 string)
 随机获取成员（用于推荐等场景）：
 
 ```go
+// 底层扩展用法：直接使用 Redis 客户端
+manager := ctx.Value(xCtx.CacheManagerKey).(*xCache.Manager)
+rdb := manager.Redis()
+key := "user:tags:1"
+
 // 随机获取一个标签
-func (c *UserTagsCache) RandomTag(ctx context.Context, userID string) (string, error) {
-    key := "user:tags:" + userID
-    return c.RDB.SRandMember(ctx, key).Result()
-}
+tag, _ := rdb.SRandMember(ctx, key).Result()
 
 // 随机获取多个标签
-func (c *UserTagsCache) RandomTags(ctx context.Context, userID string, count int64) ([]string, error) {
-    key := "user:tags:" + userID
-    return c.RDB.SRandMemberN(ctx, key, count).Result()
-}
+tags, _ := rdb.SRandMemberN(ctx, key, 3).Result()
 ```
 
 ### 移动成员
@@ -471,32 +498,32 @@ func (c *UserTagsCache) RandomTags(ctx context.Context, userID string, count int
 将成员从一个集合移动到另一个：
 
 ```go
+// 底层扩展用法：直接使用 Redis 客户端
+manager := ctx.Value(xCtx.CacheManagerKey).(*xCache.Manager)
+rdb := manager.Redis()
+
 // 将标签从一个用户移动到另一个用户
-func (c *UserTagsCache) MoveTag(ctx context.Context, fromUserID, toUserID, tag string) error {
-    fromKey := "user:tags:" + fromUserID
-    toKey := "user:tags:" + toUserID
-    return c.RDB.SMove(ctx, fromKey, toKey, tag).Err()
-}
+_ = rdb.SMove(ctx, "user:tags:1", "user:tags:2", "golang").Err()
 ```
 
 ## 性能优化
 
 ### 使用 Pipeline
 
-批量操作多个集合：
+批量操作多个集合（底层扩展用法）：
 
 ```go
-func (c *UserTagsCache) AddTagsToMultipleUsers(ctx context.Context, userTags map[string][]string) error {
-    pipe := c.RDB.Pipeline()
+// 底层扩展用法：直接使用 Redis Pipeline 批量写入
+manager := ctx.Value(xCtx.CacheManagerKey).(*xCache.Manager)
+rdb := manager.Redis()
+pipe := rdb.Pipeline()
 
-    for userID, tags := range userTags {
-        key := "user:tags:" + userID
-        pipe.SAdd(ctx, key, tags)
-    }
-
-    _, err := pipe.Exec(ctx)
-    return err
+for userID, tags := range userTags {
+    key := "user:tags:" + userID
+    pipe.SAdd(ctx, key, tags)
 }
+
+_, err := pipe.Exec(ctx)
 ```
 
 ### 成员数量限制
@@ -504,12 +531,15 @@ func (c *UserTagsCache) AddTagsToMultipleUsers(ctx context.Context, userTags map
 避免单个集合成员过多：
 
 ```go
-func (c *UserTagsCache) Add(ctx context.Context, userID string, tags ...string) error {
+// AddTagsWithLimit 在写入前检查集合大小
+func (s *UserTagsService) AddTagsWithLimit(ctx context.Context, userID string, tags []string) error {
     key := "user:tags:" + userID
 
-    // [!code highlight:5]
-    // 检查成员数量
-    count, err := c.RDB.SCard(ctx, key).Result()
+    // [!code highlight:6]
+    // 底层扩展用法：先用 Redis 客户端读取当前数量
+    manager := ctx.Value(xCtx.CacheManagerKey).(*xCache.Manager)
+    rdb := manager.Redis()
+    count, err := rdb.SCard(ctx, key).Result()
     if err != nil {
         return err
     }
@@ -520,7 +550,8 @@ func (c *UserTagsCache) Add(ctx context.Context, userID string, tags ...string) 
         return errors.New("标签数量超过限制")
     }
 
-    return c.RDB.SAdd(ctx, key, tags).Err()
+    // 数量合规后走泛型接口写入
+    return s.cache.Add(ctx, key, tags)
 }
 ```
 

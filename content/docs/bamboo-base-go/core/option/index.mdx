@@ -274,13 +274,8 @@ import (
 )
 
 func main() {
-    // v1.0.5 起：opts 直接通过变参传给 Register
-    reg := xReg.Register(context.Background(), nil)
-
-    log := xLog.WithName(xLog.NamedMAIN)
-
-    // 声明式配置：两层调用形态
-    opts := []xOption.Option{
+    // v1.0.5 起：opts 直接通过变参传给 Register（方式 A，推荐）
+    reg := xReg.Register(context.Background(), nil,
         // 缓存：Redis 后端
         xOption.WithCache(xOptCache.WithRedis("localhost:6379",
             xOptCache.WithRedisPassword("xxx"),
@@ -296,20 +291,22 @@ func main() {
                 c.String(200, "pong")
             })
         }),
-    }
+    )
+
+    log := xLog.WithName(xLog.NamedMAIN)
 
     // Runner 根据 opts 自动装配 Redis 客户端、GORM DB 等
-    xMain.Runner(reg, log, opts)
+    xMain.Runner(reg, log, nil)
 
     // 也支持传入后台协程函数
-    // xMain.Runner(reg, log, opts, goroutineFunc)
+    // xMain.Runner(reg, log, nil, goroutineFunc)
 }
 ```
 
 ### 仅缓存 + Memory 后端
 
 ```go
-opts := []xOption.Option{
+reg := xReg.Register(context.Background(), nil,
     xOption.WithCache(xOptCache.WithMemory(
         xOptCache.WithMemoryDefaultTTL(10*time.Minute),
         xOptCache.WithMemoryMaxEntries(10000),
@@ -319,42 +316,42 @@ opts := []xOption.Option{
             c.JSON(200, gin.H{"message": "pong"})
         })
     }),
-}
+)
 
-xMain.Runner(reg, log, opts)
+xMain.Runner(reg, log, nil)
 ```
 
 ### Oracle 数据库
 
 ```go title="main.go"
-opts := []xOption.Option{
+reg := xReg.Register(context.Background(), nil,
     // Oracle：显式 DSN（macOS/Windows 必须包含 libDir）
     xOption.WithDatabase(xOptDatabase.Oracle(
         `user="scott" password="tiger" connectString="dbhost:1521/orclpdb1" libDir="/opt/oracle/instantclient"` ,
         xOptDatabase.WithMaxOpenConns(50),
     )),
     xOption.WithRoute(routeFunc),
-}
-xMain.Runner(reg, log, opts)
+)
+xMain.Runner(reg, log, nil)
 ```
 
 ### SQL Server 数据库
 
 ```go title="main.go"
-opts := []xOption.Option{
+reg := xReg.Register(context.Background(), nil,
     // SQL Server：URL 格式连接串
     xOption.WithDatabase(xOptDatabase.SQLServer(
         "sqlserver://sa:Pa55w0rd@localhost:1433?database=mydb",
     )),
     xOption.WithRoute(routeFunc),
-}
-xMain.Runner(reg, log, opts)
+)
+xMain.Runner(reg, log, nil)
 ```
 
 ### 从环境变量装配（缓存 + 数据库）
 
 ```go
-opts := []xOption.Option{
+reg := xReg.Register(context.Background(), nil,
     // 读取 NOSQL_DRIVER 等，未设置时返回 nil（被 WithCache 跳过）
     xOption.WithCache(xOptCache.FromEnv()),
     // 读取 DATABASE_DRIVER/DATABASE_HOST/... 等，按驱动自动选择拼装函数
@@ -365,9 +362,9 @@ opts := []xOption.Option{
         xOptDatabase.WithPrepare(seedRoles),
     ),
     xOption.WithRoute(routeFunc),
-}
+)
 
-xMain.Runner(reg, log, opts)
+xMain.Runner(reg, log, nil)
 ```
 
 ### 条件构造
@@ -386,7 +383,9 @@ if useRedis {
 
 opts = append(opts, xOption.WithRoute(routeFunc))
 
-xMain.Runner(reg, log, opts)
+// 将累积的 opts 作为变参展开传给 Register
+reg := xReg.Register(context.Background(), nil, opts...)
+xMain.Runner(reg, log, nil)
 ```
 
 ## 与注册节点模式的关系

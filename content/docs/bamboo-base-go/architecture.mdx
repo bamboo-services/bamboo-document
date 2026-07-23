@@ -291,12 +291,20 @@ graph TD
 <Mermaid
   chart="
 flowchart TD
-    A[Register] --> B[ConfigInit<br/>加载 .env 配置]
-    B --> C[LoggerInit<br/>初始化日志系统]
-    C --> D[SnowflakeInit<br/>初始化雪花算法节点]
-    D --> E[EngineInit<br/>创建 Gin 引擎]
-    E --> F[injectContext<br/>合并初始化上下文]
-    F --> G[返回 *Reg]"
+    A[Register] --> B[configInit<br/>加载 .env 配置]
+    B --> C[loggerInit<br/>初始化日志系统]
+    C --> D[SnowflakeInit<br/>雪花算法节点]
+    D --> E{opts 含 WithDatabase?}
+    E -- 是 --> F[DatabaseInit<br/>GORM 建连 + AutoMigrate]
+    E -- 否 --> G{opts 含 WithCache?}
+    F --> G
+    G -- 是 --> H[CacheInit<br/>Manager + Redis/Memory]
+    G -- 否 --> I[业务自定义节点]
+    H --> I
+    I --> J[Init.Exec<br/>一次性执行全部装配]
+    J --> K[engineInit<br/>创建 Gin 引擎]
+    K --> L[路由注册<br/>按 opts.Routes 顺序挂载]
+    L --> M[返回 *Reg]"
 />
 
 ```go title="main.go"
@@ -305,18 +313,23 @@ package main
 import (
     "context"
 
+    xLog "github.com/bamboo-services/bamboo-base-go/common/log"
+    xMain "github.com/bamboo-services/bamboo-base-go/major/main"
+    xOption "github.com/bamboo-services/bamboo-base-go/major/option"
+    xOptDatabase "github.com/bamboo-services/bamboo-base-go/major/option/database"
     xReg "github.com/bamboo-services/bamboo-base-go/major/register"
 )
 
 func main() {
-    // [!code highlight:2]
-    // 一键初始化所有组件
-    reg := xReg.Register(context.Background(), nil)
+    // [!code highlight:5]
+    // 一键初始化所有组件，opts 声明式装配内置组件
+    reg := xReg.Register(context.Background(), nil,
+        xOption.WithDatabase(xOptDatabase.FromEnv()),
+    )
 
-    // 注册路由...
-
-    // [!code highlight]
-    reg.Serve.Run(":8080")
+    log := xLog.WithName(xLog.NamedMAIN)
+    // 启动服务并优雅关闭
+    xMain.Runner(reg, log, nil)
 }
 ```
 
@@ -349,6 +362,6 @@ func main() {
 ## 下一步
 
 <Cards>
-  <Card title="快速开始" href="/docs/bamboo-base-go/core/init" />
+  <Card title="节点初始化" href="/docs/bamboo-base-go/core/init" />
   <Card title="响应处理" href="/docs/bamboo-base-go/core/result/result" />
 </Cards>

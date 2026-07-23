@@ -185,12 +185,11 @@ grpcTask := xGrpcRunner.New(
     ),
 )
 
-xMain.Runner(reg, log, []xOption.Option{
-    xOption.WithRoute(route.NewRoute),
-}, grpcTask)
+// opts 已通过 Register 装配（方式 A），Runner 传 nil 并附加 gRPC 任务
+xMain.Runner(reg, log, nil, grpcTask)
 ```
 
-完整说明参见：[gRPC 运行时](/docs/bamboo-base-go/grpc/runner)
+完整说明参见：[gRPC 运行时](/docs/bamboo-base-go/plugins/grpc/runner)
 
 ## 声明式装配：数据库
 

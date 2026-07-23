@@ -238,13 +238,15 @@ Delete(ctx context.Context, key K) error
 
 ### 用户配置缓存
 
+通过 `Manager` 创建泛型 `HashCache`，无需自行封装底层 Redis 操作。
+
 ```go title="cache/user_config.go"
 import (
     "context"
-    "encoding/json"
+    "time"
 
-    "github.com/redis/go-redis/v9"
     xCache "github.com/bamboo-services/bamboo-base-go/major/cache"
+    xCtx "github.com/bamboo-services/bamboo-base-go/major/context"
 )
 
 type UserConfig struct {
@@ -253,80 +255,16 @@ type UserConfig struct {
     Timezone string `json:"timezone"`
 }
 
-type UserConfigCache struct {
-    *xCache.Cache
-}
-
-// [!code highlight:17]
-// Get 获取单个配置项
-func (c *UserConfigCache) Get(ctx context.Context, userID string, field string) (*string, bool, error) {
-    key := "user:config:" + userID
-
-    val, err := c.RDB.HGet(ctx, key, field).Result()
-    if err == redis.Nil {
-        return nil, false, nil
-    }
-    if err != nil {
-        return nil, false, err
-    }
-
-    return &val, true, nil
-}
-
-// [!code highlight:5]
-// Set 设置单个配置项
-func (c *UserConfigCache) Set(ctx context.Context, userID string, field string, value *string) error {
-    key := "user:config:" + userID
-    return c.RDB.HSet(ctx, key, field, *value).Err()
-}
-
-// [!code highlight:13]
-// GetAll 获取所有配置
-func (c *UserConfigCache) GetAll(ctx context.Context, userID string) (map[string]string, error) {
-    key := "user:config:" + userID
-
-    result, err := c.RDB.HGetAll(ctx, key).Result()
-    if err != nil {
-        return nil, err
-    }
-
-    return result, nil
-}
-
-// [!code highlight:13]
-// SetAll 批量设置配置
-func (c *UserConfigCache) SetAll(ctx context.Context, userID string, fields map[string]*string) error {
-    key := "user:config:" + userID
-
-    data := make(map[string]interface{})
-    for field, value := range fields {
-        if value != nil {
-            data[field] = *value
-        }
-    }
-
-    return c.RDB.HSet(ctx, key, data).Err()
-}
-
-// [!code highlight:5]
-// Exists 检查配置项是否存在
-func (c *UserConfigCache) Exists(ctx context.Context, userID string, field string) (bool, error) {
-    key := "user:config:" + userID
-    return c.RDB.HExists(ctx, key, field).Result()
-}
-
-// [!code highlight:5]
-// Remove 删除配置项
-func (c *UserConfigCache) Remove(ctx context.Context, userID string, fields ...string) error {
-    key := "user:config:" + userID
-    return c.RDB.HDel(ctx, key, fields...).Err()
-}
-
-// [!code highlight:4]
-// Delete 删除所有配置
-func (c *UserConfigCache) Delete(ctx context.Context, userID string) error {
-    key := "user:config:" + userID
-    return c.RDB.Del(ctx, key).Err()
+// NewUserConfigCache 从上下文中获取 Manager 并创建泛型哈希缓存
+//
+// 泛型参数：[K, F, V, S]
+//   - K: 键类型，string
+//   - F: 字段键类型，string
+//   - V: 字段值类型，string
+//   - S: 结构体类型，UserConfig
+func NewUserConfigCache(ctx context.Context) xCache.HashCache[string, string, string, UserConfig] {
+    manager := ctx.Value(xCtx.CacheManagerKey).(*xCache.Manager)
+    return xCache.HashCacheOf[string, string, string, UserConfig](manager)
 }
 ```
 
@@ -334,29 +272,29 @@ func (c *UserConfigCache) Delete(ctx context.Context, userID string) error {
 
 ```go title="service/user_config.go"
 type UserConfigService struct {
-    cache *UserConfigCache
+    hc xCache.HashCache[string, string, string, UserConfig]
 }
 
-func NewUserConfigService(cache *xCache.Cache) *UserConfigService {
+func NewUserConfigService(ctx context.Context) *UserConfigService {
     return &UserConfigService{
-        cache: &UserConfigCache{Cache: cache},
+        hc: NewUserConfigCache(ctx),
     }
 }
 
-// [!code highlight:11]
+// [!code highlight:8]
 // GetTheme 获取用户主题
 func (s *UserConfigService) GetTheme(ctx context.Context, userID string) (string, error) {
-    theme, exists, err := s.cache.Get(ctx, userID, "theme")
+    theme, exists, err := s.hc.Get(ctx, userID, "theme")
     if err != nil {
         return "", err
     }
-    if !exists {
+    if !exists || theme == nil {
         return "default", nil
     }
     return *theme, nil
 }
 
-// [!code highlight:6]
+// [!code highlight:4]
 // UpdateTheme 更新用户主题
 func (s *UserConfigService) UpdateTheme(ctx context.Context, userID string, theme string) error {
     // 更新数据库
@@ -365,36 +303,60 @@ func (s *UserConfigService) UpdateTheme(ctx context.Context, userID string, them
     }
 
     // [!code highlight:2]
-    // 更新缓存
-    return s.cache.Set(ctx, userID, "theme", &theme)
+    // 更新缓存（沿用默认 TTL）
+    return s.hc.Set(ctx, userID, "theme", &theme)
 }
 
 // [!code highlight:5]
+// AppendLanguage 追加语言字段，但不滑动 TTL（不延长 key 整体过期时间）
+func (s *UserConfigService) AppendLanguage(ctx context.Context, userID string, lang string) error {
+    // [!code highlight:1]
+    return s.hc.Set(ctx, userID, "lang", &lang, xCache.WithNoSlide())
+}
+
+// [!code highlight:7]
 // GetAllConfig 获取所有配置
 func (s *UserConfigService) GetAllConfig(ctx context.Context, userID string) (map[string]string, error) {
-    config, err := s.cache.GetAll(ctx, userID)
+    config, err := s.hc.GetAll(ctx, userID)
     if err != nil {
         return nil, err
     }
 
     // 如果缓存为空，从数据库加载
     if len(config) == 0 {
-        config, err = s.loadConfigFromDB(userID)
+        loaded, err := s.loadConfigFromDB(userID)
         if err != nil {
             return nil, err
         }
 
-        // [!code highlight:7]
-        // 写入缓存
+        // [!code highlight:9]
+        // 写入缓存，覆盖默认 TTL 为 10 分钟
         fields := make(map[string]*string)
-        for k, v := range config {
+        for k, v := range loaded {
             val := v
             fields[k] = &val
         }
-        _ = s.cache.SetAll(ctx, userID, fields)
+        _ = s.hc.SetAll(ctx, userID, fields, xCache.WithTTL(10*time.Minute))
+        return loaded, nil
     }
 
     return config, nil
+}
+
+// [!code highlight:7]
+// GetConfigStruct 以结构体形式获取全部配置
+func (s *UserConfigService) GetConfigStruct(ctx context.Context, userID string) (UserConfig, error) {
+    cfg, err := s.hc.GetAllStruct(ctx, userID)
+    if err != nil {
+        return UserConfig{}, err
+    }
+    return cfg, nil
+}
+
+// [!code highlight:7]
+// SaveConfigStruct 以结构体形式批量写入配置，并设置 10 分钟 TTL
+func (s *UserConfigService) SaveConfigStruct(ctx context.Context, userID string, cfg UserConfig) error {
+    return s.hc.SetAllStruct(ctx, userID, cfg, xCache.WithTTL(10*time.Minute))
 }
 
 // [!code highlight:2]
@@ -407,7 +369,7 @@ func (s *UserConfigService) ResetConfig(ctx context.Context, userID string) erro
 
     // [!code highlight:2]
     // 删除缓存
-    return s.cache.Delete(ctx, userID)
+    return s.hc.Delete(ctx, userID)
 }
 ```
 
@@ -417,7 +379,7 @@ func (s *UserConfigService) ResetConfig(ctx context.Context, userID string) erro
 
 ```go
 type UserConfigCache interface {
-    xCache.HashCache[string, string, string]
+    xCache.HashCache[string, string, string, UserConfig]
 }
 ```
 
@@ -430,7 +392,7 @@ type UserConfigCache interface {
 
 ```go
 type ProductCache interface {
-    xCache.HashCache[string, string, interface{}]
+    xCache.HashCache[string, string, interface{}, Product]
 }
 ```
 
@@ -443,7 +405,7 @@ type ProductCache interface {
 
 ```go
 type SessionCache interface {
-    xCache.HashCache[string, string, string]
+    xCache.HashCache[string, string, string, Session]
 }
 ```
 
@@ -499,7 +461,7 @@ func (s *UserConfigService) UpdatePartial(ctx context.Context, userID string, up
         val := v
         fields[k] = &val
     }
-    return s.cache.SetAll(ctx, userID, fields)
+    return s.hc.SetAll(ctx, userID, fields)
 }
 ```
 
@@ -519,11 +481,12 @@ cache.Delete(ctx, userID)
 
 ### 使用 Pipeline
 
-批量操作多个哈希表：
+批量操作多个哈希表，通过 `manager.Redis()` 获取底层客户端：
 
 ```go
-func (c *UserConfigCache) SetMultipleUsers(ctx context.Context, configs map[string]map[string]*string) error {
-    pipe := c.RDB.Pipeline()
+func SetMultipleUsers(ctx context.Context, configs map[string]map[string]*string) error {
+    manager := ctx.Value(xCtx.CacheManagerKey).(*xCache.Manager)
+    pipe := manager.Redis().Pipeline()
 
     for userID, fields := range configs {
         key := "user:config:" + userID

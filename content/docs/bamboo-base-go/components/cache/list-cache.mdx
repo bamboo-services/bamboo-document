@@ -244,109 +244,100 @@ Delete(ctx context.Context, key K) error
 
 ## 实现示例
 
-### 消息队列缓存
+`ListCache` 不需要手写底层实现：通过 `Manager` 创建泛型实例 `lc` 即可直接调用所有方法。下面以 `K=string`、`V=string` 的消息队列为例。
+
+### 创建泛型 ListCache 实例
 
 ```go title="cache/message_queue.go"
 import (
-    "encoding/json"
+    "context"
 
     "github.com/gin-gonic/gin"
-    "github.com/redis/go-redis/v9"
     xCache "github.com/bamboo-services/bamboo-base-go/major/cache"
+    xCtx   "github.com/bamboo-services/bamboo-base-go/major/context"
 )
 
-type Message struct {
-    ID      string `json:"id"`
-    Content string `json:"content"`
-    Time    int64  `json:"time"`
-}
-
+// MessageQueueCache 持有一个 string/string 的 ListCache 泛型实例
 type MessageQueueCache struct {
-    *xCache.Cache
+    lc xCache.ListCache[string, string]
 }
 
-// [!code highlight:10]
-// Prepend 在队列头部插入消息
-func (c *MessageQueueCache) Prepend(ctx context.Context, queueName string, messages ...string) error {
-    key := "queue:" + queueName
-    values := make([]interface{}, len(messages))
-    for i, msg := range messages {
-        values[i] = msg
-    }
-    return c.RDB.LPush(ctx, key, values...).Err()
+// NewMessageQueueCache 从上下文中的 CacheManager 构造泛型 ListCache
+func NewMessageQueueCache(ctx context.Context) *MessageQueueCache {
+    // [!code highlight:3]
+    // 从请求上下文中获取 Manager
+    manager := ctx.Value(xCtx.CacheManagerKey).(*xCache.Manager)
+    // 基于泛型创建 ListCache 实例
+    lc := xCache.ListCacheOf[string, string](manager)
+    return &MessageQueueCache{lc: lc}
 }
 
-// [!code highlight:10]
-// Append 在队列尾部追加消息
-func (c *MessageQueueCache) Append(ctx context.Context, queueName string, messages ...string) error {
-    key := "queue:" + queueName
-    values := make([]interface{}, len(messages))
-    for i, msg := range messages {
-        values[i] = msg
-    }
-    return c.RDB.RPush(ctx, key, values...).Err()
+// [!code highlight:3]
+// Prepend 在队列头部插入消息（切片形式，可附加 SetOption）
+func (c *MessageQueueCache) Prepend(ctx context.Context, queueName string, messages []string) error {
+    return c.lc.Prepend(ctx, "queue:"+queueName, messages)
 }
 
-// [!code highlight:5]
+// [!code highlight:3]
+// Append 在队列尾部追加消息（切片形式，可附加 SetOption）
+func (c *MessageQueueCache) Append(ctx context.Context, queueName string, messages []string) error {
+    return c.lc.Append(ctx, "queue:"+queueName, messages)
+}
+
+// [!code highlight:2]
 // Range 获取指定范围的消息
 func (c *MessageQueueCache) Range(ctx context.Context, queueName string, start, end int64) ([]string, error) {
-    key := "queue:" + queueName
-    return c.RDB.LRange(ctx, key, start, end).Result()
+    return c.lc.Range(ctx, "queue:"+queueName, start, end)
 }
 
-// [!code highlight:9]
+// [!code highlight:3]
 // Index 获取指定位置的消息
 func (c *MessageQueueCache) Index(ctx context.Context, queueName string, index int64) (*string, error) {
-    key := "queue:" + queueName
-    val, err := c.RDB.LIndex(ctx, key, index).Result()
-    if err == redis.Nil {
-        return nil, nil
-    }
-    return &val, err
+    return c.lc.Index(ctx, "queue:"+queueName, index)
 }
 
-// [!code highlight:5]
+// [!code highlight:2]
 // Len 获取队列长度
 func (c *MessageQueueCache) Len(ctx context.Context, queueName string) (int64, error) {
-    key := "queue:" + queueName
-    return c.RDB.LLen(ctx, key).Result()
+    return c.lc.Len(ctx, "queue:"+queueName)
 }
 
-// [!code highlight:9]
+// [!code highlight:3]
 // Pop 从队列头部弹出消息
 func (c *MessageQueueCache) Pop(ctx context.Context, queueName string) (*string, error) {
-    key := "queue:" + queueName
-    val, err := c.RDB.LPop(ctx, key).Result()
-    if err == redis.Nil {
-        return nil, nil
-    }
-    return &val, err
+    return c.lc.Pop(ctx, "queue:"+queueName)
 }
 
-// [!code highlight:9]
+// [!code highlight:3]
 // PopLast 从队列尾部弹出消息
 func (c *MessageQueueCache) PopLast(ctx context.Context, queueName string) (*string, error) {
-    key := "queue:" + queueName
-    val, err := c.RDB.RPop(ctx, key).Result()
-    if err == redis.Nil {
-        return nil, nil
-    }
-    return &val, err
+    return c.lc.PopLast(ctx, "queue:"+queueName)
 }
 
-// [!code highlight:5]
+// [!code highlight:2]
 // Remove 移除指定消息
 func (c *MessageQueueCache) Remove(ctx context.Context, queueName string, count int64, message string) error {
-    key := "queue:" + queueName
-    return c.RDB.LRem(ctx, key, count, message).Err()
+    return c.lc.Remove(ctx, "queue:"+queueName, count, message)
 }
 
-// [!code highlight:4]
+// [!code highlight:2]
 // Delete 删除整个队列
 func (c *MessageQueueCache) Delete(ctx context.Context, queueName string) error {
-    key := "queue:" + queueName
-    return c.RDB.Del(ctx, key).Err()
+    return c.lc.Delete(ctx, "queue:"+queueName)
 }
+```
+
+### 带写入选项的调用
+
+```go
+// 沿用默认 TTL
+_ = c.lc.Prepend(ctx, "queue:1", []string{"task-1", "task-2"})
+
+// 仅当 key 不存在时写入（首次建队）
+_ = c.lc.Prepend(ctx, "queue:1", []string{"task-1"}, xCache.WithNX())
+
+// 追加但不滑动 TTL（不延长 key 整体过期时间）
+_ = c.lc.Append(ctx, "queue:1", []string{"task-5"}, xCache.WithNoSlide())
 ```
 
 ### 使用消息队列
@@ -356,16 +347,14 @@ type MessageQueueService struct {
     cache *MessageQueueCache
 }
 
-func NewMessageQueueService(cache *xCache.Cache) *MessageQueueService {
-    return &MessageQueueService{
-        cache: &MessageQueueCache{Cache: cache},
-    }
+func NewMessageQueueService(cache *MessageQueueCache) *MessageQueueService {
+    return &MessageQueueService{cache: cache}
 }
 
-// [!code highlight:7]
-// Enqueue 入队（追加到尾部）
+// [!code highlight:5]
+// Enqueue 入队（追加到尾部），单条消息包装为切片
 func (s *MessageQueueService) Enqueue(ctx context.Context, queueName string, message string) error {
-    return s.cache.Append(ctx, queueName, message)
+    return s.cache.Append(ctx, queueName, []string{message})
 }
 
 // [!code highlight:5]
@@ -454,11 +443,11 @@ type StackCache interface {
 使用 `Append` + `Pop` 实现 FIFO 队列：
 
 ```go
-// 入队
-cache.Append(ctx, "queue", "msg1", "msg2", "msg3")
+// 入队（切片形式批量追加）
+_ = lc.Append(ctx, "queue:1", []string{"msg1", "msg2", "msg3"})
 
 // 出队
-msg, _ := cache.Pop(ctx, "queue")  // 返回 "msg1"
+msg, _ := lc.Pop(ctx, "queue:1")  // 返回 "msg1"
 ```
 
 ### 2. 栈模式
@@ -466,31 +455,22 @@ msg, _ := cache.Pop(ctx, "queue")  // 返回 "msg1"
 使用 `Prepend` + `Pop` 实现 LIFO 栈：
 
 ```go
-// 入栈
-cache.Prepend(ctx, "stack", "item1", "item2", "item3")
+// 入栈（切片形式批量插入）
+_ = lc.Prepend(ctx, "stack:1", []string{"item1", "item2", "item3"})
 
 // 出栈
-item, _ := cache.Pop(ctx, "stack")  // 返回 "item3"
+item, _ := lc.Pop(ctx, "stack:1")  // 返回 "item3"
 ```
 
 ### 3. 限制列表长度
 
-使用 `LTrim` 保持固定长度：
+使用 `Append` + `xCache.WithNoSlide()` 控制列表长度而不延长 TTL：
 
 ```go
-func (c *MessageQueueCache) AppendWithLimit(ctx context.Context, queueName string, message string, maxLen int64) error {
-    key := "queue:" + queueName
-
-    // [!code highlight:2]
-    // 追加消息
-    if err := c.RDB.RPush(ctx, key, message).Err(); err != nil {
-        return err
-    }
-
-    // [!code highlight:2]
-    // 保留最新的 maxLen 条
-    return c.RDB.LTrim(ctx, key, -maxLen, -1).Err()
-}
+// [!code highlight:3]
+// 追加消息但不滑动 TTL（不延长 key 整体过期时间）
+// 配合上游的固定 TTL 与定期 LTrim，可控制列表长度
+_ = lc.Append(ctx, "queue:1", []string{message}, xCache.WithNoSlide())
 ```
 
 ### 4. 分页获取
@@ -507,19 +487,27 @@ func (s *MessageQueueService) GetPage(ctx context.Context, queueName string, pag
 
 ### 5. 批量操作
 
-使用可变参数批量插入：
+使用切片一次性批量插入，避免逐条调用：
 
 ```go
-// ✅ 批量追加
-cache.Append(ctx, "queue", "msg1", "msg2", "msg3")
+// ✅ 批量追加（单次调用，使用切片）
+_ = lc.Append(ctx, "queue:1", []string{"msg1", "msg2", "msg3"})
 
-// ❌ 逐个追加
-cache.Append(ctx, "queue", "msg1")
-cache.Append(ctx, "queue", "msg2")
-cache.Append(ctx, "queue", "msg3")
+// ❌ 逐个追加（多次网络往返）
+_ = lc.Append(ctx, "queue:1", []string{"msg1"})
+_ = lc.Append(ctx, "queue:1", []string{"msg2"})
+_ = lc.Append(ctx, "queue:1", []string{"msg3"})
 ```
 
 ## 高级操作
+
+> 以下为**底层扩展用法**：`ListCache` 接口未直接暴露的 Redis 原生命令（阻塞弹出、列表间移动、按位置插入等）可通过 `manager.Redis()` 获取底层 `*redis.Client`，再调用 `go-redis` 原生 API 实现。这类调用绕过了 Manager 的封装，需自行处理错误与 TTL。
+
+```go
+// 从上下文获取 Manager，再取出底层 redis 客户端
+manager := ctx.Value(xCtx.CacheManagerKey).(*xCache.Manager)
+rdb := manager.Redis()
+```
 
 ### 阻塞弹出
 
@@ -527,9 +515,9 @@ cache.Append(ctx, "queue", "msg3")
 
 ```go
 // 阻塞弹出（等待 5 秒）
-func (c *MessageQueueCache) BlockingPop(ctx context.Context, queueName string, timeout time.Duration) (*string, error) {
+func BlockingPop(ctx context.Context, rdb *redis.Client, queueName string, timeout time.Duration) (*string, error) {
     key := "queue:" + queueName
-    result, err := c.RDB.BLPop(ctx, timeout, key).Result()
+    result, err := rdb.BLPop(ctx, timeout, key).Result()
     if err == redis.Nil {
         return nil, nil
     }
@@ -549,10 +537,10 @@ func (c *MessageQueueCache) BlockingPop(ctx context.Context, queueName string, t
 
 ```go
 // 从源队列弹出并推入目标队列
-func (c *MessageQueueCache) Move(ctx context.Context, srcQueue, dstQueue string) error {
+func Move(ctx context.Context, rdb *redis.Client, srcQueue, dstQueue string) error {
     srcKey := "queue:" + srcQueue
     dstKey := "queue:" + dstQueue
-    _, err := c.RDB.RPopLPush(ctx, srcKey, dstKey).Result()
+    _, err := rdb.RPopLPush(ctx, srcKey, dstKey).Result()
     return err
 }
 ```
@@ -563,15 +551,15 @@ func (c *MessageQueueCache) Move(ctx context.Context, srcQueue, dstQueue string)
 
 ```go
 // 在 pivot 元素之前插入
-func (c *MessageQueueCache) InsertBefore(ctx context.Context, queueName, pivot, value string) error {
+func InsertBefore(ctx context.Context, rdb *redis.Client, queueName, pivot, value string) error {
     key := "queue:" + queueName
-    return c.RDB.LInsertBefore(ctx, key, pivot, value).Err()
+    return rdb.LInsertBefore(ctx, key, pivot, value).Err()
 }
 
 // 在 pivot 元素之后插入
-func (c *MessageQueueCache) InsertAfter(ctx context.Context, queueName, pivot, value string) error {
+func InsertAfter(ctx context.Context, rdb *redis.Client, queueName, pivot, value string) error {
     key := "queue:" + queueName
-    return c.RDB.LInsertAfter(ctx, key, pivot, value).Err()
+    return rdb.LInsertAfter(ctx, key, pivot, value).Err()
 }
 ```
 
@@ -579,11 +567,11 @@ func (c *MessageQueueCache) InsertAfter(ctx context.Context, queueName, pivot, v
 
 ### 使用 Pipeline
 
-批量操作多个列表：
+批量操作多个列表（底层扩展用法，通过 `manager.Redis()` 获取 rdb）：
 
 ```go
-func (c *MessageQueueCache) EnqueueMultiple(ctx context.Context, messages map[string][]string) error {
-    pipe := c.RDB.Pipeline()
+func EnqueueMultiple(ctx context.Context, rdb *redis.Client, messages map[string][]string) error {
+    pipe := rdb.Pipeline()
 
     for queueName, msgs := range messages {
         key := "queue:" + queueName
@@ -601,32 +589,23 @@ func (c *MessageQueueCache) EnqueueMultiple(ctx context.Context, messages map[st
 
 ### 避免大列表
 
-限制列表长度，避免性能问题：
+优先使用 `lc.Append` 配合 `xCache.WithNoSlide()` 控制写入，避免因每次追加滑动 TTL 而导致列表无限增长：
+
+```go
+// [!code highlight:3]
+// 追加单条消息但不滑动 TTL，配合上游固定 TTL 与定期 LTrim 控制列表长度
+_ = lc.Append(ctx, "queue:1", []string{message}, xCache.WithNoSlide())
+```
+
+如需硬性长度上限，可在追加后通过 `manager.Redis()` 执行 `LTrim`：
 
 ```go
 const MaxQueueSize = 10000
 
-func (c *MessageQueueCache) Append(ctx context.Context, queueName string, messages ...string) error {
+func TrimQueue(ctx context.Context, rdb *redis.Client, queueName string) error {
     key := "queue:" + queueName
-
-    // [!code highlight:5]
-    // 检查长度
-    length, err := c.RDB.LLen(ctx, key).Result()
-    if err != nil {
-        return err
-    }
-
-    // [!code highlight:3]
-    // 超过限制则拒绝
-    if length+int64(len(messages)) > MaxQueueSize {
-        return errors.New("队列已满")
-    }
-
-    values := make([]interface{}, len(messages))
-    for i, msg := range messages {
-        values[i] = msg
-    }
-    return c.RDB.RPush(ctx, key, values...).Err()
+    // 保留最新的 MaxQueueSize 条
+    return rdb.LTrim(ctx, key, -MaxQueueSize, -1).Err()
 }
 ```
 
