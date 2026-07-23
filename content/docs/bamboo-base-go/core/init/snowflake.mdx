@@ -62,15 +62,26 @@ func SnowflakeInit(ctx context.Context) (any, error) {
 在 `Register` 流程中，雪花算法作为内置节点自动注册：
 
 ```go title="register.go"
-func Register(ctx context.Context, nodeList []xRegNode.RegNodeList) *Reg {
+// v1.0.5 起：opts 作为变参传入，统一装配内置组件
+func Register(ctx context.Context, nodeList []xRegNode.RegNodeList, opts ...xOption.Option) *Reg {
     reg := newReg(ctx)
 
     reg.configInit()
     reg.loggerInit()
 
+    cfg := xOption.Apply(opts...)
+
     // [!code highlight:2]
     // 内置节点：雪花算法
     reg.Init.Use(xCtx.SnowflakeNodeKey, xInit.SnowflakeInit)
+    // 内置节点：数据库（来自 opts，启用时）
+    if dc := cfg.Database(); dc.Enabled() {
+        reg.Init.Use(xCtx.DatabaseKey, xInit.DatabaseInit(dc))
+    }
+    // 内置节点：缓存（来自 opts，启用时）
+    if cc := cfg.Cache(); cc.Enabled() {
+        reg.Init.Use(xCtx.CacheManagerKey, xInit.CacheInit(cc))
+    }
 
     // 用户自定义节点
     for _, node := range nodeList {
@@ -79,6 +90,11 @@ func Register(ctx context.Context, nodeList []xRegNode.RegNodeList) *Reg {
 
     reg.Init.Exec()
     reg.engineInit()
+
+    // 路由注册（engineInit 之后，ctx 已含全部组件）
+    for _, registrar := range cfg.Routes() {
+        registrar(reg.Init.Ctx, reg.Serve)
+    }
 
     return reg
 }

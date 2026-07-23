@@ -23,11 +23,12 @@ import (
 )
 
 func main() {
-    // [!code highlight:6]
-    reg := xReg.Register(context.Background(), []xRegNode.RegNodeList{
-        {Key: xCtx.DatabaseKey, Node: initDatabase},
-        {Key: xCtx.RedisClientKey, Node: initRedis},
-    })
+    // [!code highlight:5]
+    // v1.0.5 起：通过 opts 声明式装配，框架自动注册保留键
+    reg := xReg.Register(context.Background(), nil,
+        xOption.WithDatabase(xOptDatabase.FromEnv()),
+        xOption.WithCache(xOptCache.FromEnv()),
+    )
 
     reg.Serve.Run(":8080")
 }

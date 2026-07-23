@@ -114,19 +114,14 @@ import (
     xRegNode "github.com/bamboo-services/bamboo-base-go/major/register/node"
 )
 
-// [!code highlight:8]
-// 注册时注入数据库和 Redis
-reg := xReg.Register(context.Background(), []xRegNode.RegNodeList{
-    {Key: xCtx.DatabaseKey, Node: initDatabase},
-    {Key: xCtx.RedisClientKey, Node: initRedis},
-})
-
-// [!code highlight:2]
-// 初始化节点函数
-func initDatabase(ctx context.Context) (any, error) {
-    db, err := gorm.Open(...)
-    return db, err
-}
+// [!code highlight:7]
+// v1.0.5 起：通过 opts 声明式装配，框架自动注册保留键
+reg := xReg.Register(context.Background(), nil,
+    xOption.WithDatabase(xOptDatabase.FromEnv()),  // → DatabaseKey
+    xOption.WithCache(xOptCache.FromEnv()),        // → CacheManagerKey + RedisClientKey
+)
+// SnowflakeNodeKey / DatabaseKey / CacheManagerKey / RedisClientKey
+// 均为框架保留键，不能在 nodeList 中重复注册
 ```
 
 ### 从上下文获取值
@@ -180,19 +175,23 @@ func MyHandler(c *gin.Context) {
 | `RequestKey` | `xHelper.RequestContext()` | 框架自动注入 |
 | `UserStartTimeKey` | `xHelper.RequestContext()` | 框架自动注入 |
 | `SnowflakeNodeKey` | `xReg.Register()` 内置节点 | 框架自动注入 |
-| `DatabaseKey` | 自定义初始化节点 | 需手动注入 |
-| `RedisClientKey` | 自定义初始化节点 | 需手动注入 |
+| `DatabaseKey` | `xReg.Register()` 根据 `opts` | v1.0.5 起框架保留键，启用 `WithDatabase` 时自动注入 |
+| `CacheManagerKey` | `xReg.Register()` 根据 `opts` | v1.0.5 起框架保留键，启用 `WithCache` 时自动注入 |
+| `RedisClientKey` | `xReg.Register()` 根据 `opts` | v1.0.5 起框架保留键，Redis 后端时自动注入 |
 | `ErrorCodeKey` | 错误处理中间件 | 错误时自动设置 |
 | `ErrorMessageKey` | 错误处理中间件 | 错误时自动设置 |
+
+> **框架保留键**（v1.0.5）：`SnowflakeNodeKey` / `DatabaseKey` / `CacheManagerKey` / `RedisClientKey` 由 `Register` 根据 `opts` 自动注册，**不得**出现在 `nodeList` 中，否则 `Use` 会因重复注册 panic。
 
 ## 上下文流转
 
 ```
-Register(ctx, nodeList)
+Register(ctx, nodeList, opts...)
     │
-    ├── 内置节点注入 SnowflakeNodeKey
-    │
-    ├── 自定义节点注入 DatabaseKey, RedisClientKey, ...
+    ├── 框架保留键：SnowflakeNodeKey（始终）
+    ├── 框架保留键：DatabaseKey（opts 含 WithDatabase 时）
+    ├── 框架保留键：CacheManagerKey + RedisClientKey（opts 含 WithCache 时）
+    ├── 业务自定义节点（来自 nodeList，键不得与保留键冲突）
     │
     └── engineInit()
             │

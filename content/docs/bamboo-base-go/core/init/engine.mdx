@@ -120,7 +120,7 @@ type CreateUserReq struct {
 初始化完成后，通过 `reg.Serve` 访问 Gin 引擎：
 
 ```go
-reg := xReg.Register(context.Background(), nodeList)
+reg := xReg.Register(context.Background(), nil)  // v1.0.5 起：opts 通过变参传入
 
 // [!code highlight:4]
 // 注册路由

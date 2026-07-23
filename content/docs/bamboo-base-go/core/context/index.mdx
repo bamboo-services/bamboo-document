@@ -40,23 +40,27 @@ sequenceDiagram
 
 ```go title="初始化流程"
 // [!code highlight:2]
-// 1. Register 创建节点管理器
-xReg.Register(ctx, nodeList)
+// 1. Register 创建节点管理器（v1.0.5 起 opts 作为变参传入）
+xReg.Register(ctx, nodeList, opts...)
     │
     ├── configInit()           // 私有：加载配置
     ├── loggerInit()           // 私有：初始化日志
     │
     // [!code highlight:2]
-    // 2. 内置节点注入雪花算法
+    // 2. 框架保留键：雪花算法（始终注入）
     ├── SnowflakeNodeKey → *xSnowflake.Node
     │
-    // [!code highlight:2]
-    // 3. 自定义节点注入业务资源
-    ├── DatabaseKey      → *gorm.DB
-    ├── RedisClientKey   → *redis.Client
+    // [!code highlight:3]
+    // 3. 框架保留键：数据库与缓存（来自 opts，启用时注入）
+    ├── DatabaseKey      → *gorm.DB          // WithDatabase 启用时
+    ├── CacheManagerKey → *xCache.Manager    // WithCache 启用时
+    ├── RedisClientKey   → *redis.Client      // Redis 后端时
     │
     // [!code highlight:2]
-    // 4. 引擎初始化，注入上下文到请求
+    // 4. 业务自定义节点（来自 nodeList，键不得与保留键冲突）
+    │
+    // [!code highlight:2]
+    // 5. 引擎初始化，注入上下文到请求
     └── engineInit()
             └── injectContext(ctx)
 ```
@@ -142,15 +146,16 @@ func (c *ContextNodeList) Append(key ContextKey, value any)
 ### 使用示例
 
 ```go title="register.go"
-nodeList := xCtx.NewCtxNodeList()
-nodeList.Append(xCtx.DatabaseKey, initDatabase())
-nodeList.Append(xCtx.RedisClientKey, initRedis())
-
+// v1.0.5 起：DatabaseKey / RedisClientKey 由 opts 自动注册，
+// 业务侧只需在 nodeList 中放纯业务自定义键
 reg := xReg.Register(ctx, []xRegNode.RegNodeList{
     {Key: xCtx.RegNodeKey, Node: func(ctx context.Context) (any, error) {
-        return nodeList, nil
+        return customNodeList, nil
     }},
-})
+},
+    xOption.WithDatabase(xOptDatabase.FromEnv()),
+    xOption.WithCache(xOptCache.FromEnv()),
+)
 ```
 
 
@@ -170,28 +175,17 @@ import (
 
 func main() {
     // [!code highlight:6]
-    reg := xReg.Register(context.Background(), []xRegNode.RegNodeList{
-        {Key: xCtx.DatabaseKey, Node: initDatabase},
-        {Key: xCtx.RedisClientKey, Node: initRedis},
-    })
+    // v1.0.5 起：通过 opts 声明式装配，框架自动注册保留键
+    reg := xReg.Register(context.Background(), nil,
+        xOption.WithDatabase(xOptDatabase.FromEnv()),  // → DatabaseKey
+        xOption.WithCache(xOptCache.FromEnv()),        // → CacheManagerKey + RedisClientKey
+    )
 
     reg.Serve.Run(":8080")
 }
-
-// [!code highlight:2]
-// 数据库初始化节点
-func initDatabase(ctx context.Context) (any, error) {
-    db, err := gorm.Open(...)
-    return db, err
-}
-
-// [!code highlight:2]
-// Redis 初始化节点
-func initRedis(ctx context.Context) (any, error) {
-    rdb := redis.NewClient(...)
-    return rdb, nil
-}
 ```
+
+> `DatabaseKey` / `CacheManagerKey` / `RedisClientKey` / `SnowflakeNodeKey` 是**框架保留键**，由 `Register` 根据 `opts` 自动注册，不能在 `nodeList` 中重复注册。如需注入自定义资源（非框架内置组件），请使用自定义 `ContextKey`。
 
 ### 方式二：中间件注入
 

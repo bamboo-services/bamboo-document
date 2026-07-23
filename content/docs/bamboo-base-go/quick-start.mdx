@@ -21,7 +21,7 @@ go get github.com/bamboo-services/bamboo-base-go/plugins/email  # 可选
 go mod tidy
 ```
 
-> 亦可使用 **声明式配置**（`xOption`）替代手动节点注册，简化内置组件装配。详见 [声明式配置](/docs/bamboo-base-go/core/option)。
+> **快速开始默认使用声明式配置**（`xOption`）装配数据库与缓存，无需手写初始化节点。如需自定义初始化逻辑（第三方 SDK 等），参见 [节点初始化](/docs/bamboo-base-go/core/init) 与 [声明式配置](/docs/bamboo-base-go/core/option)。
 
 ## 工具链与命令（接入方 vs 维护方）
 
@@ -76,6 +76,8 @@ GRPC_PORT=1119
 GRPC_REFLECTION=false
 
 # 数据库配置
+# DATABASE_DRIVER 决定声明式装配的驱动：mysql / postgres / sqlite / oracle / sqlserver / none
+DATABASE_DRIVER=postgres
 DATABASE_HOST=localhost
 DATABASE_PORT=5432
 DATABASE_USER=postgres
@@ -85,6 +87,8 @@ DATABASE_PREFIX=app_
 DATABASE_TIMEZONE=Asia/Shanghai
 
 # Redis 配置
+# NOSQL_DRIVER 决定声明式装配的缓存后端：redis / memory / none
+NOSQL_DRIVER=redis
 NOSQL_HOST=localhost
 NOSQL_PORT=6379
 NOSQL_USER=
@@ -109,38 +113,49 @@ EMAIL_TLS=starttls
 
 ## 入口文件
 
+通过 **声明式配置**（`xOption`）装配数据库、缓存与路由，框架根据 `opts` 自动注册保留键（`DatabaseKey` / `CacheManagerKey` / `RedisClientKey` / `SnowflakeNodeKey`），业务侧无需也不能手写这些节点的初始化：
+
 ```go title="main.go"
 package main
 
 import (
     "context"
 
-    xCtx "github.com/bamboo-services/bamboo-base-go/defined/context"
     xLog "github.com/bamboo-services/bamboo-base-go/common/log"
     xMain "github.com/bamboo-services/bamboo-base-go/major/main"
     xOption "github.com/bamboo-services/bamboo-base-go/major/option"
+    xOptCache "github.com/bamboo-services/bamboo-base-go/major/option/cache"
+    xOptDatabase "github.com/bamboo-services/bamboo-base-go/major/option/database"
     xReg "github.com/bamboo-services/bamboo-base-go/major/register"
-    xRegNode "github.com/bamboo-services/bamboo-base-go/major/register/node"
-    "your-project/internal/app/startup"
     "your-project/internal/app/route"
+    "your-project/internal/entity"
 )
 
 func main() {
-    // [!code highlight:7]
-    // 1. 初始化 bamboo-base-go 核心组件（传入自定义节点）
-    reg := xReg.Register(context.Background(), []xRegNode.RegNodeList{
-        {Key: xCtx.DatabaseKey, Node: startup.InitDatabase},
-        {Key: xCtx.RedisClientKey, Node: startup.InitRedis},
-    })
+    // [!code highlight:11]
+    // v1.0.5 起：opts 直接传给 Register，声明式装配内置组件
+    // DatabaseKey / CacheManagerKey / RedisClientKey / SnowflakeNodeKey
+    // 由框架根据 opts 自动注册，业务侧不能在 nodeList 中重复注册
+    reg := xReg.Register(context.Background(), nil,
+        // 数据库：从环境变量装配（DATABASE_DRIVER=postgres）
+        xOption.WithDatabase(
+            xOptDatabase.FromEnv(),
+            xOptDatabase.WithAutoMigrate(&entity.User{}),
+        ),
+        // 缓存：从环境变量装配（NOSQL_DRIVER=redis）
+        xOption.WithCache(xOptCache.FromEnv()),
+        // 路由
+        xOption.WithRoute(route.NewRoute),
+    )
 
     log := xLog.WithName(xLog.NamedMAIN)
 
-    // 2. 交由 Runner 托管服务生命周期（路由注册 + 启动 + 优雅关闭）
-    xMain.Runner(reg, log, []xOption.Option{
-        xOption.WithRoute(route.NewRoute),
-    })
+    // Runner 启动 HTTP 服务并优雅关闭
+    xMain.Runner(reg, log, nil)
 }
 ```
+
+> 也可将 `opts` 传给 `xMain.Runner(reg, log, opts)` 而非 `Register`，两种方式等价。区别是传给 `Register` 时业务自定义节点能立即从 `ctx` 取到 DB / 缓存；传给 `Runner` 时仅在 Runner 阶段装配。详见 [服务运行时](/docs/bamboo-base-go/core/init/runner)。
 
 ## 可选：HTTP + gRPC 一体化启动
 
@@ -177,115 +192,58 @@ xMain.Runner(reg, log, []xOption.Option{
 
 完整说明参见：[gRPC 运行时](/docs/bamboo-base-go/grpc/runner)
 
-## 业务初始化
+## 声明式装配：数据库
 
-数据库和 Redis 通过**节点化系统**注入，通常放在 `startup` 包中实现：
+入口文件中 `xOption.WithDatabase(xOptDatabase.FromEnv(), ...)` 会从环境变量自动装配数据库。框架根据 `DATABASE_DRIVER` 选择对应驱动的 DSN 拼装函数，建连后将 `*gorm.DB` 注入 `ctx.DatabaseKey`，业务侧通过 `xCtxUtil.MustGetDB(ctx)` 获取。
 
-```go title="internal/app/startup/init_database.go"
-package startup
+### FromEnv 读取的环境变量
 
-import (
-    "context"
-    "log/slog"
-    "strings"
+| 驱动 | `DATABASE_DRIVER` | 自动拼装的 DSN 来源 | 额外变量 |
+|------|-------------------|---------------------|----------|
+| PostgreSQL | `postgres` | `PostgresFromEnv()` | `DATABASE_TIMEZONE` |
+| MySQL | `mysql` | `MySQLFromEnv()` | `DATABASE_CHARSET` |
+| SQLite | `sqlite` | `SQLiteFromEnv()` | `DATABASE_PATH` |
+| Oracle | `oracle` | `OracleFromEnv()` | `DATABASE_SERVICE_NAME` / `DATABASE_LIB_DIR` |
+| SQL Server | `sqlserver` | `SQLServerFromEnv()` | — |
 
-    xEnv "github.com/bamboo-services/bamboo-base-go/defined/env"
-    xLog "github.com/bamboo-services/bamboo-base-go/common/log"
-    "your-project/internal/entity"
-    "gorm.io/driver/postgres"
-    "gorm.io/gorm"
-    "gorm.io/gorm/schema"
+> 若设置了 `DATABASE_DSN`，则直接使用该完整连接串，跳过分项拼装。`DATABASE_PREFIX` 会自动写入 GORM `NamingStrategy.TablePrefix`。
+
+### 自动迁移与数据初始化
+
+通过二级选项声明迁移表与建表后的数据初始化回调，框架在 `Register` 阶段建连成功后自动执行：
+
+```go title="main.go（片段）"
+xOption.WithDatabase(
+    xOptDatabase.FromEnv(),
+    // AutoMigrate 目标表，可多次叠加
+    xOptDatabase.WithAutoMigrate(&entity.User{}, &entity.Role{}),
+    // 建表后数据初始化回调，按注册顺序执行
+    xOptDatabase.WithPrepare(seedRoles),
 )
 
-// [!code highlight:4]
-// 需要自动迁移的数据表
-var migrateTables = []interface{}{
-    &entity.User{},
-}
-
-// [!code highlight:2]
-// InitDatabase 数据库初始化节点
-func InitDatabase(ctx context.Context) (any, error) {
-    log := xLog.WithName(xLog.NamedINIT)
-    log.Debug(ctx, "正在连接数据库...")
-
-    // [!code highlight:12]
-    // 构建 DSN
-    dsn := strings.Builder{}
-    dsn.WriteString("host=")
-    dsn.WriteString(xEnv.GetEnvString(xEnv.DatabaseHost, "localhost"))
-    dsn.WriteString(" user=")
-    dsn.WriteString(xEnv.GetEnvString(xEnv.DatabaseUser, "postgres"))
-    dsn.WriteString(" password=")
-    dsn.WriteString(xEnv.GetEnvString(xEnv.DatabasePass, ""))
-    dsn.WriteString(" dbname=")
-    dsn.WriteString(xEnv.GetEnvString(xEnv.DatabaseName, "postgres"))
-    dsn.WriteString(" port=")
-    dsn.WriteString(xEnv.GetEnvString(xEnv.DatabasePort, "5432"))
-    dsn.WriteString(" sslmode=disable")
-
-    // [!code highlight:11]
-    db, err := gorm.Open(postgres.Open(dsn.String()), &gorm.Config{
-        NamingStrategy: schema.NamingStrategy{
-            TablePrefix:   xEnv.GetEnvString(xEnv.DatabasePrefix, "app_"),
-            SingularTable: true,
-        },
-        Logger: xLog.NewSlogLogger(slog.Default().WithGroup(xLog.NamedREPO), xLog.GormLoggerConfig{
-            SlowThreshold:             200,
-            LogLevel:                  xLog.LevelInfo,
-            IgnoreRecordNotFoundError: true,
-        }),
-    })
-    if err != nil {
-        return nil, err
-    }
-
-    // [!code highlight:2]
-    // 自动迁移
-    _ = db.AutoMigrate(migrateTables...)
-
-    log.Info(ctx, "数据库连接成功")
-
-    // [!code highlight:2]
-    // 返回值将被存入上下文
-    return db, nil
+// seedRoles 示例：建表后插入初始角色数据
+func seedRoles(db *gorm.DB) error {
+    return db.Create([]*entity.Role{
+        {Name: "admin"},
+        {Name: "user"},
+    }).Error
 }
 ```
 
-## Redis 初始化
+> 如需完全手写数据库初始化逻辑（自定义 GORM 配置、多数据源等），可不用 `WithDatabase`，改为通过 `xRegNode.RegNodeList` 注册**自定义键**（非 `DatabaseKey`）的节点。详见 [节点初始化](/docs/bamboo-base-go/core/init)。
 
-```go title="internal/app/startup/init_redis.go"
-package startup
+## 声明式装配：缓存
 
-import (
-    "context"
+入口文件中 `xOption.WithCache(xOptCache.FromEnv())` 会从环境变量自动装配缓存后端。框架根据 `NOSQL_DRIVER` 选择 Redis 或 Memory，建连后将 `*xCache.Manager` 注入 `ctx.CacheManagerKey`，Redis 后端额外将 `*redis.Client` 注入 `ctx.RedisClientKey`。
 
-    xEnv "github.com/bamboo-services/bamboo-base-go/defined/env"
-    xLog "github.com/bamboo-services/bamboo-base-go/common/log"
-    "github.com/redis/go-redis/v9"
-)
+### FromEnv 读取的环境变量
 
-// [!code highlight:2]
-// InitRedis Redis 初始化节点
-func InitRedis(ctx context.Context) (any, error) {
-    log := xLog.WithName(xLog.NamedINIT)
-    log.Debug(ctx, "正在连接 Redis...")
+| 后端 | `NOSQL_DRIVER` | 自动拼装内容 |
+|------|----------------|-------------|
+| Redis | `redis` | `NOSQL_HOST` / `NOSQL_PORT` / `NOSQL_USER` / `NOSQL_PASS` / `NOSQL_DATABASE` / `NOSQL_POOL_SIZE` |
+| Memory | `memory` | `NOSQL_MEMORY_DEFAULT_TTL` / `NOSQL_MEMORY_MAX_ENTRIES` / `NOSQL_MEMORY_SHARD_COUNT` |
 
-    // [!code highlight:7]
-    rdb := redis.NewClient(&redis.Options{
-        Addr:     xEnv.GetEnvString(xEnv.NoSqlHost, "localhost") + ":" + xEnv.GetEnvString(xEnv.NoSqlPort, "6379"),
-        Password: xEnv.GetEnvString(xEnv.NoSqlPass, ""),
-        DB:       xEnv.GetEnvInt(xEnv.NoSqlDatabase, 0),
-        PoolSize: xEnv.GetEnvInt(xEnv.NoSqlPoolSize, 10),
-    })
-
-    log.Info(ctx, "Redis 连接成功")
-
-    // [!code highlight:2]
-    // 返回值将被存入上下文
-    return rdb, nil
-}
-```
+> 业务侧通过 `ctx.Value(xCtx.RedisClientKey)` 获取 `*redis.Client`，或通过 `ctx.Value(xCtx.CacheManagerKey)` 获取 `*xCache.Manager` 使用泛型缓存接口。详见 [缓存系统](/docs/bamboo-base-go/components/cache)。
 
 ## 实体定义
 

@@ -52,14 +52,16 @@ import (
 )
 
 func main() {
-    // [!code highlight:8]
+    // [!code highlight:9]
+    // v1.0.5 起：DatabaseKey / RedisClientKey 由 opts 自动注册，
+    // nodeList 只放业务自定义资源
     reg := xReg.Register(context.Background(), []xRegNode.RegNodeList{
-        // 框架资源
-        {Key: xCtx.DatabaseKey, Node: initDatabase},
-        {Key: xCtx.RedisClientKey, Node: initRedis},
         // 业务资源
         {Key: bContext.TencentCloudForSmsKey, Node: initTencentSms},
-    })
+    },
+        xOption.WithDatabase(xOptDatabase.FromEnv()),
+        xOption.WithCache(xOptCache.FromEnv()),
+    )
 
     reg.Serve.Run(":8080")
 }
@@ -239,15 +241,13 @@ import (
 func main() {
     reg := xReg.Register(context.Background(), []xRegNode.RegNodeList{
         // [!code highlight:3]
-        // 框架资源
-        {Key: xCtx.DatabaseKey, Node: initDatabase},
-        {Key: xCtx.RedisClientKey, Node: initRedis},
-
-        // [!code highlight:3]
-        // 业务资源
+        // 业务资源（框架资源 DatabaseKey/RedisClientKey 由 opts 装配）
         {Key: bContext.TencentSmsKey, Node: initTencentSms},
         {Key: bContext.AliyunOssKey, Node: initAliyunOss},
-    })
+    },
+        xOption.WithDatabase(xOptDatabase.FromEnv()),
+        xOption.WithCache(xOptCache.FromEnv()),
+    )
 
     reg.Serve.Run(":8080")
 }

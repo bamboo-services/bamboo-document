@@ -93,25 +93,27 @@ import (
     xLog "github.com/bamboo-services/bamboo-base-go/common/log"
     xMain "github.com/bamboo-services/bamboo-base-go/major/main"
     xOption "github.com/bamboo-services/bamboo-base-go/major/option"
+    xOptCache "github.com/bamboo-services/bamboo-base-go/major/option/cache"
+    xOptDatabase "github.com/bamboo-services/bamboo-base-go/major/option/database"
     xReg "github.com/bamboo-services/bamboo-base-go/major/register"
     xRegNode "github.com/bamboo-services/bamboo-base-go/major/register/node"
     xEmail "github.com/bamboo-services/bamboo-base-go/plugins/email"
-    "your-project/internal/app/startup"
     "your-project/internal/app/route"
 )
 
 func main() {
-    // [!code highlight:6]
+    // [!code highlight:7]
+    // v1.0.5 起：DatabaseKey/RedisClientKey 由 opts 装配，nodeList 只放业务自定义键
     reg := xReg.Register(context.Background(), []xRegNode.RegNodeList{
-        {Key: xCtx.DatabaseKey, Node: startup.InitDatabase},
-        {Key: xCtx.RedisClientKey, Node: startup.InitRedis},
         {Key: xCtx.EmailClientKey, Node: xEmail.InitClient},  // 注册邮件客户端
-    })
+    },
+        xOption.WithDatabase(xOptDatabase.FromEnv()),
+        xOption.WithCache(xOptCache.FromEnv()),
+        xOption.WithRoute(route.NewRoute),
+    )
 
     log := xLog.WithName(xLog.NamedMAIN)
-    xMain.Runner(reg, log, []xOption.Option{
-        xOption.WithRoute(route.NewRoute),
-    })
+    xMain.Runner(reg, log, nil)
 }
 ```
 
