@@ -382,7 +382,8 @@ func main() {
 
     // [!code highlight:2]
     // 1. 初始化基础库（已注册内置验证器）
-    reg := xReg.Register(ctx)
+    // v1.0.5 起：nodeList 为必填（无业务节点传 nil），opts 可选
+    reg := xReg.Register(ctx, nil)
 
     // [!code highlight:2]
     // 2. 注册项目自定义验证器
@@ -410,7 +411,6 @@ your-project/
 │   └── validator_confirm.go    # 确认密码验证器
 └── dto/
     └── user.go                 # 使用验证器的 DTO
-```
 ```
 
 ### 添加中文错误消息

@@ -83,7 +83,7 @@ import (
 
 func main() {
     // 1. 初始化框架
-    reg := xReg.Register(startup.Init())
+    reg := xReg.Register(startup.Init(), nil)  // v1.0.5 起：nodeList 为必填，无业务节点传 nil
     log := xLog.WithName(xLog.NamedMAIN)
 
     // 2. 定义 gRPC 服务注册函数
@@ -235,7 +235,7 @@ func registerUserServices(ctx context.Context, server grpc.ServiceRegistrar) {
 
 ```go title="main.go"
 func main() {
-    reg := xReg.Register(startup.Init())
+    reg := xReg.Register(startup.Init(), nil)  // v1.0.5 起：nodeList 为必填，无业务节点传 nil
     log := xLog.WithName(xLog.NamedMAIN)
 
     // 内网 gRPC 服务

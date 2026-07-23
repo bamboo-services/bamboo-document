@@ -22,14 +22,27 @@ import (
 
 传统的 `xRegNode.RegNodeList` 要求业务侧编写完整的初始化工厂函数（打开连接、拼装 DSN、注册中间件）。对于框架内置组件（缓存、数据库、路由），xOption 将这部分逻辑内化到框架层，业务侧只需描述「选哪种 + 用什么参数」。
 
+v1.0.5 起，`Register` 与 `Runner` 均接受 `opts ...xOption.Option`，opts 既可作为变参传给 `Register`（业务自定义节点立即拿到 DB / 缓存），也可切片传给 `Runner`（仅启动阶段装配）。两者**不是二选一**，而是同一套 opts 的两种注入时机：
+
 ```
-注册节点模式                  Option 模式
-─────────────                  ────────────────────────────────
-xReg.Register(ctx, nodeList)   xOption.Apply(
-  └── 用户手写 InitXxx             xOption.WithCache(xOptCache.WithRedis(...)),
-                                    xOption.WithDatabase(xOptDatabase.MySQL(...)),
-                                    xOption.WithRoute(routeFunc),
-                                )
+方式 A：opts 传给 Register（推荐，业务节点立即可用）
+─────────────────────────────────────────────────────
+reg := xReg.Register(ctx, nodeList,
+    xOption.WithCache(xOptCache.WithRedis(...)),
+    xOption.WithDatabase(xOptDatabase.MySQL(...)),
+    xOption.WithRoute(routeFunc),
+)
+xMain.Runner(reg, log, nil)
+
+方式 B：opts 传给 Runner（启动阶段才装配）
+─────────────────────────────────────────────────────
+reg := xReg.Register(ctx, nodeList)
+opts := []xOption.Option{
+    xOption.WithCache(xOptCache.WithRedis(...)),
+    xOption.WithDatabase(xOptDatabase.MySQL(...)),
+    xOption.WithRoute(routeFunc),
+}
+xMain.Runner(reg, log, opts)
 ```
 
 ## 两层调用形态
